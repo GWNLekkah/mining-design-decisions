@@ -60,6 +60,32 @@ def main():
     app.add_constraint(lambda ensemble, test_sep: ensemble == 'none' or not test_sep,
                        'Cannot use ensemble when using separate testing mode.',
                        'run.ensemble-strategy', 'run.test-separately')
+    app.add_constraint(lambda store, test_separately: not (store and test_separately),
+                       'Cannot store model when using separate testing mode.',
+                       'run.store-model', 'run.test-separately')
+    app.add_constraint(lambda store, k: not (store and k > 0),
+                       'Cannot store model when using k-fold cross validation',
+                       'run.store-model', 'run.k-cross')
+    app.add_constraint(lambda project, study: project is None or study is None,
+                       'Cannot use test-project and test-study at the same time.',
+                       'run.test-project', 'run.test-study')
+    app.add_constraint(lambda cross_project, k: k == 0 or not cross_project,
+                       'Cannot use --k-cross and --cross-project at the same time.',
+                       'run.cross-project', 'run.k-cross')
+    app.add_constraint(
+        lambda k, quick_cross, test_study, test_project: not (
+            (k > 0 and not quick_cross) and (test_study is not None or test_project is not None)
+        ),
+        'Cannot use --test-study or --test-project without --quick-cross when k > 0',
+        'run.k-cross', 'run.quick-cross', 'run.test-study', 'run.test-project'
+    )
+    app.add_constraint(
+        lambda cross_project, test_study, test_project: not (
+            cross_project and (test_study is not None or test_project is not None)
+        ),
+        'Cannot use --test-study or --test-project in --cross-project mode',
+        'run.cross-project', 'run.test-study', 'run.test-project'
+    )
 
     app.register_callback('run', run_classification_command)
     app.register_callback('visualize', run_visualize_command)
@@ -307,7 +333,7 @@ def run_classification_command():
         return
 
     # 5) Invoke actual DL process
-    if k_cross == 0:
+    if k_cross == 0 and not conf.get('run.cross-project'):
         learning.run_single(factory(),
                             epochs,
                             split_size,

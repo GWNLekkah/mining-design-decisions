@@ -105,6 +105,12 @@
           "name": "apply-ontology-classes",
           "help": "Enable application of ontology classes",
           "style": "flag"
+        },
+        {
+          "name": "save-trained-generator",
+          "alias": "stg",
+          "help": "If given, store the pre-trained feature generator. This is necessary to generate features when using prediction mode",
+          "style": "flag"
         }
       ]
     },
@@ -164,8 +170,8 @@
           "style": "flag"
         },
         {
-          "name": "cross-is-cross-project",
-          "help": "k-cross should be cross-project validation.",
+          "name": "cross-project",
+          "help": "Run cross project validation.",
           "style": "flag"
         },
         {
@@ -323,6 +329,12 @@
         {
           "name": "test-separately",
           "help": "If given, disable combining multiple classifiers. In stead, test them separately on the same data.",
+          "style": "flag"
+        },
+        {
+          "name": "save-model",
+          "alias": "sm",
+          "help": "If given, store the trained model. Can only be used when training a single model.",
           "style": "flag"
         }
      ]
