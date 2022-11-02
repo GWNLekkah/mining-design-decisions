@@ -5,6 +5,7 @@
 
 import json
 import os
+import pathlib
 import shutil
 
 from .config import conf
@@ -43,10 +44,8 @@ def save_single_model(directory: str, model):
     metadata = {
         'model_type': 'single',
         'model_path': '0',
-        'feature_generator': _get_and_copy_feature_generators(),
-        'feature_settings': conf.get_all('make-features'),
-        'model_settings': conf.get_all('run'),
-    }
+        'feature_generator': _get_and_copy_feature_generators(directory),
+    } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
 
@@ -62,14 +61,12 @@ def save_stacking_model(directory: str,
     metadata = {
         'model_type': 'stacking',
         'meta_model': '0',
-        'feature_generator': _get_and_copy_feature_generators(),
+        'feature_generator': _get_and_copy_feature_generators(directory),
         'input_conversion_strategy': conversion_strategy,
         'child_models': [
             str(i) for i in range(1, len(child_models) + 1)
         ],
-        'feature_settings': conf.get_all('make-features'),
-        'model_settings': conf.get_all('run'),
-    }
+    } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
 
@@ -81,10 +78,8 @@ def save_voting_model(directory: str, *models):
     metadata = {
         'model_type': 'voting',
         'child_models': list(range(len(models))),
-        'feature_generator': _get_and_copy_feature_generators(),
-        'feature_settings': conf.get_all('make-features'),
-        'model_settings': conf.get_all('run'),
-    }
+        'feature_generator': _get_and_copy_feature_generators(directory),
+    } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
 
@@ -93,6 +88,24 @@ def _store_model(directory, number, model):
     path = os.path.join(directory, str(number))
     model.save(path)
 
+
+def _get_cli_settings():
+    return {
+        'feature_settings': {
+            key: _convert_value(value)
+            for key, value in conf.get_all('make-features').items()
+        },
+        'model_settings': {
+            key: _convert_value(value)
+            for key, value in conf.get_all('run').items()
+        },
+    }
+
+
+def _convert_value(x):
+    if isinstance(x, pathlib.Path):
+        return str(x)
+    return x
 
 ##############################################################################
 ##############################################################################

@@ -186,7 +186,7 @@ def make_dataset(labels, *features):
 class DataSplitter(abc.ABC):
 
     def __init__(self, **kwargs):
-        self.max_train = kwargs.pop('max_training_samples', None)
+        self.max_train = t if (t := kwargs.pop('max_train', -1)) != -1 else None
         self.test_project = kwargs.pop('test_project', None)
         self.test_study = kwargs.pop('test_study', None)
         if kwargs:

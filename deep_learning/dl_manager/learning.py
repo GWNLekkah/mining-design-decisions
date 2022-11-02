@@ -340,6 +340,16 @@ def plot_dataset_label_distributions(original, train, test, validation):
 ##############################################################################
 
 
+def _coerce_none(x: str) -> str | None:
+    match x:
+        case 'None':
+            return None
+        case 'none':
+            return None
+        case _:
+            return x
+
+
 def run_single(model_or_models,
                epochs: int,
                split_size: float,
@@ -360,8 +370,8 @@ def run_single(model_or_models,
     #                                                              test_project=test_project)
     spitter = splitting.SimpleSplitter(val_split_size=conf.get('run.split-size'),
                                        test_split_size=conf.get('run.split-size'),
-                                       test_study=conf.get('run.test-study'),
-                                       test_project=conf.get('run.test-project'),
+                                       test_study=_coerce_none(conf.get('run.test-study')),
+                                       test_project=_coerce_none(conf.get('run.test-project')),
                                        max_train=conf.get('run.max-train'))
     # Split returns an iterator; call next() to get data splits
     train, test, validation, test_issue_keys = next(spitter.split(labels, issue_keys, *features))
@@ -383,7 +393,7 @@ def run_single(model_or_models,
                                                              test_issue_keys)
         # Save model can only be true if not testing separately,
         # which means the loop only runs once.
-        if conf.get('run.save-model'):
+        if conf.get('run.store-model'):
             model_manager.save_single_model(conf.get('run.target-model-path'), trained_model)
         dump_metrics([metrics_])
         comparator.add_result(metrics_)
@@ -416,8 +426,8 @@ def run_cross(model_factory,
     if conf.get('run.quick-cross'):
         splitter = splitting.QuickCrossFoldSplitter(
             k=conf.get('run.k-cross'),
-            test_project=conf.get('run.test-project'),
-            test_study=conf.get('run.test-study'),
+            test_study=_coerce_none(conf.get('run.test-study')),
+            test_project=_coerce_none(conf.get('run.test-project')),
             max_train=conf.get('run.max-train'),
         )
     elif conf.get('run.cross-project'):
@@ -659,8 +669,8 @@ def run_stacking_ensemble(factory,
     if conf.get('run.k-cross') > 0:
         splitter = splitting.QuickCrossFoldSplitter(
             k=conf.get('run.k-cross'),
-            test_project=conf.get('run.test-project'),
-            test_study=conf.get('run.test-study'),
+            test_study=_coerce_none(conf.get('run.test-study')),
+            test_project=_coerce_none(conf.get('run.test-project')),
             max_train=conf.get('run.max-train'),
         )
     elif conf.get('run.cross-project'):
@@ -672,8 +682,8 @@ def run_stacking_ensemble(factory,
         splitter = splitting.SimpleSplitter(
             val_split_size=conf.get('run.split-size'),
             test_split_size=conf.get('run.split-size'),
-            test_project=conf.get('run.test-project'),
-            test_study=conf.get('run.test-study'),
+            test_study=_coerce_none(conf.get('run.test-study')),
+            test_project=_coerce_none(conf.get('run.test-project')),
             max_train=conf.get('run.max-train'),
         )
     if __voting_ensemble_hook is None:
@@ -797,8 +807,6 @@ def _save_voting_data(data):
         json.dump(data, file)
     with open('most_recent_run.txt', 'w') as file:
         file.write(filename)
-    if conf.get('run.save-model'):
-        raise NotImplementedError('Saving of voting models not implemented')
 
 
 def _get_voting_predictions(truth, predictions):

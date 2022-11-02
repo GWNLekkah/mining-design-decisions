@@ -66,7 +66,7 @@ def main():
     app.add_constraint(lambda store, k: not (store and k > 0),
                        'Cannot store model when using k-fold cross validation',
                        'run.store-model', 'run.k-cross')
-    app.add_constraint(lambda project, study: project is None or study is None,
+    app.add_constraint(lambda project, study: project == 'None' or study == 'None',
                        'Cannot use test-project and test-study at the same time.',
                        'run.test-project', 'run.test-study')
     app.add_constraint(lambda cross_project, k: k == 0 or not cross_project,
@@ -74,14 +74,14 @@ def main():
                        'run.cross-project', 'run.k-cross')
     app.add_constraint(
         lambda k, quick_cross, test_study, test_project: not (
-            (k > 0 and not quick_cross) and (test_study is not None or test_project is not None)
+            (k > 0 and not quick_cross) and (test_study != 'None' or test_project != 'None')
         ),
         'Cannot use --test-study or --test-project without --quick-cross when k > 0',
         'run.k-cross', 'run.quick-cross', 'run.test-study', 'run.test-project'
     )
     app.add_constraint(
         lambda cross_project, test_study, test_project: not (
-            cross_project and (test_study is not None or test_project is not None)
+            cross_project and (test_study != 'None' or test_project != 'None')
         ),
         'Cannot use --test-study or --test-project in --cross-project mode',
         'run.cross-project', 'run.test-study', 'run.test-project'
@@ -90,6 +90,11 @@ def main():
         lambda do_save, path: (not do_save) or (do_save and path),
         '--target-model-path must be given when storing a model.',
         'run.store-model', 'run.target-model-path'
+    )
+    app.add_constraint(
+        lambda do_save, force_regenerate: (not do_save) or (do_save and force_regenerate),
+        'Must use --force-regenerate-data when using --store-model.',
+        'run.store-model', 'run.force-regenerate-data'
     )
 
     app.register_callback('run', run_classification_command)
@@ -114,7 +119,6 @@ def main():
                           analysis.run_stat_command)
 
     app.register_setup_callback(setup_peregrine)
-
     app.parse_and_dispatch()
 
 
