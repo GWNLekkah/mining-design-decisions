@@ -10,19 +10,28 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
+                         args: dict[str, str]):
         # Train or load a model
-        if 'pretrained-file' not in args:
-            model = GensimWord2Vec(tokenized_issues, min_count=int(args['min-count']),
-                                   vector_size=int(args['vector-length']))
-            filename = 'word2vec_' + datetime.datetime.now().strftime('%d-%m-%Y-%H-%M-%S') + '.bin'
-            model.wv.save_word2vec_format(filename, binary=True)
-            args['pretrained-file'] = filename
-            args['pretrained-binary'] = 'True'
+        if self.pretrained is None:
+            if 'pretrained-file' not in args:
+                model = GensimWord2Vec(tokenized_issues, min_count=int(args['min-count']),
+                                       vector_size=int(args['vector-length']))
+                filename = 'word2vec_' + datetime.datetime.now().strftime('%d-%m-%Y-%H-%M-%S') + '.bin'
+                model.wv.save_word2vec_format(filename, binary=True)
+                args['pretrained-file'] = filename
+                args['pretrained-binary'] = 'True'
 
-        # Load the model
-        wv = models.KeyedVectors.load_word2vec_format(args['pretrained-file'], binary=bool(args['pretrained-binary']))
+            # Load the model
+            wv = models.KeyedVectors.load_word2vec_format(
+                args['pretrained-file'], binary=bool(args['pretrained-binary'])
+            )
+        else:
+            raise NotImplementedError(
+                f'{self.__class__.__name__} does not implement loading a pre-trained generator'
+            )
 
+        # Build the final feature vectors.
+        # This function should also save the pretrained model
         return self.finalize_vectors(tokenized_issues, wv, args)
 
     @staticmethod

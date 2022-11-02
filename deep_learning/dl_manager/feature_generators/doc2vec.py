@@ -15,18 +15,23 @@ class Doc2Vec(AbstractFeatureGenerator):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
-        documents = []
-        for idx in range(len(tokenized_issues)):
-            documents.append(TaggedDocument(tokenized_issues[idx], [idx]))
+                         args: dict[str, str]):
+        if self.pretrained is None:
+            documents = []
+            for idx in range(len(tokenized_issues)):
+                documents.append(TaggedDocument(tokenized_issues[idx], [idx]))
 
-        if 'pretrained-file' not in args:
-            model = GensimDoc2Vec(documents, vector_size=int(args['vector-length']))
-            filename = 'doc2vec_' + datetime.datetime.now().strftime('%d-%m-%Y-%H-%M-%S') + '.bin'
-            model.save(filename)
-            args['pretrained-file'] = filename
+            if 'pretrained-file' not in args:
+                model = GensimDoc2Vec(documents, vector_size=int(args['vector-length']))
+                filename = 'doc2vec_' + datetime.datetime.now().strftime('%d-%m-%Y-%H-%M-%S') + '.bin'
+                model.save(filename)
+                args['pretrained-file'] = filename
 
-        model = GensimDoc2Vec.load(args['pretrained-file'])
+            model = GensimDoc2Vec.load(args['pretrained-file'])
+        else:
+            raise NotImplementedError(
+                f'{self.__class__.__name__} does not implement loading a pre-trained generator'
+            )
 
         return {'features': [
                     model.infer_vector(

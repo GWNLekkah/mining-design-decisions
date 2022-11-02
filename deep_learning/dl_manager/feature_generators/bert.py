@@ -10,10 +10,13 @@ class Bert(AbstractFeatureGenerator):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
+                         args: dict[str, str]):
         features = []
         for tokenized_issue in tokenized_issues:
             features.append(tokenized_issue[0])
+
+        if self.pretrained is None:
+            self.save_pretrained({})
 
         return {
             'features': features,

@@ -200,7 +200,6 @@ class OutputMode(enum.Enum):
                 return 8
 
 
-
 ##############################################################################
 ##############################################################################
 # Main Class
@@ -209,12 +208,46 @@ class OutputMode(enum.Enum):
 
 class AbstractFeatureGenerator(abc.ABC):
 
-    def __init__(self, **params):
+    def __init__(self, *,
+                 pretrained_generator_settings: dict | None = None,
+                 **params):
         self.__params = params
+        self.__pretrained = pretrained_generator_settings
+        if self.__pretrained is not None:
+            if self.__params:
+                raise ValueError(
+                    'Feature generator does not take params when pretrained settings are given'
+                )
+            # Populate params for default pre-processing,
+            # which does not require any trained settings.
+            for name in AbstractFeatureGenerator.get_parameters():
+                if name in self.__pretrained:
+                    self.__params[name] = self.__pretrained[name]
 
     @property
     def params(self) -> dict[str, str]:
         return self.__params
+
+    @property
+    def pretrained(self) -> dict | None:
+        return self.__pretrained
+
+    def save_pretrained(self, pretrained_settings: dict):
+        settings = '_'.join(
+            f'{key}-{value}' for key, value in self.__params.items()
+        )
+        filename = f'{self.__class__.__name__}__{settings}.json'
+        for name in AbstractFeatureGenerator.get_parameters():
+            if name in self.__params:
+                pretrained_settings[name] = self.__params[name]
+        with open(filename, 'w') as file:
+            json.dump(
+                {
+                    'settings': pretrained_settings,
+                    'generator': self.__class__.__name__,
+                },
+                file
+            )
 
     @staticmethod
     @abc.abstractmethod
@@ -226,7 +259,7 @@ class AbstractFeatureGenerator(abc.ABC):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
+                         args: dict[str, str]):
         # TODO: implement this method
         # TODO: this method should take in data, and generate
         # TODO: the corresponding feature vectors

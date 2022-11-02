@@ -37,7 +37,15 @@ class OntologyFeatures(AbstractFeatureGenerator):
     def input_encoding_type() -> InputEncoding:
         return InputEncoding.Vector
 
-    def generate_vectors(self, tokenized_issues: list[list[str]], metadata, args: ...):
+    def generate_vectors(self,
+                         tokenized_issues: list[list[str]],
+                         metadata,
+                         args: dict[str, str]):
+        # This pre-processing does not require learning
+        # anything.
+        # If this is changed, be sure to implement
+        # functionality for dealing with the .pretrained
+        # attribute.
         ontology_path = conf.get('make-features.ontology-classes')
         if ontology_path == '':
             raise ValueError('--ontology-classes parameter must be given')
@@ -47,6 +55,10 @@ class OntologyFeatures(AbstractFeatureGenerator):
             self._make_feature(issue, table, order)
             for issue in tokenized_issues
         ]
+
+        if self.pretrained is None:
+            self.save_pretrained({})
+
         return {
             'features': features,
             'feature_shape': len(order)

@@ -10,7 +10,13 @@ class Metadata(AbstractFeatureGenerator):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
+                         args: dict):
+        # When adding any preprocessing here, be sure to
+        # implement handling pretrained generators.
+
+        if self.pretrained is None:
+            self.save_pretrained({})
+
         return {'features': metadata,
                 'feature_shape': len(metadata[0])}
 

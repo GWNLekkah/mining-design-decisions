@@ -11,14 +11,24 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
-        word_to_idx = dict()
-        idx = 0
-        for tokenized_issue in tokenized_issues:
-            for token in tokenized_issue:
-                if token not in word_to_idx:
-                    word_to_idx[token] = idx
-                    idx += 1
+                         args: dict[str, str]):
+        if self.pretrained is None:
+            word_to_idx = dict()
+            idx = 0
+            for tokenized_issue in tokenized_issues:
+                for token in tokenized_issue:
+                    if token not in word_to_idx:
+                        word_to_idx[token] = idx
+                        idx += 1
+            self.save_pretrained(
+                {
+                    'word-to-index-mapping': word_to_idx,
+                    'max-index': idx
+                }
+            )
+        else:
+            word_to_idx = self.pretrained['word-to-index-mapping']
+            idx = self.pretrained['max-index']
 
         bags = []
         for tokenized_issue in tokenized_issues:

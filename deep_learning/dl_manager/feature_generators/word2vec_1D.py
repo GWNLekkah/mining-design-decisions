@@ -1,3 +1,5 @@
+import warnings
+
 from ..classifiers import InputEncoding
 from .word2vec import AbstractWord2Vec
 
@@ -8,11 +10,21 @@ class Word2Vec1D(AbstractWord2Vec):
     def input_encoding_type() -> InputEncoding:
         return InputEncoding.Embedding
 
-    @staticmethod
-    def finalize_vectors(tokenized_issues, wv, args):
-        idx = 0
-        word_to_idx = dict()
-        embedding_weights = []
+    def finalize_vectors(self, tokenized_issues, wv, args):
+        if self.pretrained is None:
+            idx = 0
+            word_to_idx = dict()
+            embedding_weights = []
+            feature_shape = int(args['max-len'])
+            word_vector_length = int(args['vector-length'])
+        else:
+            word_to_idx = self.pretrained['word-to-index-mapping']
+            idx = self.pretrained['max-index']
+            embedding_weights = self.pretrained['embedding-weights']
+            feature_shape = self.pretrained['feature-shape']
+            word_vector_length = self.pretrained['word-vector-length']
+            model = ...
+            raise NotImplementedError('Word2Vec Model Loading not implemented')
         features = []
         original_text = []
         for tokenized_issue in tokenized_issues:
@@ -23,7 +35,9 @@ class Word2Vec1D(AbstractWord2Vec):
                     current_issue_original_text.append(token)
                     feature.append([word_to_idx[token]])
                 else:
-                    if token in wv:
+                    # Be sure to only add to mapping when not
+                    # using a pretrained generator.
+                    if token in wv and self.pretrained is None:
                         current_issue_original_text.append(token)
                         word_to_idx[token] = idx
                         embedding_weights.append(wv[token].tolist())
@@ -33,10 +47,23 @@ class Word2Vec1D(AbstractWord2Vec):
             feature.extend([[0]] * (int(args['max-len']) - len(feature)))
             features.append(feature)
 
+        if self.pretrained is None:
+            warnings.warn('Word2Vec Model saving not implemented')
+            # self.save_pretrained(
+            #     {
+            #         'word-to-index-mapping': word_to_idx,
+            #         'max-index': idx,
+            #         'embedding-weights': embedding_weights,
+            #         'feature-shape': feature_shape,
+            #         'word-vector-length': word_vector_length,
+            #         'model': ...
+            #     }
+            # )
+
         return {'features': features,
                 'weights': embedding_weights,
-                'feature_shape': int(args['max-len']),
+                'feature_shape': feature_shape,
                 'vocab_size': idx,
-                'word_vector_length': int(args['vector-length']),
+                'word_vector_length': word_vector_length,
                 'original': original_text
                 }
