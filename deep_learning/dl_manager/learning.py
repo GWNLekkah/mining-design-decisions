@@ -386,6 +386,8 @@ def run_single(model_or_models,
     comparator.finalize()
     if conf.get('run.test-separately'):
         comparator.compare()
+    if conf.get('run.save-model'):
+        raise NotImplementedError('Saving of models not implemented')
 
 
 def run_cross(model_factory,
@@ -746,7 +748,8 @@ def run_stacking_ensemble(factory,
         print_and_save_k_cross_results(results,
                                        best_results,
                                        'stacking_ensemble_total')
-
+        if conf.get('run.save-model'):
+            raise NotImplementedError('Saving of stacking models not implemented')
     else:   # Voting ensemble
         __voting_ensemble_hook[1](voting_result_data)
 
@@ -770,6 +773,8 @@ def _save_voting_data(data):
         json.dump(data, file)
     with open('most_recent_run.txt', 'w') as file:
         file.write(filename)
+    if conf.get('run.save-model'):
+        raise NotImplementedError('Saving of voting models not implemented')
 
 
 def _get_voting_predictions(truth, predictions):
