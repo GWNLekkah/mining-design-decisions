@@ -77,7 +77,7 @@ def save_voting_model(directory: str, *models):
         _store_model(directory, nr, model)
     metadata = {
         'model_type': 'voting',
-        'child_models': list(range(len(models))),
+        'child_models': [str(x) for x in range(len(models))],
         'feature_generator': _get_and_copy_feature_generators(directory),
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
