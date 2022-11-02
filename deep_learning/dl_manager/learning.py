@@ -39,6 +39,7 @@ from . import boosting
 from .metrics import MetricLogger
 from . import metrics
 from . import data_splitting as splitting
+from . import model_manager
 
 
 EARLY_STOPPING_GOALS = {
@@ -372,22 +373,24 @@ def run_single(model_or_models,
         models = model_or_models
         inputs = _separate_datasets(train, test, validation)
     for model, (m_train, m_test, m_val) in zip(models, inputs):
-        metrics_, best = train_and_test_model(model,
-                                              m_train,
-                                              m_val,
-                                              m_test,
-                                              epochs,
-                                              output_mode,
-                                              label_mapping,
-                                              test_issue_keys)
+        trained_model, metrics_, best = train_and_test_model(model,
+                                                             m_train,
+                                                             m_val,
+                                                             m_test,
+                                                             epochs,
+                                                             output_mode,
+                                                             label_mapping,
+                                                             test_issue_keys)
+        # Save model can only be true if not testing separately,
+        # which means the loop only runs once.
+        if conf.get('run.save-model'):
+            model_manager.save_single_model(conf.get('run.target-model-path'), trained_model)
         dump_metrics([metrics_])
         comparator.add_result(metrics_)
     comparator.add_truth(test[1])
     comparator.finalize()
     if conf.get('run.test-separately'):
         comparator.compare()
-    if conf.get('run.save-model'):
-        raise NotImplementedError('Saving of models not implemented')
 
 
 def run_cross(model_factory,
@@ -438,14 +441,14 @@ def run_cross(model_factory,
             models = [model_or_models]
             inputs = [(train, test, validation)]
         for model, (m_train, m_test, m_val) in zip(models, inputs):
-            metrics_, best_metrics = train_and_test_model(model,
-                                                          m_train,
-                                                          m_val,
-                                                          m_test,
-                                                          epochs,
-                                                          output_mode,
-                                                          label_mapping,
-                                                          test_issue_keys)
+            _, metrics_, best_metrics = train_and_test_model(model,
+                                                             m_train,
+                                                             m_val,
+                                                             m_test,
+                                                             epochs,
+                                                             output_mode,
+                                                             label_mapping,
+                                                             test_issue_keys)
             results.append(metrics_)
             best_results.append(best_metrics)
             comparator.add_result(metrics_)
@@ -484,7 +487,10 @@ def print_and_save_k_cross_results(results, best_results, filename_hint=None):
             print('    * Geometric Mean:', statistics.geometric_mean(stat_data))
         except statistics.StatisticsError:
             pass
-        print('    * Standard Deviation:', statistics.stdev(stat_data))
+        try:
+            print('    * Standard Deviation:', statistics.stdev(stat_data))
+        except statistics.StatisticsError:
+            pass
         print('    * Median:', statistics.median(stat_data))
 
 
@@ -571,6 +577,7 @@ def train_and_test_model(model: tf.keras.Model,
 
     # logger.rollback_model_results(monitor.get_best_model_offset())
     return (
+        model,
         logger.get_model_results_for_all_epochs(),
         logger.get_main_model_metrics_at_stopping_epoch()
     )
@@ -670,9 +677,9 @@ def run_stacking_ensemble(factory,
             max_train=conf.get('run.max-train'),
         )
     if __voting_ensemble_hook is None:
-        meta_factory, onehot_as_integer = stacking.build_stacking_classifier()
+        meta_factory, input_conversion_method = stacking.build_stacking_classifier()
     else:
-        meta_factory, onehot_as_integer = None, False
+        meta_factory, input_conversion_method = None, False
     number_of_models = len(conf.get('run.classifier'))
     sub_results = [[] for _ in range(number_of_models)]
     best_sub_results = [[] for _ in range(number_of_models)]
@@ -688,44 +695,57 @@ def run_stacking_ensemble(factory,
         predictions_val = []
         predictions_test = []
         model_number = 0
+        trained_sub_models = []
         for model, model_train, model_test, model_validation in zip(models, train[0], test[0], validation[0], strict=True):
-            sub_model_results, best_sub_model_results = train_and_test_model(model,
-                                                                             dataset_train=(model_train, train[1]),
-                                                                             dataset_val=(
-                                                                             model_validation, validation[1]),
-                                                                             dataset_test=(model_test, test[1]),
-                                                                             epochs=conf.get('run.epochs'),
-                                                                             output_mode=OutputMode.from_string(
-                                                                                 conf.get('run.output-mode')),
-                                                                             label_mapping=label_mapping,
-                                                                             test_issue_keys=test_issue_keys)
+            trained_sub_model, sub_model_results, best_sub_model_results = train_and_test_model(
+                model,
+                dataset_train=(model_train, train[1]),
+                dataset_val=(model_validation, validation[1]),
+                dataset_test=(model_test, test[1]),
+                epochs=conf.get('run.epochs'),
+                output_mode=OutputMode.from_string(conf.get('run.output-mode')),
+                label_mapping=label_mapping,
+                test_issue_keys=test_issue_keys
+            )
             sub_results[model_number].append(sub_model_results)
             best_sub_results[model_number].append(best_sub_model_results)
             model_number += 1
             predictions_train.append(model.predict(model_train))
             predictions_val.append(model.predict(model_validation))
             predictions_test.append(model.predict(model_test))
+            if conf.get('run.store-model'):
+                trained_sub_models.append(trained_sub_model)
         if __voting_ensemble_hook is None:
             # Step 2) Generate new feature vectors from the predictions
             train_features = stacking.transform_predictions_to_stacking_input(predictions_train,
-                                                                              onehot_as_integer)
+                                                                              input_conversion_method)
             val_features = stacking.transform_predictions_to_stacking_input(predictions_val,
-                                                                            onehot_as_integer)
+                                                                            input_conversion_method)
             test_features = stacking.transform_predictions_to_stacking_input(predictions_test,
-                                                                             onehot_as_integer)
+                                                                             input_conversion_method)
             # Step 3) Train and test the meta-classifier.
             meta_model = meta_factory()
-            epoch_results, best_epoch_results = train_and_test_model(meta_model,
-                                                                     dataset_train=(train_features, train[1]),
-                                                                     dataset_val=(val_features, validation[1]),
-                                                                     dataset_test=(test_features, test[1]),
-                                                                     epochs=conf.get('run.epochs'),
-                                                                     output_mode=OutputMode.from_string(
-                                                                         conf.get('run.output-mode')),
-                                                                     label_mapping=label_mapping,
-                                                                     test_issue_keys=test_issue_keys)
+            epoch_model, epoch_results, best_epoch_results = train_and_test_model(
+                meta_model,
+                dataset_train=(train_features, train[1]),
+                dataset_val=(val_features, validation[1]),
+                dataset_test=(test_features, test[1]),
+                epochs=conf.get('run.epochs'),
+                output_mode=OutputMode.from_string(
+                    conf.get('run.output-mode')),
+                label_mapping=label_mapping,
+                test_issue_keys=test_issue_keys
+            )
             results.append(epoch_results)
             best_results.append(best_epoch_results)
+
+            if conf.get('run.store-model'):     # only ran in single-shot mode
+                model_manager.save_stacking_model(
+                    conf.get('run.target-model-path'),
+                    input_conversion_method.to_json(),
+                    epoch_model,
+                    *trained_sub_models
+                )
 
         else:   # We're being used by the voting ensemble
             voting_results = {
@@ -734,6 +754,12 @@ def run_stacking_ensemble(factory,
                 'val': __voting_ensemble_hook[0](validation[1], predictions_val)
             }
             voting_result_data.append(voting_results)
+
+            if conf.get('run.store-model'):
+                model_manager.save_voting_model(
+                    conf.get('run.target-model-path'),
+                    *trained_sub_models
+                )
 
     if __voting_ensemble_hook is None:
         it = enumerate(zip(sub_results, best_sub_results))
@@ -748,8 +774,6 @@ def run_stacking_ensemble(factory,
         print_and_save_k_cross_results(results,
                                        best_results,
                                        'stacking_ensemble_total')
-        if conf.get('run.save-model'):
-            raise NotImplementedError('Saving of stacking models not implemented')
     else:   # Voting ensemble
         __voting_ensemble_hook[1](voting_result_data)
 

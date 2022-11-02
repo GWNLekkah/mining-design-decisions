@@ -240,6 +240,7 @@ class AbstractFeatureGenerator(abc.ABC):
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
+        conf.register('system.unstable.generator', str, filename)
         with open(filename, 'w') as file:
             json.dump(
                 {

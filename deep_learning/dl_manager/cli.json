@@ -336,6 +336,12 @@
           "alias": "sm",
           "help": "If given, store the trained model. Can only be used when training a single model.",
           "style": "flag"
+        },
+        {
+          "name": "target-model-path",
+          "help": "Directory to store model to.",
+          "type": "str",
+          "default": ""
         }
      ]
     },

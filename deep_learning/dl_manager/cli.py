@@ -86,6 +86,11 @@ def main():
         'Cannot use --test-study or --test-project in --cross-project mode',
         'run.cross-project', 'run.test-study', 'run.test-project'
     )
+    app.add_constraint(
+        lambda do_save, path: (not do_save) or (do_save and path),
+        '--target-model-path must be given when storing a model.',
+        'run.store-model', 'run.target-model-path'
+    )
 
     app.register_callback('run', run_classification_command)
     app.register_callback('visualize', run_visualize_command)

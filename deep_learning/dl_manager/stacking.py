@@ -28,6 +28,29 @@ class InputConversion(enum.Enum):
             case self.ComposeAsMatrix:
                 return classifiers.InputEncoding.Matrix
 
+    def to_json(self):
+        match self:
+            case self.Concatenate:
+                return 'concatenate'
+            case self.OneHotAsInteger:
+                return 'one-hot-as-integer'
+            case self.VectorAsBinary:
+                return 'vector-as-binary'
+            case self.ComposeAsMatrix:
+                return 'compose-as-matrix'
+
+    @classmethod
+    def from_json(cls, string: str):
+        match string:
+            case 'concatenate':
+                return cls.Concatenate
+            case 'one-hot-as-integer':
+                return cls.OneHotAsInteger
+            case 'vector-as-binary':
+                return cls.VectorAsBinary
+            case 'compose-as-matrix':
+                return cls.ComposeAsMatrix
+
 
 def build_stacking_classifier():
     # First, we load the settings

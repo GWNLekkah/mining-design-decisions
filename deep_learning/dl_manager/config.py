@@ -76,6 +76,14 @@ class Config:
             raise NoDefault(name)
         return value
 
+    def get_all(self, name):
+        name = name.replace('-', '_')
+        return {
+            key: value
+            for key, value in self._namespace.items()
+            if key.startswith(name) and value is not self._NOT_SET
+        }
+
     def clone(self, source, target):
         self.register(target, self._types[source])
         self.set(target, self.get(source))
