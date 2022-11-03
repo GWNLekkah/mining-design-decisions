@@ -2,9 +2,11 @@
 ##############################################################################
 # Imports
 ##############################################################################
-import csv
 
-from tensorflow import keras
+import csv
+import pathlib
+
+from keras.models import load_model
 
 from .classifiers import OutputEncoding
 from .feature_generators import OutputMode
@@ -19,9 +21,9 @@ from . import metrics
 ##############################################################################
 
 
-def predict_simple_model(model_metadata, features, output_mode):
+def predict_simple_model(path: pathlib.Path, model_metadata, features, output_mode):
     _check_output_mode(output_mode)
-    model = keras.load_model(model_metadata['model_path'])
+    model = load_model(path / model_metadata['model_path'])
     if len(features) == 1:
         features = features[0]
     predictions = model.predict(features)
@@ -41,16 +43,17 @@ def predict_simple_model(model_metadata, features, output_mode):
 ##############################################################################
 
 
-def predict_stacking_model(model_metadata, features, output_mode):
+def predict_stacking_model(path: pathlib.Path, model_metadata, features, output_mode):
     _check_output_mode(output_mode)
-    predictions = _ensemble_collect_predictions(model_metadata['child_models'],
+    predictions = _ensemble_collect_predictions(path,
+                                                model_metadata['child_models'],
                                                 features)
     conversion = stacking.InputConversion.from_json(
         model_metadata['input_conversion_strategy']
     )
     new_features = stacking.transform_predictions_to_stacking_input(predictions,
                                                                     conversion)
-    meta_model = keras.load_model(model_metadata['meta_model'])
+    meta_model = load_model(path / model_metadata['meta_model'])
     final_predictions = meta_model.predict(new_features)
     if output_mode.output_encoding == OutputEncoding.Binary:
         canonical_predictions = metrics.round_binary_predictions(final_predictions)
@@ -68,9 +71,10 @@ def predict_stacking_model(model_metadata, features, output_mode):
 ##############################################################################
 
 
-def predict_voting_model(model_metadata, features, output_mode):
+def predict_voting_model(path: pathlib.Path, model_metadata, features, output_mode):
     _check_output_mode(output_mode)
-    predictions = _ensemble_collect_predictions(model_metadata['child_models'],
+    predictions = _ensemble_collect_predictions(path,
+                                                model_metadata['child_models'],
                                                 features)
     voting_predictions = voting_util.get_voting_predictions(output_mode,
                                                             predictions)
@@ -101,10 +105,10 @@ def _predictions_to_canonical(output_mode, voting_predictions):
     return output
 
 
-def _ensemble_collect_predictions(models, features):
+def _ensemble_collect_predictions(path: pathlib.Path, models, features):
     predictions = []
     for model_path, feature_set in zip(models, features):
-        model = keras.load_model(model_path)
+        model = load_model(path / model_path)
         predictions.append(model.predict(feature_set))
     return predictions
 

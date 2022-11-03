@@ -100,7 +100,7 @@ def main():
         'run.store-model', 'run.force-regenerate-data'
     )
 
-    app.register_callback('prediction', run_prediction_command)
+    app.register_callback('predict', run_prediction_command)
     app.register_callback('run', run_classification_command)
     app.register_callback('visualize', run_visualize_command)
     app.register_callback('make-features', run_make_features_command)
@@ -528,11 +528,11 @@ def run_prediction_command():
     # Step 3: Load the model and get the predictions
     match model_metadata['model_type']:
         case 'single':
-            prediction.predict_simple_model(model_metadata, datasets, output_mode)
+            prediction.predict_simple_model(model, model_metadata, datasets, output_mode)
         case 'stacking':
-            prediction.predict_stacking_model(model_metadata, datasets, output_mode)
+            prediction.predict_stacking_model(model, model_metadata, datasets, output_mode)
         case 'voting':
-            prediction.predict_voting_model(model_metadata, datasets, output_mode)
+            prediction.predict_voting_model(model, model_metadata, datasets, output_mode)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')
 
