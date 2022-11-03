@@ -37,4 +37,4 @@ class Bert(AbstractModel):
     @classmethod
     @_fix_hyper_params
     def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
-        return {} | super().get_hyper_parameters()
+        return {} | super(Bert, Bert).get_hyper_parameters()
