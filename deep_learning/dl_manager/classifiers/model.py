@@ -38,7 +38,7 @@ class OutputEncoding(enum.Enum):
 class HyperParameter(typing.NamedTuple):
     minimum: numbers.Number | None
     maximum: numbers.Number | None
-    default: typing.Any 
+    default: typing.Any
 
 
 def _fix_hyper_params(function):

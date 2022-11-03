@@ -25,7 +25,7 @@ from .config import conf
 
 
 def _check_output_mode():
-    output_mode: OutputMode = conf.get('run.output-mode')
+    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     if output_mode == OutputMode.Classification3:
         raise ValueError(
             'Metric computation not supported for 3-Classification')
