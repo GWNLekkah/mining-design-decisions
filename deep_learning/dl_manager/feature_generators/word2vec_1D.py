@@ -23,8 +23,6 @@ class Word2Vec1D(AbstractWord2Vec):
             embedding_weights = self.pretrained['embedding-weights']
             feature_shape = self.pretrained['feature-shape']
             word_vector_length = self.pretrained['word-vector-length']
-            model = ...
-            raise NotImplementedError('Word2Vec Model Loading not implemented')
         features = []
         original_text = []
         for tokenized_issue in tokenized_issues:
@@ -48,17 +46,17 @@ class Word2Vec1D(AbstractWord2Vec):
             features.append(feature)
 
         if self.pretrained is None:
-            warnings.warn('Word2Vec Model saving not implemented')
-            # self.save_pretrained(
-            #     {
-            #         'word-to-index-mapping': word_to_idx,
-            #         'max-index': idx,
-            #         'embedding-weights': embedding_weights,
-            #         'feature-shape': feature_shape,
-            #         'word-vector-length': word_vector_length,
-            #         'model': ...
-            #     }
-            # )
+            self.save_pretrained(
+                {
+                    'word-to-index-mapping': word_to_idx,
+                    'max-index': idx,
+                    'embedding-weights': embedding_weights,
+                    'feature-shape': feature_shape,
+                    'word-vector-length': word_vector_length,
+                    'model': self.__params['pretrained-file'],
+                    'model-binary': self.__params['pretrained-binary'].lower() == 'true'
+                }
+            )
 
         return {'features': features,
                 'weights': embedding_weights,

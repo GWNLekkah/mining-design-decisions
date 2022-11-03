@@ -28,10 +28,14 @@ class Doc2Vec(AbstractFeatureGenerator):
                 args['pretrained-file'] = filename
 
             model = GensimDoc2Vec.load(args['pretrained-file'])
-        else:
-            raise NotImplementedError(
-                f'{self.__class__.__name__} does not implement loading a pre-trained generator'
+
+            self.save_pretrained(
+                {
+                    'pretrained-file': args['pretrained-file']
+                }
             )
+        else:
+            model = GensimDoc2Vec.load(self.pretrained['pretrained-file'])
 
         return {'features': [
                     model.infer_vector(

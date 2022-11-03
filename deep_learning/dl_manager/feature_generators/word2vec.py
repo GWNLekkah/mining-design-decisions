@@ -26,8 +26,9 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                 args['pretrained-file'], binary=bool(args['pretrained-binary'])
             )
         else:
-            raise NotImplementedError(
-                f'{self.__class__.__name__} does not implement loading a pre-trained generator'
+            wv = models.KeyedVectors.load_word2vec_format(
+                self.pretrained['model'],
+                binary=self.pretrained['model-binary']
             )
 
         # Build the final feature vectors.
