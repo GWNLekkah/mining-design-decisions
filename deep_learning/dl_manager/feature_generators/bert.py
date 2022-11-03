@@ -25,6 +25,4 @@ class Bert(AbstractFeatureGenerator):
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:
-        return {
-
-        }
+        return super(Bert, Bert).get_parameters()
