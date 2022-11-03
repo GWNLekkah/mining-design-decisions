@@ -6,12 +6,14 @@
 from __future__ import annotations
 
 import abc
+import ast
 import csv
 import enum
 import json
 import pathlib
 import random
 import typing
+import warnings
 
 import gensim
 import nltk
@@ -104,6 +106,13 @@ class OutputMode(enum.Enum):
             case 'Detection':
                 return cls.Detection
             case 'Classification3':
+                warnings.warn('Classification3 (Binary) is outdated. '
+                              'Using this option requires carefully re-implementing '
+                              'support for this mode in all places where we deal with '
+                              'labels. This can be done by following the code paths '
+                              'for all normal and ensemble models, both in training/evaluation mode, '
+                              'and in prediction mode. The involved code will raise exceptions '
+                              'when Classification3 is used as input mode.')
                 return cls.Classification3
             case 'Classification3Simplified':
                 return cls.Classification3Simplified
@@ -240,7 +249,9 @@ class AbstractFeatureGenerator(abc.ABC):
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
-        conf.register('system.unstable.generator', str, filename)
+        while filename in conf.get('system.storage.generators'):
+            filename = f'x_{filename}'
+        conf.get('system.storage.generators').append(filename)
         with open(filename, 'w') as file:
             json.dump(
                 {
@@ -301,7 +312,14 @@ class AbstractFeatureGenerator(abc.ABC):
         """
         with open(source_filename) as file:
             issues = json.load(file)
-            metadata_attributes = eval(self.__params.get('metadata-attributes', '[]'), ATTRIBUTE_CONSTANTS)
+            # DONT USE EVAL!
+            #metadata_attributes = eval(self.__params.get('metadata-attributes', '[]'), ATTRIBUTE_CONSTANTS)
+            metadata_attributes = [
+                attr for attr in self.__params.get('metadata-attributes', '').split(',') if attr
+            ]
+            for attr in metadata_attributes:
+                if attr not in ATTRIBUTE_CONSTANTS:
+                    raise ValueError(f'Unknown metadata attribute: {attr}')
 
             texts = []
             metadata = []
@@ -320,23 +338,34 @@ class AbstractFeatureGenerator(abc.ABC):
             }
             current_index = 0
             for issue in issues:
-                is_cat1 = issue['is-cat1']['value'] == 'True'
-                is_cat2 = issue['is-cat2']['value'] == 'True'
-                is_cat3 = issue['is-cat3']['value'] == 'True'
-                key = (is_cat1, is_cat2, is_cat3)
+                if self.pretrained is None:
+                    # Add labels if not using a pre-trained dataset.
+                    is_cat1 = issue['is-cat1']['value'] == 'True'
+                    is_cat2 = issue['is-cat2']['value'] == 'True'
+                    is_cat3 = issue['is-cat3']['value'] == 'True'
+                    key = (is_cat1, is_cat2, is_cat3)
 
-                if is_cat2:  # Executive
-                    labels['classification3simplified'].append((0, 1, 0, 0))
-                    classification_indices['Executive'].append(current_index)
-                elif is_cat3:  # Property
-                    labels['classification3simplified'].append((0, 0, 1, 0))
-                    classification_indices['Property'].append(current_index)
-                elif is_cat1:  # Existence
-                    labels['classification3simplified'].append((1, 0, 0, 0))
-                    classification_indices['Existence'].append(current_index)
-                else:  # Non-architectural
-                    labels['classification3simplified'].append((0, 0, 0, 1))
-                    classification_indices['Non-Architectural'].append(current_index)
+                    if is_cat2:  # Executive
+                        labels['classification3simplified'].append((0, 1, 0, 0))
+                        classification_indices['Executive'].append(current_index)
+                    elif is_cat3:  # Property
+                        labels['classification3simplified'].append((0, 0, 1, 0))
+                        classification_indices['Property'].append(current_index)
+                    elif is_cat1:  # Existence
+                        labels['classification3simplified'].append((1, 0, 0, 0))
+                        classification_indices['Existence'].append(current_index)
+                    else:  # Non-architectural
+                        labels['classification3simplified'].append((0, 0, 0, 1))
+                        classification_indices['Non-Architectural'].append(current_index)
+
+                    if issue['is-design'] == 'True':
+                        labels['detection'].append(True)
+                    else:
+                        labels['detection'].append(False)
+
+                    labels['classification8'].append(classification8_lookup[key])
+                    labels['classification3'].append(key)
+                    labels['issue_keys'].append(issue['key'] + '-' + issue['study'])
 
                 texts.append(issue['summary'] + issue['description'])
 
@@ -345,18 +374,15 @@ class AbstractFeatureGenerator(abc.ABC):
                     new_metadata.extend(issue['metadata'][attribute])
                 metadata.append(new_metadata)
 
-                if issue['is-design'] == 'True':
-                    labels['detection'].append(True)
-                else:
-                    labels['detection'].append(False)
-
-                labels['classification8'].append(classification8_lookup[key])
-                labels['classification3'].append(key)
-                labels['issue_keys'].append(issue['key'] + '-' + issue['study'])
                 current_index += 1
 
+        try:
+            texts
+        except NameError:   # This is necessary to make Pycharm shut up
+            raise ValueError('BUG')
+
         limit = int(self.params.get('class-limit', -1))
-        if limit != -1:
+        if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
             random.seed(42)
             stratified_indices = []
             for issue_type in classification_indices.keys():
@@ -375,13 +401,15 @@ class AbstractFeatureGenerator(abc.ABC):
             tokenized_issues = self.preprocess(texts)
 
         output = self.generate_vectors(tokenized_issues, metadata, self.__params)
-        output['labels'] = labels
+        output['labels'] = labels   # labels is empty when pretrained
 
-        if 'original' in output:
+        if 'original' in output and self.pretrained:    # Only dump original text when not pre-trained.
             with open(get_raw_text_file_name(), 'w') as file:
                 mapping = {key: text
                            for key, text in zip(labels['issue_keys'], output['original'])}
                 json.dump(mapping, file)
+            del output['original']
+        elif 'original' in output:
             del output['original']
 
         with open(target_filename, 'w') as file:

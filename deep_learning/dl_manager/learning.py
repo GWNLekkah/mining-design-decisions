@@ -31,8 +31,6 @@ from collections import Counter
 from .classifiers import OutputEncoding
 from .feature_generators.generator import OutputMode
 
-from . import kfold
-from . import custom_kfold
 from . config import conf
 from . import stacking
 from . import boosting
@@ -40,6 +38,7 @@ from .metrics import MetricLogger
 from . import metrics
 from . import data_splitting as splitting
 from . import model_manager
+from . import voting_util
 
 
 EARLY_STOPPING_GOALS = {
@@ -563,6 +562,7 @@ def train_and_test_model(model: tf.keras.Model,
             )
             callbacks.append(monitor)
         epochs = 1000   # Just a large amount of epochs
+        import warnings
         warnings.warn('--epochs is ignored when using early stopping')
         conf.set('run.epochs', 1000)
     #print('Training data shape:', train_y.shape, train_x.shape)
@@ -811,28 +811,8 @@ def _save_voting_data(data):
 
 def _get_voting_predictions(truth, predictions):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-    if output_mode.output_encoding == OutputEncoding.Binary:
-        hard_predictions = []
-        for pred in predictions:
-            hard_pred = pred.flatten()
-            hard_pred[hard_pred < 0.5] = 0
-            hard_pred[hard_pred >= 0.5] = 1
-            hard_predictions.append(hard_pred)
-    else:
-        hard_predictions = []
-        for pred in predictions:
-            hard_pred = numpy.argmax(pred, axis=1)
-            hard_predictions.append(hard_pred)
-    # Step 1: Determine whether there is a majority
-    prediction_matrix = numpy.asarray(hard_predictions).transpose().tolist()
-    final_predictions = [mode(x) for x in prediction_matrix]
-    # Step 2: Break ties using probabilities
-    probability_matrix = numpy.asarray(predictions).sum(axis=0)
-    probability_classes: list = numpy.argmax(probability_matrix, axis=1).tolist()
-    final_predictions = numpy.asarray([
-        final_pred if final_pred is not None else probability_classes[index]
-        for index, final_pred in enumerate(final_predictions)
-    ])
+    final_predictions = voting_util.get_voting_predictions(output_mode,
+                                                           predictions)
     if output_mode == OutputMode.Detection:
         accuracy, other_metrics = metrics.compute_confusion_binary(truth,
                                                                    final_predictions,
@@ -852,20 +832,6 @@ def _get_voting_predictions(truth, predictions):
             **{cls: metrics_for_class.as_dictionary()
                for cls, metrics_for_class in class_metrics.items()}
         }
-
-
-def mode(x):
-    counter = collections.Counter(x)
-    if len(counter) == 1:
-        return x[0]
-    best_two = counter.most_common(2)
-    (value_1, count_1), (value_2, count_2) = best_two
-    if count_1 > count_2:
-        return value_1
-    if count_2 > count_1:
-        return value_2
-    return None
-
 
 def run_boosting_ensemble(factory,
                           datasets,

@@ -10,9 +10,11 @@ deep learning classifiers.
 
 import argparse
 import collections
+import json
 import os.path
 import pathlib
 import getpass
+import warnings
 
 from . import classifiers
 from .classifiers import HyperParameter
@@ -25,6 +27,7 @@ from . import learning
 from .config import conf, CLIApp
 
 from . import analysis
+from . import prediction
 
 
 ##############################################################################
@@ -97,6 +100,7 @@ def main():
         'run.store-model', 'run.force-regenerate-data'
     )
 
+    app.register_callback('prediction', run_prediction_command)
     app.register_callback('run', run_classification_command)
     app.register_callback('visualize', run_visualize_command)
     app.register_callback('make-features', run_make_features_command)
@@ -256,6 +260,7 @@ def run_generator_params_command():
 
 
 def run_make_features_command():
+    conf.register('system.storage.generators', list, [])
     source_file = conf.get('make-features.file')
     input_mode = conf.get('make-features.input_mode')
     output_mode = conf.get('make-features.output_mode')
@@ -487,3 +492,48 @@ def _get_model_factory(input_mode,
 
 def _normalize_param_names(params):
     return {key.replace('_', '-'): value for key, value in params.items()}
+
+
+##############################################################################
+##############################################################################
+# Command Dispatch - Prediction Command
+##############################################################################
+
+
+def run_prediction_command():
+    # Step 1: Load model data
+    data: pathlib.Path = conf.get('predict.data')
+    model: pathlib.Path = conf.get('predict.model')
+    with open(model / 'model.json') as file:
+        model_metadata = json.load(file)
+    output_mode = OutputMode.from_string(
+        model_metadata['feature_settings']['make_features.output_mode']
+    )
+
+    # Step 2: Load data
+    datasets = []
+    warnings.warn('The predict command does not cache features!')
+    for generator in model_metadata['feature_generators']:
+        with open(model / generator) as file:
+            generator_data = json.load(file)
+        feature_file = pathlib.Path('prediction_features.json')
+        generator_class = feature_generators.generators[generator_data['generator']]
+        generator = generator_class(
+            pretrained_generator_settings=generator_data['settings']
+        )
+        generator.generate_features(data, feature_file)
+        features = data_manager.load_features(feature_file, output_mode.name).features
+        datasets.append(features)
+
+    # Step 3: Load the model and get the predictions
+    match model_metadata['model_type']:
+        case 'single':
+            prediction.predict_simple_model(model_metadata, datasets, output_mode)
+        case 'stacking':
+            prediction.predict_stacking_model(model_metadata, datasets, output_mode)
+        case 'voting':
+            prediction.predict_voting_model(model_metadata, datasets, output_mode)
+        case _ as tp:
+            raise ValueError(f'Invalid model type: {tp}')
+
+

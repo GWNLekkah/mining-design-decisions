@@ -347,6 +347,32 @@
      ]
     },
     {
+      "name": "predict",
+      "help": "Use an existing classifier to make predictions on new data.",
+      "args": [
+        {
+          "name": "model",
+          "alias": "m",
+          "required": true,
+          "style": "named",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ]
+        },
+        {
+          "name": "data",
+          "alias": "d",
+          "required": true,
+          "style": "named",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ]
+        }
+      ]
+    },
+    {
       "name": "visualize",
       "help": "Visualize a classifier",
       "import_args": [

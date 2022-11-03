@@ -26,10 +26,11 @@ def _prepare_directory(path: str):
 
 
 def _get_and_copy_feature_generators(directory: str):
-    filename = conf.get('system.unstable.generator')
-    full_path = os.path.join(directory, filename)
-    shutil.copy(filename, full_path)
-    return filename
+    filenames = conf.get('system.storage.generators')
+    for filename in filenames:
+        full_path = os.path.join(directory, filename)
+        shutil.copy(filename, full_path)
+    return filenames
 
 
 ##############################################################################
@@ -44,7 +45,7 @@ def save_single_model(directory: str, model):
     metadata = {
         'model_type': 'single',
         'model_path': '0',
-        'feature_generator': _get_and_copy_feature_generators(directory),
+        'feature_generators': _get_and_copy_feature_generators(directory),
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
@@ -61,7 +62,7 @@ def save_stacking_model(directory: str,
     metadata = {
         'model_type': 'stacking',
         'meta_model': '0',
-        'feature_generator': _get_and_copy_feature_generators(directory),
+        'feature_generators': _get_and_copy_feature_generators(directory),
         'input_conversion_strategy': conversion_strategy,
         'child_models': [
             str(i) for i in range(1, len(child_models) + 1)
@@ -78,7 +79,7 @@ def save_voting_model(directory: str, *models):
     metadata = {
         'model_type': 'voting',
         'child_models': [str(x) for x in range(len(models))],
-        'feature_generator': _get_and_copy_feature_generators(directory),
+        'feature_generators': _get_and_copy_feature_generators(directory),
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
