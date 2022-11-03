@@ -38,7 +38,7 @@ class OutputEncoding(enum.Enum):
 class HyperParameter(typing.NamedTuple):
     minimum: numbers.Number | None
     maximum: numbers.Number | None
-    default: numbers.Number
+    default: typing.Any 
 
 
 def _fix_hyper_params(function):
@@ -126,13 +126,18 @@ class AbstractModel(abc.ABC):
 
         Remember to call super() when implementing
         """
+        result = {
+            'optimizer': HyperParameter(default='adam',
+                                        minimum=None,
+                                        maximum=None)
+        }
         if InputEncoding.Embedding in cls.supported_input_encodings():
-            return {
+            result |= {
                 'use_trainable_embedding': HyperParameter(default=False,
                                                           minimum=False,
                                                           maximum=True)
             }
-        return {}
+        return result
 
     @staticmethod
     @abc.abstractmethod
