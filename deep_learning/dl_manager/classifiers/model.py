@@ -129,7 +129,10 @@ class AbstractModel(abc.ABC):
         result = {
             'optimizer': HyperParameter(default='adam',
                                         minimum=None,
-                                        maximum=None)
+                                        maximum=None),
+            'loss': HyperParameter(default='crossentropy',
+                                   minimum=None,
+                                   maximum=None)
         }
         if InputEncoding.Embedding in cls.supported_input_encodings():
             result |= {
