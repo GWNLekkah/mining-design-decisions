@@ -93,6 +93,9 @@ class Config:
         self._namespace[name] = default
         self._types[name] = type_or_validator
 
+    def is_registered(self, name: str) -> bool:
+        return name in self._namespace
+
 
 conf = Config()
 

@@ -123,6 +123,7 @@ def main():
                           analysis.run_stat_command)
 
     app.register_setup_callback(setup_peregrine)
+    app.register_setup_callback(setup_storage)
     app.parse_and_dispatch()
 
 
@@ -134,6 +135,10 @@ def setup_peregrine():
         conf.register('system.peregrine.data', str, f'/data/{getpass.getuser()}')
         print(f'system.peregrine.home: {conf.get("system.peregrine.home")}')
         print(f'system.peregrine.data: {conf.get("system.peregrine.data")}')
+
+
+def setup_storage():
+    conf.register('system.storage.generators', list, [])
 
 
 ##############################################################################
@@ -260,7 +265,6 @@ def run_generator_params_command():
 
 
 def run_make_features_command():
-    conf.register('system.storage.generators', list, [])
     source_file = conf.get('make-features.file')
     input_mode = conf.get('make-features.input_mode')
     output_mode = conf.get('make-features.output_mode')
