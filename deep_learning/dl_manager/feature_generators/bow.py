@@ -34,8 +34,9 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
         for tokenized_issue in tokenized_issues:
             bag = [0] * idx
             for token in tokenized_issue:
-                token_idx = word_to_idx[token]
-                bag[token_idx] += self.get_word_value(len(tokenized_issue))
+                if token in word_to_idx:    # In pretrained mode, ignore unknown words.
+                    token_idx = word_to_idx[token]
+                    bag[token_idx] += self.get_word_value(len(tokenized_issue))
             bags.append(bag)
 
         return {
