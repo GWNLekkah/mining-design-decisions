@@ -53,9 +53,15 @@ class Config:
     def __new__(cls):
         if cls._self is None:
             cls._self = self = super().__new__(cls)
-            self._namespace = {}
-            self._types = {}
         return cls._self
+
+    def __init__(self):
+        self._namespace = {}
+        self._types = {}
+
+    def reset(self):
+        self._namespace = {}
+        self._types = {}
 
     def set(self, name, value):
         name = name.replace('-', '_')
@@ -134,8 +140,11 @@ class CLIApp:
     def add_constraint(self, predicate, message, *keys):
         self.__constraints.append((keys, predicate, message))
 
-    def parse_and_dispatch(self):
-        args = self.__parser.parse_args()
+    def parse_and_dispatch(self, cli_args=None):
+        if cli_args is None:
+            args = self.__parser.parse_args()
+        else:
+            args = self.__parser.parse_args(cli_args)
         self.__expand_dictionaries(args)
         active_name, active_qualname = self.__get_active_command(args)
         self.__resolve_borrows(args, active_name)

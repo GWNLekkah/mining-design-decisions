@@ -36,7 +36,13 @@ from . import prediction
 ##############################################################################
 
 
-def main():
+def main(args=None):
+    conf.reset()
+    app = build_app()
+    app.parse_and_dispatch(args)
+
+
+def build_app():
     location = os.path.split(__file__)[0]
     app = CLIApp(os.path.join(location, 'cli.json'))
 
@@ -124,7 +130,8 @@ def main():
 
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
-    app.parse_and_dispatch()
+
+    return app
 
 
 def setup_peregrine():
