@@ -135,7 +135,7 @@ class DeepLearningData:
             )
             remaining = self.sample_indices(list(remaining_indices))
             validation,  training = remaining.split_fraction(val_split)
-            testing = self.sample_indices(test_indices)
+            testing = self.sample_indices(list(test_indices))
             yield training, validation, testing
 
     def limit_size(self, max_size: int):
