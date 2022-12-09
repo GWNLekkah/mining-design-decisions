@@ -1,0 +1,5 @@
+allow
+offer
+provide
+supply
+support
