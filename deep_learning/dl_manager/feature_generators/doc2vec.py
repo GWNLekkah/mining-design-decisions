@@ -48,6 +48,7 @@ class Doc2Vec(AbstractFeatureGenerator):
     def get_parameters() -> dict[str, ParameterSpec]:
         return {
             'vector-length': ParameterSpec(
-                description='specify the length of the output vector'
+                description='specify the length of the output vector',
+                type='int'
             ),
         } | super(Doc2Vec, Doc2Vec).get_parameters()

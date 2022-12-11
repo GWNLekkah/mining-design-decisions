@@ -92,6 +92,7 @@ class _NullDict(dict):
 
 class ParameterSpec(typing.NamedTuple):
     description: str
+    type: str
 
 
 class OutputMode(enum.Enum):
@@ -282,25 +283,32 @@ class AbstractFeatureGenerator(abc.ABC):
     def get_parameters() -> dict[str, ParameterSpec]:
         return {
             'max-len': ParameterSpec(
-                description='words limit of the issue text'
+                description='words limit of the issue text',
+                type='int'
             ),
             'disable-lowercase': ParameterSpec(
-                description='transform words to lowercase'
+                description='transform words to lowercase',
+                type='bool'
             ),
             'disable-stopwords': ParameterSpec(
-                description='remove stopwords from text'
+                description='remove stopwords from text',
+                type='bool'
             ),
             'use-stemming': ParameterSpec(
-                description='stem the words in the text'
+                description='stem the words in the text',
+                type='bool'
             ),
             'use-lemmatization': ParameterSpec(
-                description='Use lemmatization on words in the text'
+                description='Use lemmatization on words in the text',
+                type='bool'
             ),
             'use-pos': ParameterSpec(
-                'Enhance words in the text with part of speech information'
+                'Enhance words in the text with part of speech information',
+                type='bool'
             ),
             'class-limit': ParameterSpec(
-                description='limit the amount of items per class'
+                description='limit the amount of items per class',
+                type='int'
             ),
         }
 
