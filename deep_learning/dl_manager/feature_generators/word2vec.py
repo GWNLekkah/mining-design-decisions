@@ -44,15 +44,19 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
     def get_parameters() -> dict[str, ParameterSpec]:
         return {
             'vector-length': ParameterSpec(
-                description='specify the length of the output vector'
+                description='specify the length of the output vector',
+                type='int'
             ),
             'min-count': ParameterSpec(
-                description='minimum occurrence for a word to be in the word2vec'
+                description='minimum occurrence for a word to be in the word2vec',
+                type='int'
             ),
             'pretrained-file': ParameterSpec(
-                description='specify path to the pretrained word2vec model'
+                description='specify path to the pretrained word2vec model',
+                type='str'
             ),
             'pretrained-binary': ParameterSpec(
-                description='specify is pretrained word2vec is binary'
+                description='specify is pretrained word2vec is binary',
+                type='str'
             ),
         } | super(AbstractWord2Vec, AbstractWord2Vec).get_parameters()
