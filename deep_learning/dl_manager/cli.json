@@ -343,6 +343,11 @@
           "style": "named",
           "type": "str",
           "default": ""
+        },
+        {
+          "name": "analyze-keywords",
+          "help": "Compute a list of important keywords (convolutional mode only)",
+          "style": "flag"
         }
      ]
     },

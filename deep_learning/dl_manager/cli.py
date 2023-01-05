@@ -16,7 +16,7 @@ import pathlib
 import getpass
 import warnings
 
-from . import classifiers
+from . import classifiers, kw_analyzer
 from .classifiers import HyperParameter
 
 from . import feature_generators
@@ -83,14 +83,19 @@ def build_app():
                        'run.cross-project', 'run.k-cross')
     app.add_constraint(
         lambda k, quick_cross, test_study, test_project: not (
-            (k > 0 and not quick_cross) and (test_study != 'None' or test_project != 'None')
+                (k > 0 and not quick_cross) and (test_study != 'None' or test_project != 'None')
         ),
         'Cannot use --test-study or --test-project without --quick-cross when k > 0',
         'run.k-cross', 'run.quick-cross', 'run.test-study', 'run.test-project'
     )
     app.add_constraint(
+        lambda k, quick_cross: not quick_cross or k > 0,
+        'Must specify k when running with --quick-cross',
+        'run.k-cross', 'run.quick-cross'
+    )
+    app.add_constraint(
         lambda cross_project, test_study, test_project: not (
-            cross_project and (test_study != 'None' or test_project != 'None')
+                cross_project and (test_study != 'None' or test_project != 'None')
         ),
         'Cannot use --test-study or --test-project in --cross-project mode',
         'run.cross-project', 'run.test-study', 'run.test-project'
@@ -104,6 +109,17 @@ def build_app():
         lambda do_save, force_regenerate: (not do_save) or (do_save and force_regenerate),
         'Must use --force-regenerate-data when using --store-model.',
         'run.store-model', 'run.force-regenerate-data'
+    )
+    app.add_constraint(
+        lambda do_analyze, _:
+            not do_analyze or kw_analyzer.model_is_convolution(),
+        'Can only analyze keywords when using a convolutional model',
+        'run.analyze-keywords', 'run.classifier'
+    )
+    app.add_constraint(
+        lambda do_analyze: (not do_analyze) or kw_analyzer.doing_one_run(),
+        'Can not perform cross validation when extracting keywords',
+        'run.analyze-keywords'
     )
 
     app.register_callback('predict', run_prediction_command)
@@ -325,7 +341,7 @@ def run_visualize_command():
 
     import visualkeras.visualkeras as visualkeras
     visualkeras.graph_view(model,
-                             to_file='output.png', legend=True).show()
+                           to_file='output.png', legend=True).show()
 
 
 def run_classification_command():
@@ -470,9 +486,9 @@ def _get_model_factory(input_mode,
             number = model_counts[name]
             model_counts[name] += 1
             hyperparams = _normalize_param_names(
-                    hyper_parameters.get(name, {}) |
-                    hyper_parameters.get(f'{name}[{number}]', {}) |
-                    hyper_parameters.get('default', {})
+                hyper_parameters.get(name, {}) |
+                hyper_parameters.get(f'{name}[{number}]', {}) |
+                hyper_parameters.get('default', {})
             )
             allowed_hyper_params = model.get_hyper_parameters()
             for param_name in hyperparams:
@@ -494,7 +510,7 @@ def _get_model_factory(input_mode,
                 models[0], *keras_models, fully_connected_layers=(None, None)
             )
         else:
-            return keras_models     # Return all models separately, required for stacking or separate testing
+            return keras_models  # Return all models separately, required for stacking or separate testing
         final_model.summary()
         return final_model
 
@@ -546,5 +562,3 @@ def run_prediction_command():
             prediction.predict_voting_model(model, model_metadata, datasets, output_mode)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')
-
-

@@ -36,6 +36,19 @@ def model_is_convolution() -> bool:
     return models[classifiers[0]].input_must_support_convolution()
 
 
+def doing_one_run() -> bool:
+    k = conf.get('run.k-cross')
+    if k > 0:
+        return False
+    if conf.get('run.cross-project'):
+        return False
+    return True
+
+
+def enabled() -> bool:
+    return conf.get('run.analyze-keywords')
+
+
 def analyze_keywords(model, test_x, test_y, issue_keys):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     analyzer = ConvolutionKeywordAnalyzer(model)

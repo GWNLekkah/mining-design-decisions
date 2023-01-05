@@ -577,13 +577,11 @@ def train_and_test_model(model: tf.keras.Model,
               **extra_model_params)
 
     from . import kw_analyzer
-    if kw_analyzer.model_is_convolution():
-        import warnings
-        warnings.warn('Not performing keyword analysis. Must be manually uncommented.')
-        # kw_analyzer.analyze_keywords(model,
-        #                              test_x,
-        #                              test_y,
-        #                              test_issue_keys)
+    if kw_analyzer.model_is_convolution() and kw_analyzer.doing_one_run() and kw_analyzer.enabled():
+        kw_analyzer.analyze_keywords(model,
+                                     test_x,
+                                     test_y,
+                                     test_issue_keys)
 
     # logger.rollback_model_results(monitor.get_best_model_offset())
     return (
