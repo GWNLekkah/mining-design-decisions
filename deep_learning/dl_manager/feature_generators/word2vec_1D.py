@@ -53,8 +53,8 @@ class Word2Vec1D(AbstractWord2Vec):
                     'embedding-weights': embedding_weights,
                     'feature-shape': feature_shape,
                     'word-vector-length': word_vector_length,
-                    'model': self.__params['pretrained-file'],
-                    'model-binary': self.__params['pretrained-binary'].lower() == 'true'
+                    'model': args['pretrained-file'],
+                    'model-binary': args['pretrained-binary'].lower() == 'true'
                 }
             )
 
