@@ -411,7 +411,7 @@ class AbstractFeatureGenerator(abc.ABC):
         output = self.generate_vectors(tokenized_issues, metadata, self.__params)
         output['labels'] = labels   # labels is empty when pretrained
 
-        if 'original' in output and self.pretrained:    # Only dump original text when not pre-trained.
+        if 'original' in output and not self.pretrained:    # Only dump original text when not pre-trained.
             with open(get_raw_text_file_name(), 'w') as file:
                 mapping = {key: text
                            for key, text in zip(labels['issue_keys'], output['original'])}
