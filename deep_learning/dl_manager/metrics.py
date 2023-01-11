@@ -78,7 +78,7 @@ def get_metric_translation_table():
 def round_binary_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
     predictions[predictions <= 0.5] = 0
     predictions[predictions > 0.5] = 1
-    return predictions.flatten().astype(numpy.bool)
+    return predictions.flatten().astype(bool)
 
 
 def round_onehot_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
