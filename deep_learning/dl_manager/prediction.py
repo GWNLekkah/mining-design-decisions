@@ -101,7 +101,7 @@ def _predictions_to_canonical(output_mode, voting_predictions):
     for index in voting_predictions:
         vec = [0] * full_vector_length
         vec[index] = 1
-        output.append(index)
+        output.append(tuple(vec))
     return output
 
 
