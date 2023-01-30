@@ -33,11 +33,15 @@ class LinearConv1Model(AbstractModel):
             tf.keras.layers.MaxPooling1D(pool_size=p_size)(hidden)
             for hidden, p_size in zip(convolutions, pooling_sizes)
         ]
-        #hidden = tf.keras.layers.Conv1D(filters=filters,
-        #                                kernel_size=kernel_size,
-        #                                activation='relu')(next_layer)
-        #hidden = tf.keras.layers.MaxPooling1D(pool_size=pooling_size)(hidden)
-        concatenated = tf.keras.layers.concatenate(pooling_layers, axis=1)
+        # keras.load_model does not work on a concatenation layer with only
+        # a single input layer.
+        # This is intended, or will at least not be fixed.
+        # For more info, see
+        # https://github.com/keras-team/keras/issues/15547
+        if len(pooling_layers) == 1:
+            concatenated = pooling_layers[0]
+        else:
+            concatenated = tf.keras.layers.concatenate(pooling_layers, axis=1)
         hidden = tf.keras.layers.Flatten()(concatenated)
         if layer_size > 0:
             hidden = tf.keras.layers.Dense(layer_size)(hidden)
