@@ -17,6 +17,8 @@ import argparse
 import collections
 import importlib
 import json
+import re
+
 
 ##############################################################################
 ##############################################################################
@@ -43,6 +45,15 @@ class NoDefault(Exception):
 ##############################################################################
 # Configuration Class (not thread safe)
 ##############################################################################
+
+
+def _align(x, y):
+    if len(x) > len(y):
+        return False
+    for dx, dy in zip(x, y, strict=False):
+        if dx != dy:
+            return False
+    return True
 
 
 class Config:
@@ -84,10 +95,11 @@ class Config:
 
     def get_all(self, name):
         name = name.replace('-', '_')
+        parts = name.split('.')
         return {
             key: value
             for key, value in self._namespace.items()
-            if key.startswith(name) and value is not self._NOT_SET
+            if _align(parts, key.split('.')) and value is not self._NOT_SET
         }
 
     def clone(self, source, target):

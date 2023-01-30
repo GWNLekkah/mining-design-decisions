@@ -111,6 +111,22 @@ def build_app():
         'run.store-model', 'run.force-regenerate-data'
     )
     app.add_constraint(
+        lambda do_save, k, cross_project, quick_cross, test_study, test_project:
+            (not do_save)
+            or (k == 0
+                and not cross_project
+                and not quick_cross
+                and test_study == 'None'
+                and test_project == 'None'),
+        'Cannot run cross validation (or cross study) scheme when saving a model.',
+        'run.store-model',
+        'run.k-cross',
+        'run.cross-project',
+        'run.quick-cross',
+        'run.test-study',
+        'run.test-project'
+    )
+    app.add_constraint(
         lambda do_analyze, _:
             not do_analyze or kw_analyzer.model_is_convolution(),
         'Can only analyze keywords when using a convolutional model',
@@ -162,6 +178,8 @@ def setup_peregrine():
 
 def setup_storage():
     conf.register('system.storage.generators', list, [])
+    conf.register('system.storage.auxiliary', list, [])
+    conf.register('system.storage.auxiliary_map', dict, {})
 
 
 ##############################################################################
@@ -229,7 +247,7 @@ def _show_input_mode_list():
 
 def _show_enum_list(name: str, obj):
     print(f'Possible values for {name} setting:')
-    keys = [key for key in vars(obj) if not key.startswith('_')]
+    keys = [key for key in vars(obj) if not key.startswith('_') and key[0].isupper()]
     _print_keys(keys)
 
 
@@ -540,6 +558,11 @@ def run_prediction_command():
     # Step 2: Load data
     datasets = []
     warnings.warn('The predict command does not cache features!')
+    auxiliary_files = {
+        file: os.path.join(model, path)
+        for file, path in model_metadata['auxiliary_files'].items()
+    }
+    conf.get('system.storage.auxiliary_map').update(auxiliary_files)
     for generator in model_metadata['feature_generators']:
         with open(model / generator) as file:
             generator_data = json.load(file)

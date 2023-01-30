@@ -62,20 +62,23 @@ class LinearConv1Model(AbstractModel):
     @classmethod
     @_fix_hyper_params
     def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
+        max_convolutions = 11
+        num_convolutions = HyperParameter(
+            default=1, minimum=1, maximum=max_convolutions
+        )
+        kernel_sizes = {
+            f'kernel_{i}_size': HyperParameter(minimum=1, default=4, maximum=512)
+            for i in range(1, max_convolutions + 1)
+        }
         return {
             'fully_connected_layer_size': HyperParameter(
-                default=32, minimum=0, maximum=128
+                default=32, minimum=1, maximum=16384
             ),
-            'number_of_convolutions': HyperParameter(
-                default=1, minimum=1, maximum=32
-            ),
-            'kernel_1_size': HyperParameter(
-                default=8, minimum=1, maximum=64
-            ),
+            'number_of_convolutions': num_convolutions,
             'filters': HyperParameter(
                 default=32, minimum=1, maximum=64
             ),
-            'pooling_size': HyperParameter(
-                default=2, minimum=2, maximum=16
-            ),
-        } | super().get_hyper_parameters()
+            # 'pooling_size': HyperParameter(
+            #     default=2, minimum=2, maximum=16
+            # ),
+        } | kernel_sizes | super().get_hyper_parameters()

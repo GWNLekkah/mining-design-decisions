@@ -3,6 +3,9 @@ import datetime
 
 from gensim.models import Word2Vec as GensimWord2Vec
 from gensim import models
+
+from ..config import conf
+
 from ..feature_generators import AbstractFeatureGenerator, ParameterSpec
 
 
@@ -26,8 +29,10 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                 args['pretrained-file'], binary=bool(args['pretrained-binary'])
             )
         else:
+            aux_map = conf.get('system.storage.auxiliary_map')
+            filename = aux_map[self.pretrained['model']]
             wv = models.KeyedVectors.load_word2vec_format(
-                self.pretrained['model'],
+                filename,
                 binary=self.pretrained['model-binary']
             )
 

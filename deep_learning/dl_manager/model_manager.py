@@ -33,6 +33,18 @@ def _get_and_copy_feature_generators(directory: str):
     return filenames
 
 
+def _get_and_copy_auxiliary_files(directory: str):
+    filenames = conf.get('system.storage.auxiliary')
+    os.makedirs(os.path.join(directory, 'auxiliary'), exist_ok=True)
+    result = {}
+    for filename in filenames:
+        full_path = os.path.join(directory, 'auxiliary', filename)
+        result[filename] = os.path.join('auxiliary', filename)
+        shutil.copy(filename, full_path)
+    return result
+
+
+
 ##############################################################################
 ##############################################################################
 # Model Saving
@@ -46,6 +58,7 @@ def save_single_model(directory: str, model):
         'model_type': 'single',
         'model_path': '0',
         'feature_generators': _get_and_copy_feature_generators(directory),
+        'auxiliary_files': _get_and_copy_auxiliary_files(directory)
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)

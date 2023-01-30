@@ -242,7 +242,7 @@ class AbstractFeatureGenerator(abc.ABC):
     def pretrained(self) -> dict | None:
         return self.__pretrained
 
-    def save_pretrained(self, pretrained_settings: dict):
+    def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str]):
         settings = '_'.join(
             f'{key}-{value}' for key, value in self.__params.items()
         )
@@ -253,6 +253,7 @@ class AbstractFeatureGenerator(abc.ABC):
         while filename in conf.get('system.storage.generators'):
             filename = f'x_{filename}'
         conf.get('system.storage.generators').append(filename)
+        conf.get('system.storage.auxiliary').extend(auxiliary_files)
         with open(filename, 'w') as file:
             json.dump(
                 {

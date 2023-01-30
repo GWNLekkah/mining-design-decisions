@@ -3,6 +3,8 @@ import datetime
 from gensim.models.doc2vec import TaggedDocument
 from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
+from ..config import conf
+
 from .generator import AbstractFeatureGenerator, InputEncoding, ParameterSpec
 
 
@@ -32,10 +34,15 @@ class Doc2Vec(AbstractFeatureGenerator):
             self.save_pretrained(
                 {
                     'pretrained-file': args['pretrained-file']
-                }
+                },
+                [
+                    args['pretrained-file']
+                ]
             )
         else:
-            model = GensimDoc2Vec.load(self.pretrained['pretrained-file'])
+            aux_map = conf.get('system.storage.auxiliary_map')
+            filename = aux_map[self.pretrained['pretrained-file']]
+            model = GensimDoc2Vec.load(filename)
 
         return {'features': [
                     model.infer_vector(

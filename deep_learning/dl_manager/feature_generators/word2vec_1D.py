@@ -55,7 +55,10 @@ class Word2Vec1D(AbstractWord2Vec):
                     'word-vector-length': word_vector_length,
                     'model': args['pretrained-file'],
                     'model-binary': args['pretrained-binary'].lower() == 'true'
-                }
+                },
+                [
+                    args['pretrained-file']
+                ]
             )
 
         return {'features': features,
