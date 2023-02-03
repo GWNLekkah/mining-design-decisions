@@ -242,7 +242,7 @@ class AbstractFeatureGenerator(abc.ABC):
     def pretrained(self) -> dict | None:
         return self.__pretrained
 
-    def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str]):
+    def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str] = []):
         settings = '_'.join(
             f'{key}-{value}' for key, value in self.__params.items()
         )
