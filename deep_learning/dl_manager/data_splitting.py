@@ -188,7 +188,11 @@ class DataSplitter(abc.ABC):
     def __init__(self, **kwargs):
         self.max_train = t if (t := kwargs.pop('max_train', -1)) != -1 else None
         self.test_project = kwargs.pop('test_project', None)
+        if self.test_project == 'None':
+            self.test_project = None
         self.test_study = kwargs.pop('test_study', None)
+        if self.test_study == 'None':
+            self.test_study = None
         if kwargs:
             keys = ', '.join(kwargs)
             raise ValueError(
