@@ -45,6 +45,15 @@ class DeepLearningData:
             for label, key in zip(self.labels, self.issue_keys)
         ]
 
+    @property
+    def custom_kfold_extended_labels(self):
+        if not isinstance(self.labels[0], (numpy.ndarray, list)):
+            return self.extended_labels
+        return [
+            (tuple(label), key.split('-')[0])
+            for label, key in zip(self.labels, self.issue_keys)
+        ]
+
     def split_on_project(self, project: str):
         return self._split_on_predicate(
             # Split: project, number, study
@@ -110,7 +119,7 @@ class DeepLearningData:
             yield left, right
 
     def split_k_cross_three(self, k: int):
-        for ix, iy, iz in custom_kfold.stratified_kfold(k, self.extended_labels):
+        for ix, iy, iz in custom_kfold.stratified_kfold(k, self.custom_kfold_extended_labels):
             x = self.sample_indices(ix)
             y = self.sample_indices(iy)
             z = self.sample_indices(iz)
