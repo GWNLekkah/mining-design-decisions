@@ -15,6 +15,7 @@ import os.path
 import pathlib
 import getpass
 import warnings
+import shlex 
 
 import numpy
 
@@ -42,6 +43,15 @@ def main(args=None):
     conf.reset()
     app = build_app()
     app.parse_and_dispatch(args)
+
+
+def invoke_pipeline(command: str) -> None | Exception:
+    conf.reset()
+    try:
+        main(shlex.split(command))
+    except Exception as e:
+        return e
+
 
 
 def build_app():
