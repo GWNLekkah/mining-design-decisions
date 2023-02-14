@@ -1,4 +1,5 @@
 import collections
+import os
 
 from . import ParameterSpec
 from .generator import AbstractFeatureGenerator
@@ -41,14 +42,13 @@ class OntologyFeatures(AbstractFeatureGenerator):
                          tokenized_issues: list[list[str]],
                          metadata,
                          args: dict[str, str]):
-        # This pre-processing does not require learning
-        # anything.
-        # If this is changed, be sure to implement
-        # functionality for dealing with the .pretrained
-        # attribute.
-        ontology_path = conf.get('make-features.ontology-classes')
-        if ontology_path == '':
-            raise ValueError('--ontology-classes parameter must be given')
+        if self.pretrained is None:
+            ontology_path = conf.get('make-features.ontology-classes')
+            if ontology_path == '':
+                raise ValueError('--ontology-classes parameter must be given')
+        else:
+            aux_map = conf.get('system.storage.auxiliary_map')
+            ontology_path = aux_map[self.pretrained['ontologies']]
         table = load_ontology(ontology_path)
         order = tuple(table.classes)
         features = [
@@ -57,7 +57,14 @@ class OntologyFeatures(AbstractFeatureGenerator):
         ]
 
         if self.pretrained is None:
-            self.save_pretrained({})
+            self.save_pretrained(
+                {
+                    'ontologies': ontology_path
+                },
+                [
+                   ontology_path
+                ]
+            )
 
         return {
             'features': features,

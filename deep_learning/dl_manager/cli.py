@@ -16,6 +16,8 @@ import pathlib
 import getpass
 import warnings
 
+import numpy
+
 from . import classifiers, kw_analyzer
 from .classifiers import HyperParameter
 
@@ -574,6 +576,7 @@ def run_prediction_command():
         generator.generate_features(data, feature_file)
         features = data_manager.load_features(feature_file, output_mode.name).features
         datasets.append(features)
+    datasets = [numpy.asarray(d) for d in datasets]
 
     # Step 3: Load the model and get the predictions
     match model_metadata['model_type']:

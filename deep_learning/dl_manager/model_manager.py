@@ -40,6 +40,8 @@ def _get_and_copy_auxiliary_files(directory: str):
     for filename in filenames:
         full_path = os.path.join(directory, 'auxiliary', filename)
         result[filename] = os.path.join('auxiliary', filename)
+        stem = os.path.split(full_path)[0]
+        os.makedirs(stem, exist_ok=True)
         shutil.copy(filename, full_path)
     return result
 
@@ -80,6 +82,7 @@ def save_stacking_model(directory: str,
         'child_models': [
             str(i) for i in range(1, len(child_models) + 1)
         ],
+        'auxiliary_files': _get_and_copy_auxiliary_files(directory)
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
@@ -93,6 +96,7 @@ def save_voting_model(directory: str, *models):
         'model_type': 'voting',
         'child_models': [str(x) for x in range(len(models))],
         'feature_generators': _get_and_copy_feature_generators(directory),
+        'auxiliary_files': _get_and_copy_auxiliary_files(directory)
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
@@ -101,6 +105,9 @@ def save_voting_model(directory: str, *models):
 def _store_model(directory, number, model):
     path = os.path.join(directory, str(number))
     model.save(path)
+    os.makedirs(os.path.join(directory, 'arch'), exist_ok=True)
+    with open(os.path.join(directory, 'arch', f'{number}.json'), 'w') as file:
+        file.write(model.to_json(indent=4))
 
 
 def _get_cli_settings():

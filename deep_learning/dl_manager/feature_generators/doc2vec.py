@@ -31,9 +31,12 @@ class Doc2Vec(AbstractFeatureGenerator):
 
             model = GensimDoc2Vec.load(args['pretrained-file'])
 
+            shape = int(args['vector-length'])
+
             self.save_pretrained(
                 {
-                    'pretrained-file': args['pretrained-file']
+                    'pretrained-file': args['pretrained-file'],
+                    'vector-length': shape
                 },
                 [
                     args['pretrained-file']
@@ -43,13 +46,15 @@ class Doc2Vec(AbstractFeatureGenerator):
             aux_map = conf.get('system.storage.auxiliary_map')
             filename = aux_map[self.pretrained['pretrained-file']]
             model = GensimDoc2Vec.load(filename)
+            shape = self.pretrained['vector-length']
 
         return {'features': [
                     model.infer_vector(
                         issue
                     ).tolist()
                     for issue in tokenized_issues],
-                'feature_shape': int(args['vector-length'])}
+                'feature_shape': shape
+        }
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

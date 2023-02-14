@@ -233,6 +233,9 @@ class AbstractFeatureGenerator(abc.ABC):
             for name in AbstractFeatureGenerator.get_parameters():
                 if name in self.__pretrained:
                     self.__params[name] = self.__pretrained[name]
+            if 'ontology-classes' in self.__pretrained:
+                aux = conf.get('system.storage.auxiliary_map')
+                conf.set('make-features.ontology-classes', aux[self.__pretrained['ontology-classes']])
 
     @property
     def params(self) -> dict[str, str]:
@@ -250,6 +253,10 @@ class AbstractFeatureGenerator(abc.ABC):
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
+        ontologies = conf.get('make-features.ontology-classes')
+        if ontologies:
+            pretrained_settings['ontology-classes'] = ontologies
+            conf.get('system.storage.auxiliary').append(ontologies)
         while filename in conf.get('system.storage.generators'):
             filename = f'x_{filename}'
         conf.get('system.storage.generators').append(filename)
