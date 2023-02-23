@@ -1,1 +1,3 @@
 include-recursive dl_manager/accelerator
+include dl_manager/*.json
+include dl_manager/feature_generators/util/*.json

@@ -1,8 +1,8 @@
-from dl_manager import cli
+from dl_manager import run_cli_app
 
 
 def main():
-    cli.main()
+    run_cli_app()
 
 
 if __name__ == '__main__':
