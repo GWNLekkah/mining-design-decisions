@@ -24,6 +24,8 @@ class FullyConnectedModel(AbstractModel):
         for i in range(1, n_layers + 1):
             layer_size = int(kwargs.get(f'hidden-layer-{i}-size', 64))
             current = tf.keras.layers.Dense(layer_size)(current)
+            if (act := kwargs.get(f'layer-{i}-activation', 'linear')) != 'linear':
+                current = self.get_activation(act)(current)
         outputs = self.get_output_layer()(current)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -49,4 +51,11 @@ class FullyConnectedModel(AbstractModel):
         }
         return {
             'number_of_hidden_layers': num_layers_param,
+            'layer-{i}-activation': HyperParameter(
+                minimum=None, maximum=None, default='linear',
+                options=[
+                    'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
+                    'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
+                ]
+            )
         } | layer_sizes | super().get_hyper_parameters()

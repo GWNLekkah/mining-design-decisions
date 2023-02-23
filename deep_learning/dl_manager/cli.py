@@ -28,6 +28,8 @@ from . import data_manager
 
 from . import learning
 from .config import conf, CLIApp
+from .logger import get_logger
+log = get_logger('CLI')
 
 from . import analysis
 from . import prediction
@@ -42,6 +44,7 @@ from . import prediction
 def main(args=None):
     conf.reset()
     app = build_app()
+    log.info('Dispatching user command')
     app.parse_and_dispatch(args)
 
 
@@ -56,6 +59,7 @@ def invoke_pipeline(command: str) -> None | Exception:
 
 def build_app():
     location = os.path.split(__file__)[0]
+    log.debug(f'Building CLI app from file {location}')
     app = CLIApp(os.path.join(location, 'cli.json'))
 
     def add_eq_len_constraint(p, q):
@@ -175,6 +179,7 @@ def build_app():
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
 
+    log.debug('Finished building app')
     return app
 
 

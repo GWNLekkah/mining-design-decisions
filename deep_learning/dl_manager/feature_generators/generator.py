@@ -22,6 +22,8 @@ from ..classifiers import InputEncoding, OutputEncoding
 from ..custom_kfold import stratified_trim
 from .util import ontology
 from ..config import conf
+from ..logger import get_logger, timer
+log = get_logger('Base Feature Generator')
 
 from ..data_manager_bootstrap import get_raw_text_file_name
 
@@ -223,6 +225,8 @@ class AbstractFeatureGenerator(abc.ABC):
                  **params):
         self.__params = params
         self.__pretrained = pretrained_generator_settings
+        self.__colors = None
+        self.__keys=  None
         if self.__pretrained is not None:
             if self.__params:
                 raise ValueError(
@@ -245,7 +249,20 @@ class AbstractFeatureGenerator(abc.ABC):
     def pretrained(self) -> dict | None:
         return self.__pretrained
 
+    @property
+    def colors(self) -> list[int]:
+        if self.__colors is None:
+            raise RuntimeError('No colors yet')
+        return self.__colors
+
+    @property
+    def issue_keys(self) -> list[str]:
+        if self.__keys is None:
+            raise RuntimeError('No keys yet')
+        return self.__keys
+
     def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str] = []):
+        log.info(f'Saving {self.__class__.__name__} feature encoding')
         settings = '_'.join(
             f'{key}-{value}' for key, value in self.__params.items()
         )
@@ -326,6 +343,7 @@ class AbstractFeatureGenerator(abc.ABC):
         """Generate features from the data in the given source file,
         and store the results in the given target file.
         """
+        log.info(f'Loading features from file {source_filename}')
         with open(source_filename) as file:
             issues = json.load(file)
             # DONT USE EVAL!
@@ -353,7 +371,10 @@ class AbstractFeatureGenerator(abc.ABC):
                 'Non-Architectural': []
             }
             current_index = 0
+            self.__colors = []
+            self.__keys = []
             for issue in issues:
+                self.__keys.append(issue['key'])
                 if self.pretrained is None:
                     # Add labels if not using a pre-trained dataset.
                     is_cat1 = issue['is-cat1']['value'] == 'True'
@@ -364,15 +385,19 @@ class AbstractFeatureGenerator(abc.ABC):
                     if is_cat2:  # Executive
                         labels['classification3simplified'].append((0, 1, 0, 0))
                         classification_indices['Executive'].append(current_index)
+                        self.__colors.append(0)
                     elif is_cat3:  # Property
                         labels['classification3simplified'].append((0, 0, 1, 0))
                         classification_indices['Property'].append(current_index)
+                        self.__colors.append(1)
                     elif is_cat1:  # Existence
                         labels['classification3simplified'].append((1, 0, 0, 0))
                         classification_indices['Existence'].append(current_index)
+                        self.__colors.append(2)
                     else:  # Non-architectural
                         labels['classification3simplified'].append((0, 0, 0, 1))
                         classification_indices['Non-Architectural'].append(current_index)
+                        self.__colors.append(3)
 
                     if issue['is-design'] == 'True':
                         labels['detection'].append(True)
@@ -416,7 +441,9 @@ class AbstractFeatureGenerator(abc.ABC):
         else:
             tokenized_issues = self.preprocess(texts)
 
-        output = self.generate_vectors(tokenized_issues, metadata, self.__params)
+        log.info('Generating feature vectors')
+        with timer('Feature Generation'):
+            output = self.generate_vectors(tokenized_issues, metadata, self.__params)
         output['labels'] = labels   # labels is empty when pretrained
 
         if 'original' in output and not self.pretrained:    # Only dump original text when not pre-trained.
@@ -428,67 +455,77 @@ class AbstractFeatureGenerator(abc.ABC):
         elif 'original' in output:
             del output['original']
 
+        log.info('Saving features')
         with open(target_filename, 'w') as file:
             json.dump(output, file)
 
     def preprocess(self, issues):
-        ontology_path = conf.get('make-features.ontology-classes')
-        if ontology_path != '':
-            ontology_table = ontology.load_ontology(ontology_path)
-        else:
-            ontology_table = None
+        log.info('Preprocessing Features')
+        with timer('Feature Preprocessing'):
+            ontology_path = conf.get('make-features.ontology-classes')
+            if ontology_path != '':
+                ontology_table = ontology.load_ontology(ontology_path)
+            else:
+                ontology_table = None
 
-        tokenized_issues = []
-        for issue in issues:
-            all_words = []
+            stopwords = nltk.corpus.stopwords.words('english')
+            use_stemming = self.__params.get('use-stemming', 'False') == 'True'
+            use_lemmatization = self.__params.get('use-lemmatization', 'False') == 'True'
+            use_pos = self.__params.get('use-pos', 'False') == 'True'
+            stemmer = nltk.stem.PorterStemmer()
+            lemmatizer = nltk.stem.WordNetLemmatizer()
+            use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
+            use_ontologies = conf.get('make-features.apply-ontology-classes')
 
-            # Tokenize
-            for sentence in issue:
-                words = nltk.word_tokenize(sentence)
+            tokenized_issues = []
+            for issue in issues:
+                all_words = []
 
-                # Transform lowercase
-                if self.__params.get('disable-lowercase', 'False') != 'True':
-                    words = [word.lower() for word in words]
+                # Tokenize
+                for sentence in issue:
+                    # Transform to lowercase.
+                    # Do this before tokenization for maximum performance.
+                    if use_lowercase:
+                        sentence = sentence.lower()
+                    words = nltk.word_tokenize(sentence)
 
-                # Apply ontology simplification. Must be done before stemming/lemmatization
-                if conf.get('make-features.apply-ontology-classes'):
-                    assert ontology_table is not None, 'Missing --ontology-classes'
-                    words = ontology.apply_ontologies_to_sentence(words, ontology_table)
+                    # We always perform POS analysis because it's required for many
+                    # subsequent steps.
+                    words = nltk.pos_tag(words)
 
-                words = nltk.pos_tag(words)
+                    # Apply ontology simplification. Must be done before stemming/lemmatization
+                    if use_ontologies:
+                        #assert ontology_table is not None, 'Missing --ontology-classes'
+                        words = ontology.apply_ontologies_to_sentence(words, ontology_table)
 
-                # Remove stopwords
-                if self.__params.get('disable-stopwords', 'False') != 'True':
-                    stopwords = nltk.corpus.stopwords.words('english')
-                    #words = [word for word in words if word not in stopwords]
-                    words = [(word, tag) for word, tag in words if word not in stopwords]
+                    # Remove stopwords
+                    if self.__params.get('disable-stopwords', 'False') != 'True':
+                        words = [(word, tag) for word, tag in words if word not in stopwords]
 
-                use_stemming = self.__params.get('use-stemming', 'False') == 'True'
-                use_lemmatization = self.__params.get('use-lemmatization', 'False') == 'True'
-                use_pos = self.__params.get('use-pos', 'False') == 'True'
-                if use_stemming and use_lemmatization:
-                    raise ValueError('Cannot use both stemming and lemmatization')
+                    if use_stemming and use_lemmatization:
+                        raise ValueError('Cannot use both stemming and lemmatization')
 
-                if use_stemming:
-                    stemmer = nltk.stem.PorterStemmer()
-                    words = [(stemmer.stem(word), tag) for word, tag in words]
-                if use_lemmatization:
-                    lemmatizer = nltk.stem.WordNetLemmatizer()
-                    words = [(lemmatizer.lemmatize(word, pos=POS_CONVERSION.get(tag, 'n')), tag)
-                             for word, tag in words]
-                if use_pos:
-                    words = [f'{word}_{POS_CONVERSION.get(tag, tag)}' for word, tag in words]
-                else:
-                    words = [word for word, _ in words]
+                    if use_stemming:
+                        words = [(stemmer.stem(word), tag) for word, tag in words]
 
-                # At this point, we forget about sentence order
-                all_words.extend(words)
+                    if use_lemmatization:
+                        words = [(lemmatizer.lemmatize(word, pos=POS_CONVERSION.get(tag, 'n')), tag)
+                                 for word, tag in words]
 
-            # Limit issue length
-            if 'max-len' in self.__params:
-                if len(all_words) > int(self.__params['max-len']):
-                    all_words = all_words[0:int(self.__params['max-len'])]
+                    if use_pos:
+                        words = [f'{word}_{POS_CONVERSION.get(tag, tag)}' for word, tag in words]
+                    else:
+                        words = [word for word, _ in words]
 
-            tokenized_issues.append(all_words)
+                    # At this point, we forget about sentence order
+                    all_words.extend(words)
 
+                # Limit issue length
+                if 'max-len' in self.__params:
+                    if len(all_words) > int(self.__params['max-len']):
+                        all_words = all_words[0:int(self.__params['max-len'])]
+
+                tokenized_issues.append(all_words)
+
+        log.info('Finished preprocessing')
         return tokenized_issues

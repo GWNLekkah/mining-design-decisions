@@ -36,10 +36,10 @@ class OutputEncoding(enum.Enum):
 
 
 class HyperParameter(typing.NamedTuple):
-    minimum: numbers.Number | None
-    maximum: numbers.Number | None
     default: typing.Any
-
+    minimum: numbers.Number | None = None
+    maximum: numbers.Number | None = None
+    options: list[str] | None = None
 
 def _fix_hyper_params(function):
     def wrapper(*args):
@@ -155,6 +155,31 @@ class AbstractModel(abc.ABC):
 
     # ================================================================
     # Auxiliary Methods for Model Creation
+
+    def get_activation(self, act: str):
+        match act:
+            case 'relu':
+                return tf.keras.layers.Activation(tf.keras.activations.relu)
+            case 'elu':
+                return tf.keras.layers.Activation(tf.keras.activations.elu)
+            case 'leakrelu':
+                return tf.keras.layers.advanced_activations.LeakyReLU()
+            case 'sigmoid':
+                return tf.keras.layers.Activation(tf.keras.activations.sigmoid)
+            case 'tanh':
+                return tf.keras.layers.Activation(tf.keras.activations.tanh)
+            case 'softmax':
+                return tf.keras.layers.Activation(tf.keras.activations.softmax)
+            case 'softsign':
+                return tf.keras.layers.Activation(tf.keras.activations.softsign)
+            case 'selu':
+                return tf.keras.layers.Activation(tf.keras.activations.selu)
+            case 'exp':
+                return tf.keras.layers.Activation(tf.keras.activations.exp)
+            case 'prelu':
+                return tf.keras.layers.advanced_activations.PReLU()
+            case _ as x:
+                raise ValueError(f'Invalid activation {x}')
 
     def get_input_layer(self, *,
                         embedding=None,

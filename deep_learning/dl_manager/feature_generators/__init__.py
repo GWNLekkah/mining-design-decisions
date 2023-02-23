@@ -8,6 +8,7 @@ from .bert import Bert
 from .tfidf import TfidfGenerator
 from .metadata import Metadata
 from .ontology_features import OntologyFeatures
+from .auto_encoder import AutoEncoder
 
 
 _generators = (
@@ -18,7 +19,8 @@ _generators = (
     Bert,
     TfidfGenerator,
     Metadata,
-    OntologyFeatures
+    OntologyFeatures,
+    AutoEncoder
 )
 generators = {
     cls.__name__: cls for cls in _generators

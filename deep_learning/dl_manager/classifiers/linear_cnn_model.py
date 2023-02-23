@@ -45,6 +45,8 @@ class LinearConv1Model(AbstractModel):
         hidden = tf.keras.layers.Flatten()(concatenated)
         if layer_size > 0:
             hidden = tf.keras.layers.Dense(layer_size)(hidden)
+        if (act := kwargs.get('fnn-layer-activation', 'linear')) != 'linear':
+            hidden = self.get_activation(act)(hidden)
         outputs = self.get_output_layer()(hidden)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -78,6 +80,13 @@ class LinearConv1Model(AbstractModel):
             'filters': HyperParameter(
                 default=32, minimum=1, maximum=64
             ),
+            'fnn-layer-activation': HyperParameter(
+                minimum=None, maximum=None, default='linear',
+                options=[
+                    'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
+                    'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
+                ]
+            )
             # 'pooling_size': HyperParameter(
             #     default=2, minimum=2, maximum=16
             # ),

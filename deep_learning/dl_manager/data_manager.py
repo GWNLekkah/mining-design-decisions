@@ -52,6 +52,8 @@ def get_feature_file(source_file: pathlib.Path,
     suffix = '_'.join(f'{key}-{_escape(value)}'
                       for key, value in params.items()
                       if key != 'metadata-attributes')
+    if len(suffix) >= 200:  # Temporary fix for long file names
+        suffix = str(hash(suffix))
     if conf.get('system.peregrine'):
         data = pathlib.Path(conf.get('system.peregrine.data'))
         directory = data / 'features'
@@ -66,6 +68,7 @@ def get_feature_file(source_file: pathlib.Path,
 def _escape(x):
     for ws in string.whitespace:
         x = x.replace(ws, '_')
+    x = x.replace('.', 'dot')
     for illegal in '/<>:"/\\|?*\'':
         x = x.replace(illegal, '')
     return x
