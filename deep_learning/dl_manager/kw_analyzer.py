@@ -49,25 +49,95 @@ def enabled() -> bool:
     return conf.get('run.analyze-keywords')
 
 
-def analyze_keywords(model, test_x, test_y, issue_keys):
+def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
+    def _to_str(y):
+        return OutputMode.Classification3Simplified.label_encoding[y]
+
+    def _pop(x):
+        y = x.copy()
+        del y['key']
+        return y
+
+    def _trim(z):
+        if z.count('-') == 1:
+            return z
+        p = z.split('-')
+        return f'{p[0]}-{p[1]}'
+
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     analyzer = ConvolutionKeywordAnalyzer(model)
     classes = list(output_mode.label_encoding.keys())
     keywords_per_class = collections.defaultdict(list)
     print('Analyzing Keywords...')
-    with alive_progress.alive_bar(len(issue_keys) * len(classes)) as bar:
-        for input_x, truth, issue_key in zip(test_x, test_y, issue_keys):
-            for cls in classes:
-                words: list[KeywordEntry] = analyzer.get_keywords_for_input(input_x, issue_key, cls)
-                for entry in words:
-                    if output_mode == output_mode.Detection:
-                        keywords_per_class[truth].append(entry.as_dict() | {'ground_truth': truth})
-                    else:
-                        keywords_per_class[tuple(truth)].append(entry.as_dict() | {'ground_truth': tuple(truth)})
-                bar()
+    if output_mode == OutputMode.Detection:
+        with alive_progress.alive_bar(len(issue_keys) * len(classes)) as bar:
+            for input_x, truth, issue_key in zip(test_x, test_y, issue_keys):
+                for cls in classes:
+                    words: list[KeywordEntry] = analyzer.get_keywords_for_input(input_x, issue_key, cls)
+                    for entry in words:
+                        if output_mode == output_mode.Detection:
+                            keywords_per_class[truth].append(
+                                entry.as_dict() | {'ground_truth': _to_str(truth), 'key': issue_key}
+                            )
+                        else:
+                            keywords_per_class[tuple(truth)].append(
+                                entry.as_dict() | {'ground_truth': _to_str(tuple(truth)), 'key': issue_key}
+                            )
+                    bar()
+    else:
+        #issue_keys = [_trim(key) for key in issue_keys]
+        with alive_progress.alive_bar(len(issue_keys)) as bar:
+            keywords_per_class = analyzer.get_bulk_keywords_for_input_classification(test_x, issue_keys, test_y, bar)
 
-    with open('keywords.json', 'w') as file:
-        json.dump(dict(keywords_per_class), file)
+    #print(keywords_per_class)
+
+    with open('../datasets/labels/bottom-up.csv') as file:
+        bottom_up = [line.strip() for line in file]
+    with open('../datasets/labels/maven.csv') as file:
+        maven = [line.strip() for line in file]
+    with open('../datasets/labels/top-down.csv') as file:
+        top_down = [line.strip() for line in file]
+    with open('../datasets/labels/BHAT_labels.json') as file:
+        bhat = [item['key'] for item in json.load(file)]
+
+    with open(f'./maven-keywords-{suffix}.json', 'w') as file:
+        maven_keywords = {
+            _to_str(cls): [
+                _pop(entry) for entry in entries if _trim(entry['key']) in maven
+            ]
+            for cls, entries in keywords_per_class.items()
+        }
+        json.dump(maven_keywords, file)
+
+    with open(f'./bottom-up-keywords-{suffix}.json', 'w') as file:
+        bottom_up_keywords = {
+            _to_str(cls): [
+                _pop(entry) for entry in entries if _trim(entry['key']) in bottom_up
+            ]
+            for cls, entries in keywords_per_class.items()
+        }
+        json.dump(bottom_up_keywords, file)
+
+    with open(f'./top-down-keywords-{suffix}.json', 'w') as file:
+        top_down_keywords = {
+            _to_str(cls): [
+                _pop(entry) for entry in entries if _trim(entry['key']) in top_down
+            ]
+            for cls, entries in keywords_per_class.items()
+        }
+        json.dump(top_down_keywords, file)
+
+    with open(f'./bhat-keywords-{suffix}.json', 'w') as file:
+        bhat_keywords = {
+            _to_str(cls): [
+                _pop(entry) for entry in entries if _trim(entry['key']) in bhat
+            ]
+            for cls, entries in keywords_per_class.items()
+        }
+        json.dump(bhat_keywords, file)
+
+    #with open('keywords.json', 'w') as file:
+    #    json.dump(dict(keywords_per_class), file)
         
     # for label, keywords in keywords_per_class.items():
     #     label_as_text = output_mode.label_encoding[label]
@@ -122,7 +192,7 @@ class ConvolutionKeywordAnalyzer:
 
         # Get number of filters
         params = conf.get('run.params')
-        conv_params = params.get('default', {}) | params.get('Word2Vec2D', {})
+        conv_params = params.get('default', {}) | params.get('Word2Vec1D', {})
         self.__input_size = int(conv_params['max-len'])
 
         hy_params = conf.get('run.hyper-params')
@@ -132,63 +202,98 @@ class ConvolutionKeywordAnalyzer:
         for i in range(len(self.__convolutions)):
             self.__convolution_sizes[i] = int(conv_params[f'kernel-{i+1}-size'])
 
-    def get_keywords_for_input(self, vector, issue_key, ground_truth):
-        if self.__binary:
-            return self.get_keywords_for_input_detection(vector, issue_key, ground_truth)
-        return self.get_keywords_for_input_classification(vector, issue_key, ground_truth)
+    def get_keywords_for_one_hot_output(self, vectors, keys, truths, bar):
+        # Get output mode
+        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
 
-    def get_keywords_for_input_classification(self, vector, issue_key, ground_truth):
-        pre_predictions = self.__pre_output_model.predict(np.array([vector]))[0]
+        # Compute all predictions and features.
+        # Even though we might make more predictions than strictly
+        # necessary, doing everything at once is significantly
+        # faster than per-sample computation.
+        pre_predictions = self.__pre_output_model.predict(np.array(vectors))
+        feature_map = {
+            i: self.__convolutions[i].predict(np.array(vectors))
+            for i in self.__convolutions
+        }
 
-        truth_index = numpy.argmax(ground_truth)
+        # Compute indices of the ground truth
+        truth_indices = np.argmax(np.array(truths), axis=1)
 
-        list_tuple_prob = []
-        for i, f in enumerate(pre_predictions):  # Loop over individual feature items
-            w = f * self.__dense_layer_weights[i]
-            prob = softmax(w)
+        # Mapping of indices to keys suitable for the output
+        # mode encoding map
+        l_map = {vec.index(1): vec for vec in output_mode.label_encoding}
 
-            if prob[truth_index] > float(1.0 / self.__number_of_classes):
-                list_tuple_prob.append((i, prob, w[truth_index]))
+        # Map for the outputs
+        output = {}
 
-        word_text = self.__original_text_lookup[issue_key]
+        # l_map = {
+        #     0: (1, 0, 0, 0),
+        #     1: (0, 1, 0, 0),
+        #     2: (0, 0, 1, 0),
+        #     3: (0, 0, 0, 1)
+        # }
 
-        votes_per_convolution = collections.defaultdict(lambda: collections.defaultdict(list))
-        # keywords_length = self.__convolution_sizes[conv_num]
+        for j, (truth_index, issue_key) in enumerate(zip(truth_indices, keys)):
+            list_tuple_prob = []
 
-        for (ind, prob, w) in list_tuple_prob:
-            # localize the convolutional layer
-            conv_num = int(ind / self.__num_filters)
-            # localize the index in the convolutional layer
-            conv_ind = ind % self.__num_filters
+            pre_predictions_for_sample = pre_predictions[j, :]
 
-            # localize keywords index
-            features = self.__convolutions[conv_num].predict(np.array([vector]))[0]
+            # Loop over individual feature items,
+            # and record all items which would result in
+            # a correct classification.
+            for i, f in enumerate(pre_predictions_for_sample):
+                w = f * self.__dense_layer_weights[i]
+                prob = softmax(w)
+                if np.argmax(prob) == truth_index:
+                    list_tuple_prob.append((i, prob[truth_index], w[truth_index]))
 
-            keywords_index = np.where(features[:, conv_ind] == pre_predictions[ind])[0][0]
+            # Get text of the original issue
+            word_text = self.__original_text_lookup[issue_key]
 
-            votes_per_convolution[conv_num][keywords_index].append(prob)
+            votes_per_convolution = collections.defaultdict(lambda: collections.defaultdict(list))
+            for (ind, prob, w) in list_tuple_prob:
+                # localize the convolutional layer
+                conv_num = int(ind / self.__num_filters)
+                # localize the index in the convolutional layer
+                conv_ind = ind % self.__num_filters
+                # localize keywords index
+                features = feature_map[conv_num][j, :, :]
+                keywords_index = np.where(features[:, conv_ind] == pre_predictions_for_sample[ind])[0][0]
+                # Record the keywords
+                votes_per_convolution[conv_num][keywords_index].append(prob)
 
-        keywords_per_convolution = collections.defaultdict(list)
-        for convolution, votes in votes_per_convolution.items():
-            for keyword_index, probabilities in votes.items():
-                mean_strength = statistics.mean(votes)
-                if mean_strength >= 0.5:
-                    keyword_stop = min(
-                        keyword_index + self.__convolution_sizes[convolution],
-                        len(word_text)
-                    )
-                    keywords_per_convolution[convolution].append(
-                        (
-                            ' '.join([word_text[index] for index in range(keyword_index, keyword_stop)]),
-                            mean_strength
+            keywords_per_convolution = collections.defaultdict(list)
+            for convolution, votes in votes_per_convolution.items():
+                for keyword_index, probabilities in votes.items():
+                    mean_strength = float(statistics.mean(probabilities))
+                    if mean_strength >= float(1.0 / self.__number_of_classes):
+                        keyword_stop = min(
+                            keyword_index + self.__convolution_sizes[convolution],
+                            len(word_text)
                         )
-                    )
+                        keywords_per_convolution[convolution].append(
+                            (
+                                ' '.join([word_text[index] for index in range(keyword_index, keyword_stop)]),
+                                mean_strength
+                            )
+                        )
 
-        return [KeywordEntry(keyword, prob)
-                for keywords in keywords_per_convolution.values()
-                for keyword, prob in keywords]
+            kw = (
+                [KeywordEntry(keyword, prob)
+                 for keywords in keywords_per_convolution.values()
+                 for keyword, prob in keywords])
+            output.setdefault(l_map[truth_index], []).extend(
+                entry.as_dict() | {
+                    'ground_truth': output_mode.label_encoding[l_map[truth_index]],
+                    'key': issue_key
+                }
+                for entry in kw
+            )
 
-    def get_keywords_for_input_detection(self, vector, issue_key, ground_truth):
+            bar()
+        return output
+
+    def get_keywords_for_binary_output(self, vector, issue_key, ground_truth):
         pre_predictions = self.__pre_output_model.predict(np.array([vector]))[0]
 
         list_tuple_prob = []

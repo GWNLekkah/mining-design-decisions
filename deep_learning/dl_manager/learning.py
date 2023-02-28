@@ -56,285 +56,6 @@ EARLY_STOPPING_GOALS = {
 
 ##############################################################################
 ##############################################################################
-# Data Preparation
-##############################################################################
-
-
-# def shuffle_raw_data(*x):
-#     c = list(zip(*x))
-#     random.shuffle(c)
-#     return map(numpy.asarray, zip(*c))
-#
-#
-# def make_dataset(labels, *features):
-#     if len(features) == 1:
-#         return features[0], labels
-#     return list(features), labels
-#
-#
-# def index_list(array, indices):
-#     return [array[index] for index in indices]
-#
-#
-# def split_data_single(test_split, validation_split, labels, *features, issue_keys, test_project=None):
-#     labels, *features, issue_keys = shuffle_raw_data(labels, *features, issue_keys)
-#
-#     if test_project != 'None':
-#         indices = [index for index, issue_key in enumerate(issue_keys) if issue_key.split('-')[0] == test_project]
-#
-#         testing_set = make_dataset(
-#             np.array([label for index, label in enumerate(labels) if index in indices]),
-#             *(
-#                 np.array([feature for index, feature in enumerate(feature_set) if index in indices])
-#                 for feature_set in features
-#             )
-#         )
-#         test_issue_keys = [issue_key for index, issue_key in enumerate(issue_keys) if index in indices]
-#
-#         size_test = int(test_split * (len(labels) - len(indices)))
-#         size_train = int(len(labels) - len(indices) - size_test)
-#
-#         training_set = make_dataset(
-#             np.array([label for index, label in enumerate(labels) if index not in indices][:size_train]),
-#             *(
-#                 np.array([feature for index, feature in enumerate(feature_set) if index not in indices][:size_train])
-#                 for feature_set in features
-#             )
-#         )
-#
-#         validation_set = make_dataset(
-#             np.array([label for index, label in enumerate(labels) if index not in indices][size_train:]),
-#             *(
-#                 np.array([feature for index, feature in enumerate(feature_set) if index not in indices][size_train:])
-#                 for feature_set in features
-#             )
-#         )
-#     else:
-#         size_train = int((1 - test_split - validation_split) * len(labels))
-#         size_test = int(test_split * len(labels))
-#
-#         training_set = make_dataset(
-#             labels[:size_train],
-#             *(
-#                 feature_set[:size_train] for feature_set in features
-#             )
-#         )
-#         testing_set = make_dataset(
-#             labels[size_train:size_train + size_test],
-#             *(
-#                 feature_set[size_train:size_train + size_test]
-#                 for feature_set in features
-#             )
-#         )
-#         test_issue_keys = issue_keys[size_train:size_train + size_test]
-#         validation_set = make_dataset(
-#             labels[size_train + size_test:],
-#             *(
-#                 feature_set[size_train + size_test:]
-#                 for feature_set in features
-#             )
-#         )
-#
-#     return training_set, testing_set, validation_set, test_issue_keys
-#
-#
-# def split_data_cross(k, labels, *features, issue_keys):
-#     extended_labels = [(label, issue_key.split('-')[0]) for label, issue_key in zip(labels, issue_keys)]
-#     labels, *features, extended_labels, issue_keys = shuffle_raw_data(labels, *features, extended_labels, issue_keys)
-#     outer_splitter = kfold.StratifiedKFold(k)
-#     outer_stream = enumerate(outer_splitter.split(features[0], extended_labels),
-#                              start=1)
-#     for outer_index, (inner, test) in outer_stream:
-#         testing_set = make_dataset(
-#             labels[test],
-#             *(feature_set[test] for feature_set in features)
-#         )
-#         inner_splitter = kfold.StratifiedKFold(k - 1)
-#         inner_stream = enumerate(
-#             inner_splitter.split(features[0][inner], labels[inner]),
-#             start=1
-#         )
-#         for inner_index, (train, validation) in inner_stream:
-#             training_set = make_dataset(
-#                 labels[inner][train],
-#                 *(feature_set[inner][train] for feature_set in features)
-#             )
-#             validation_set = make_dataset(
-#                 labels[inner][validation],
-#                 *(feature_set[inner][validation] for feature_set in features)
-#             )
-#             # aux = numpy.asarray(extended_labels)
-#             # plot_dataset_label_distributions(
-#             #     [tuple(x) for x in extended_labels],
-#             #     [tuple(x) for x in aux[inner][train].tolist()],
-#             #     [tuple(x) for x in aux[test].tolist()],
-#             #     [tuple(x) for x in aux[inner][validation].tolist()],
-#             # )
-#             yield outer_index, inner_index, training_set, testing_set, validation_set, issue_keys[test]
-#
-#
-# def split_data_quick_cross(k, labels, *features, issue_keys, max_train=-1):
-#     if conf.get('run.cross-is-cross-project'):
-#         yield from split_data_cross_project(labels, *features, issue_keys=issue_keys, max_train=max_train)
-#         return
-#     projects = [key.split('-')[0] for key in issue_keys]
-#     extended_labels = [(str(label), project)
-#                        for label, project in zip(labels, projects)]
-#     labels, *features, extended_labels, issue_keys = shuffle_raw_data(
-#         labels, *features, extended_labels, issue_keys
-#     )
-#     extended_labels = [tuple(label) for label in extended_labels]
-#     test_project = conf.get('run.test-project')
-#     test_study = conf.get('run.test-study')
-#     use_index_conversion = False
-#     if test_project != 'None':
-#         test_project_indices = [idx for idx, label in enumerate(extended_labels) if label[1] == test_project]
-#         idx_to_original_idx = [idx for idx, label in enumerate(extended_labels) if label[1] != test_project]
-#         small_extended_labels = [label for label in extended_labels if label[1] != test_project]
-#         stream = custom_kfold.stratified_kfold(k, small_extended_labels)
-#         use_index_conversion = True
-#     elif test_study != 'None':
-#         test_project_indices = idx_to_original_idx = []
-#         small_extended_labels = []
-#         for idx in range(len(issue_keys)):
-#             if issue_keys[idx].split('-')[2] == test_study:
-#                 test_project_indices.append(idx)
-#             else:
-#                 idx_to_original_idx.append(idx)
-#                 small_extended_labels.append(extended_labels[idx])
-#         stream = custom_kfold.stratified_kfold(k, small_extended_labels)
-#         use_index_conversion = True
-#     else:
-#         stream = custom_kfold.stratified_kfold(k, extended_labels)
-#     round_number = 0
-#     for training_indices, validation_indices, testing_indices in stream:
-#         if use_index_conversion:
-#             training_indices.extend(testing_indices)
-#             # Your IDE probably will not detect it, but if this branch is used,
-#             # all these variables will be defined.
-#             testing_indices = test_project_indices
-#             training_indices = [idx_to_original_idx[idx] for idx in training_indices]
-#             validation_indices = [idx_to_original_idx[idx] for idx in validation_indices]
-#         round_number += 1
-#         if max_train > 0:
-#             training_indices_layer_2 = custom_kfold.stratified_trim(
-#                 max_train, index_list(extended_labels, training_indices)
-#             )
-#             training_set = make_dataset(
-#                 labels[training_indices][training_indices_layer_2],
-#                 *(feature_set[training_indices][training_indices_layer_2]
-#                   for feature_set in features)
-#             )
-#         else:
-#             training_set = make_dataset(
-#                 labels[training_indices],
-#                 *(feature_set[training_indices] for feature_set in features)
-#             )
-#         validation_set = make_dataset(
-#             labels[validation_indices],
-#             *(feature_set[validation_indices] for feature_set in features)
-#         )
-#         testing_set = make_dataset(
-#             labels[testing_indices],
-#             *(feature_set[testing_indices] for feature_set in features)
-#         )
-#         # plot_dataset_label_distributions(
-#         #     extended_labels,
-#         #     index_list(extended_labels, training_indices),
-#         #     index_list(extended_labels, testing_indices),
-#         #     index_list(extended_labels, validation_indices)
-#         # )
-#         yield (round_number,
-#                1,
-#                training_set,
-#                testing_set,
-#                validation_set,
-#                issue_keys[testing_indices])
-#
-#
-# def split_data_cross_project(labels, *features, issue_keys, max_train):
-#     labels, *features, issue_keys = shuffle_raw_data(
-#         labels, *features, issue_keys
-#     )
-#     projects = []
-#     for issue_key in issue_keys.tolist():
-#         project, number, study = issue_key.split('-')
-#         if project == 'HBASE':
-#             project = 'HADOOP'
-#         projects.append(project)
-#     # Get indices per project
-#     bins = collections.defaultdict(list)
-#     for index, project in enumerate(projects):
-#         bins[project].append(index)
-#     # Iterate over bins to get testing project
-#     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-#     if output_mode.output_encoding == OutputEncoding.OneHot:
-#         split_labels = labels.argmax(axis=1)
-#     else:
-#         split_labels = labels
-#     round_number = 0
-#     for test_project, testing_indices in bins.items():
-#         round_number += 1
-#         # Combine all remaining projects
-#         remaining_projects = set(bins) - {test_project}
-#         remaining_indices = []
-#         for remaining_project in remaining_projects:
-#             remaining_indices.extend(bins[remaining_project])
-#         # Split remaining projects into training and validation set
-#         training_indices, validation_indices = custom_kfold.stratified_split(numpy.asarray(remaining_indices),
-#                                                                              split_labels[remaining_indices],
-#                                                                              conf.get('run.split-size'))
-#         training_set = make_dataset(
-#             labels[training_indices],
-#             *(feature_set[training_indices] for feature_set in features)
-#         )
-#         validation_set = make_dataset(
-#             labels[validation_indices],
-#             *(feature_set[validation_indices] for feature_set in features)
-#         )
-#         testing_set = make_dataset(
-#             labels[testing_indices],
-#             *(feature_set[testing_indices] for feature_set in features)
-#         )
-#         yield (round_number,
-#                1,
-#                training_set,
-#                testing_set,
-#                validation_set,
-#                issue_keys[testing_indices])
-
-
-def plot_dataset_label_distributions(original, train, test, validation):
-    import pandas
-    import matplotlib.pyplot as pyplot
-    label_counts = collections.defaultdict(lambda: collections.defaultdict(int))
-    sets = {
-        'Original': original,
-        'Training': train,
-        'Test': test,
-        'Validation': validation
-    }
-    for dataset_label, dataset in sets.items():
-        for label in dataset:
-            label_counts[label][dataset_label] += 1
-    classes = sorted(label_counts)
-    header = ['Class'] + list(sets)
-    rows = []
-    class_names = []
-    for cls in classes:
-        frequencies = [label_counts[cls][dataset_name] / len(sets[dataset_name])
-                       for dataset_name in header[1:]]
-        cls_name = '-'.join(cls)
-        row = (cls_name,) + tuple(frequencies)
-        rows.append(row)
-        class_names.append(cls_name)
-    df = pandas.DataFrame(rows, columns=header)
-    df.plot(x='Class', y=header[1:], kind="bar")
-    pyplot.show()
-
-
-##############################################################################
-##############################################################################
 # Model Training/Testing
 ##############################################################################
 
@@ -361,19 +82,13 @@ def run_single(model_or_models,
                test_project=None):
     if max_train > 0:
         warnings.warn('The --max-train parameter is ignored in single runs.')
-    # train, test, validation, test_issue_keys = split_data_single(split_size,
-    #                                                              split_size,
-    #                                                              labels,
-    #                                                              *features,
-    #                                                              issue_keys=issue_keys,
-    #                                                              test_project=test_project)
     spitter = splitting.SimpleSplitter(val_split_size=conf.get('run.split-size'),
                                        test_split_size=conf.get('run.split-size'),
                                        test_study=_coerce_none(conf.get('run.test-study')),
                                        test_project=_coerce_none(conf.get('run.test-project')),
                                        max_train=conf.get('run.max-train'))
     # Split returns an iterator; call next() to get data splits
-    train, test, validation, test_issue_keys = next(spitter.split(labels, issue_keys, *features))
+    train, test, validation, train_keys, val_keys, test_issue_keys = next(spitter.split(labels, issue_keys, *features))
     comparator = metrics.ComparisonManager()
     if not conf.get('run.test-separately'):
         models = [model_or_models]
@@ -389,7 +104,9 @@ def run_single(model_or_models,
                                                              epochs,
                                                              output_mode,
                                                              label_mapping,
-                                                             test_issue_keys)
+                                                             test_issue_keys,
+                                                             training_keys=train_keys,
+                                                             validation_keys=val_keys)
         # Save model can only be true if not testing separately,
         # which means the loop only runs once.
         if conf.get('run.store-model'):
@@ -441,7 +158,7 @@ def run_cross(model_factory,
         )
     comparator = metrics.ComparisonManager()
     stream = splitter.split(labels, issue_keys, *features)
-    for train, test, validation, test_issue_keys in stream:
+    for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
         model_or_models = model_factory()
         if conf.get('run.test-separately'):
             models = model_or_models
@@ -457,7 +174,9 @@ def run_cross(model_factory,
                                                              epochs,
                                                              output_mode,
                                                              label_mapping,
-                                                             test_issue_keys)
+                                                             test_issue_keys,
+                                                             training_keys=training_keys,
+                                                             validation_keys=validation_keys)
             results.append(metrics_)
             best_results.append(best_metrics)
             comparator.add_result(metrics_)
@@ -511,7 +230,10 @@ def train_and_test_model(model: tf.keras.Model,
                          output_mode: OutputMode,
                          label_mapping,
                          test_issue_keys,
-                         extra_model_params=None):
+                         extra_model_params=None,
+                         *,
+                         validation_keys=None,
+                         training_keys=None):
     train_x, train_y = dataset_train
     test_x, test_y = dataset_test
 
@@ -578,10 +300,23 @@ def train_and_test_model(model: tf.keras.Model,
 
     from . import kw_analyzer
     if kw_analyzer.model_is_convolution() and kw_analyzer.doing_one_run() and kw_analyzer.enabled():
+        print('Analyzing keywords', logger.get_main_model_metrics_at_stopping_epoch())
         kw_analyzer.analyze_keywords(model,
                                      test_x,
                                      test_y,
-                                     test_issue_keys)
+                                     test_issue_keys,
+                                     'test')
+        kw_analyzer.analyze_keywords(model,
+                                     dataset_val[0],
+                                     dataset_test[1],
+                                     validation_keys,
+                                     'validation')
+        kw_analyzer.analyze_keywords(model,
+                                     train_x,
+                                     train_y,
+                                     training_keys,
+                                     'train')
+
 
     # logger.rollback_model_results(monitor.get_best_model_offset())
     return (
@@ -695,7 +430,7 @@ def run_stacking_ensemble(factory,
     best_results = []
     voting_result_data = []
     stream = splitter.split(labels, issue_keys, *datasets)
-    for train, test, validation, test_issue_keys in stream:
+    for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
         # Step 1) Train all models and get their predictions
         #           on the training and validation set.
         models = factory()
@@ -713,7 +448,9 @@ def run_stacking_ensemble(factory,
                 epochs=conf.get('run.epochs'),
                 output_mode=OutputMode.from_string(conf.get('run.output-mode')),
                 label_mapping=label_mapping,
-                test_issue_keys=test_issue_keys
+                test_issue_keys=test_issue_keys,
+                training_keys=training_keys,
+                validation_keys=validation_keys
             )
             sub_results[model_number].append(sub_model_results)
             best_sub_results[model_number].append(best_sub_model_results)
@@ -742,7 +479,9 @@ def run_stacking_ensemble(factory,
                 output_mode=OutputMode.from_string(
                     conf.get('run.output-mode')),
                 label_mapping=label_mapping,
-                test_issue_keys=test_issue_keys
+                test_issue_keys=test_issue_keys,
+                training_keys=training_keys,
+                validation_keys=validation_keys
             )
             results.append(epoch_results)
             best_results.append(best_epoch_results)
@@ -830,6 +569,7 @@ def _get_voting_predictions(truth, predictions):
             **{cls: metrics_for_class.as_dictionary()
                for cls, metrics_for_class in class_metrics.items()}
         }
+
 
 def run_boosting_ensemble(factory,
                           datasets,

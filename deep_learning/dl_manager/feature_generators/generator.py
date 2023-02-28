@@ -189,14 +189,14 @@ class OutputMode(enum.Enum):
                 }
             case self.Classification8:
                 return {
-                    classification8_lookup[(0, 0, 0)]: 'Non-Architectural',
-                    classification8_lookup[(0, 0, 1)]: 'Property',
-                    classification8_lookup[(0, 1, 0)]: 'Executive',
-                    classification8_lookup[(0, 1, 1)]: 'Executive/Property',
-                    classification8_lookup[(1, 0, 0)]: 'Existence',
-                    classification8_lookup[(1, 0, 1)]: 'Existence/Property',
-                    classification8_lookup[(1, 1, 0)]: 'Existence/Executive',
-                    classification8_lookup[(1, 1, 1)]: 'Existence/Executive/Property',
+                    classification8_lookup[(False, False, False)]: 'Non-Architectural',
+                    classification8_lookup[(False, False, True)]: 'Property',
+                    classification8_lookup[(False, True, False)]: 'Executive',
+                    classification8_lookup[(False, True, True)]: 'Executive/Property',
+                    classification8_lookup[(True, False, False)]: 'Existence',
+                    classification8_lookup[(True, False, True)]: 'Existence/Property',
+                    classification8_lookup[(True, True, False)]: 'Existence/Executive',
+                    classification8_lookup[(True, True, True)]: 'Existence/Executive/Property',
                 }
 
     @property

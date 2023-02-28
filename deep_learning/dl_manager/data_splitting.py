@@ -241,7 +241,7 @@ class SimpleSplitter(DataSplitter):
             val_data, training_data = remainder.split_fraction(self.val_split)
         else:
             size = self.val_split + self.test_split
-            training_data, remainder = data.split_fraction(size)
+            training_data, remainder = data.split_fraction(1 - size)
             size = self.val_split / (self.val_split + self.test_split)
             val_data, test_data = remainder.split_fraction(size)
         if self.max_train is not None:
@@ -250,6 +250,8 @@ class SimpleSplitter(DataSplitter):
             training_data.to_dataset(),
             test_data.to_dataset(),
             val_data.to_dataset(),
+            training_data.issue_keys,
+            val_data.issue_keys,
             test_data.issue_keys
         )
 
@@ -277,6 +279,8 @@ class CrossFoldSplitter(DataSplitter):
                     training_data.to_dataset(),
                     test_data.to_dataset(),
                     validation_data.to_dataset(),
+                    training_data.issue_keys,
+                    validation_data.issue_keys,
                     test_data.issue_keys
                 )
 
@@ -304,6 +308,8 @@ class QuickCrossFoldSplitter(DataSplitter):
                     training.to_dataset(),
                     testing_data.to_dataset(),
                     validation.to_dataset(),
+                    training.issue_keys,
+                    validation.issue_keys,
                     testing_data.issue_keys
                 )
         else:
@@ -314,6 +320,8 @@ class QuickCrossFoldSplitter(DataSplitter):
                     training.to_dataset(),
                     testing.to_dataset(),
                     validation.to_dataset(),
+                    training.issue_keys,
+                    validation.issue_keys,
                     testing.issue_keys
                 )
 
@@ -342,5 +350,7 @@ class CrossProjectSplitter(DataSplitter):
                 training.to_dataset(),
                 testing.to_dataset(),
                 validation.to_dataset(),
+                training.issue_keys,
+                validation.issue_keys,
                 testing.issue_keys
             )
