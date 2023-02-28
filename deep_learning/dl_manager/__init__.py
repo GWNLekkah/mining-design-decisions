@@ -1,13 +1,13 @@
 import contextlib
 import io
 
-from cli import invoke_pipeline as _invoke
-from cli import main as _main
-from classifiers import AbstractModel
-from classifiers import models as _models
-from feature_generators import AbstractFeatureGenerator
-from feature_generators import generators as _generators
-from feature_generators import OutputMode
+from .cli import invoke_pipeline as _invoke
+from .cli import main as _main
+from .classifiers import AbstractModel
+from .classifiers import models as _models
+from .feature_generators import AbstractFeatureGenerator
+from .feature_generators import generators as _generators
+from .feature_generators import OutputMode
 
 def run_cli_app():
     _main()

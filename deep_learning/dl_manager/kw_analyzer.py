@@ -2,6 +2,7 @@ import abc
 import collections
 import statistics
 import typing
+import warnings
 
 import alive_progress
 import numpy as np
@@ -16,8 +17,6 @@ from .config import conf
 from . import data_manager_bootstrap
 
 import tensorflow as tf
-import numpy
-
 
 class KeywordEntry(typing.NamedTuple):
     keyword: str
@@ -66,32 +65,16 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
         return f'{p[0]}-{p[1]}'
 
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-    #analyzer = ConvolutionKeywordAnalyzer(model)
-    classes = list(output_mode.label_encoding.keys())
-    keywords_per_class = collections.defaultdict(list)
     print('Analyzing Keywords...')
-    if output_mode == OutputMode.Detection:
-        analyzer = _ConvolutionKeywordAnalyzer(model)
-        with alive_progress.alive_bar(len(issue_keys) * len(classes)) as bar:
-            for input_x, truth, issue_key in zip(test_x, test_y, issue_keys):
-                for cls in classes:
-                    words: list[KeywordEntry] = analyzer.get_keywords_for_binary_output(input_x, issue_key, cls)
-                    for entry in words:
-                        if output_mode == output_mode.Detection:
-                            keywords_per_class[truth].append(
-                                entry.as_dict() | {'ground_truth': _to_str(truth), 'key': issue_key}
-                            )
-                        else:
-                            keywords_per_class[tuple(truth)].append(
-                                entry.as_dict() | {'ground_truth': _to_str(tuple(truth)), 'key': issue_key}
-                            )
-                    bar()
-    else:
-        #issue_keys = [_trim(key) for key in issue_keys]
+    if output_mode.output_encoding == OutputEncoding.Binary:
+        analyzer = BinaryConvolutionKeywordAnalyzer(model)
         with alive_progress.alive_bar(len(issue_keys)) as bar:
-            keywords_per_class = analyzer.get_bulk_keywords_for_input_classification(test_x, issue_keys, test_y, bar)
+            keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
+    else:
+        analyzer = OneHotConvolutionKeywordAnalyzer(model)
+        with alive_progress.alive_bar(len(issue_keys)) as bar:
+            keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
 
-    #print(keywords_per_class)
 
     with open('../datasets/labels/bottom-up.csv') as file:
         bottom_up = [line.strip() for line in file]
@@ -103,8 +86,9 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
         bhat = [item['key'] for item in json.load(file)]
 
     with open(f'./maven-keywords-{suffix}.json', 'w') as file:
+        print(keywords_per_class)
         maven_keywords = {
-            _to_str(cls): [
+            cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in maven
             ]
             for cls, entries in keywords_per_class.items()
@@ -113,7 +97,7 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
 
     with open(f'./bottom-up-keywords-{suffix}.json', 'w') as file:
         bottom_up_keywords = {
-            _to_str(cls): [
+            cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in bottom_up
             ]
             for cls, entries in keywords_per_class.items()
@@ -122,7 +106,7 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
 
     with open(f'./top-down-keywords-{suffix}.json', 'w') as file:
         top_down_keywords = {
-            _to_str(cls): [
+            cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in top_down
             ]
             for cls, entries in keywords_per_class.items()
@@ -131,26 +115,13 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
 
     with open(f'./bhat-keywords-{suffix}.json', 'w') as file:
         bhat_keywords = {
-            _to_str(cls): [
+            cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in bhat
             ]
             for cls, entries in keywords_per_class.items()
         }
         json.dump(bhat_keywords, file)
 
-    #with open('keywords.json', 'w') as file:
-    #    json.dump(dict(keywords_per_class), file)
-        
-    # for label, keywords in keywords_per_class.items():
-    #     label_as_text = output_mode.label_encoding[label]
-    #     with open(f'{label_as_text}_keywords.csv', 'w', newline='') as file:
-    #         writer = csv.writer(file)
-    #         writer.writerow(['Keyword', 'Frequency'])
-    #         counts = collections.Counter()
-    #         for keyword_dict in keywords:
-    #             counts.update(keyword_dict.keys())
-    #         for kw, freq in counts.items():
-    #             writer.writerow([kw, freq])
 
 
 def sigmoid(x):
@@ -203,8 +174,12 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
         for i in range(len(self.__convolutions)):
             self.__convolution_sizes[i] = int(conv_params[f'kernel-{i+1}-size'])
 
+    @property
+    def number_of_classes(self) -> int:
+        return self.__number_of_classes
+
     @abc.abstractmethod
-    def get_candidates(self, pre_predictions, truth):
+    def get_candidates(self, pre_predictions, truth, dense_weights):
         return []
 
     @abc.abstractmethod
@@ -234,13 +209,17 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
 
         for j, (truth, issue_key) in enumerate(zip(truths, keys)):
             pre_predictions_for_sample = pre_predictions[j, :]
-            list_tuple_prob = self.get_candidates(pre_predictions_for_sample, truth)
+            list_tuple_prob = self.get_candidates(pre_predictions_for_sample, truth, dense_weights=self.__dense_layer_weights)
 
             # Get text of the original issue
             word_text = self.__original_text_lookup[issue_key]
 
-            votes_per_convolution = collections.defaultdict(lambda: collections.defaultdict(list))
-            for (ind, prob, w) in list_tuple_prob:
+            votes_per_convolution = collections.defaultdict(
+                lambda: collections.defaultdict(
+                    lambda: collections.defaultdict(list)
+                )
+            )
+            for (ind, label, prob, w) in list_tuple_prob:
                 # localize the convolutional layer
                 conv_num = int(ind / self.__num_filters)
                 # localize the index in the convolutional layer
@@ -249,114 +228,84 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
                 features = feature_map[conv_num][j, :, :]
                 keywords_index = np.where(features[:, conv_ind] == pre_predictions_for_sample[ind])[0][0]
                 # Record the keywords
-                votes_per_convolution[conv_num][keywords_index].append(prob)
+                votes_per_convolution[conv_num][label][keywords_index].append(prob)
 
-            keywords_per_convolution = collections.defaultdict(list)
-            for convolution, votes in votes_per_convolution.items():
-                for keyword_index, probabilities in votes.items():
-                    mean_strength = float(statistics.mean(probabilities))
-                    if mean_strength >= min_strength:
-                        keyword_stop = min(
-                            keyword_index + self.__convolution_sizes[convolution],
-                            len(word_text)
-                        )
-                        keywords_per_convolution[convolution].append(
-                            (
-                                ' '.join([word_text[index] for index in range(keyword_index, keyword_stop)]),
-                                mean_strength
+            keywords_per_convolution = collections.defaultdict(
+                lambda: collections.defaultdict(list)
+            )
+            for convolution, votes_per_label in votes_per_convolution.items():
+                for label, votes in votes_per_label.items():
+                    for keyword_index, probabilities in votes.items():
+                        mean_strength = float(statistics.mean(probabilities))
+                        if mean_strength >= min_strength:
+                            keyword_stop = min(
+                                keyword_index + self.__convolution_sizes[convolution],
+                                len(word_text)
                             )
-                        )
+                            keywords_per_convolution[convolution][label].append(
+                                (
+                                    ' '.join([word_text[index] for index in range(keyword_index, keyword_stop)]),
+                                    mean_strength
+                                )
+                            )
 
             kw = (
-                [KeywordEntry(keyword, prob)
-                 for keywords in keywords_per_convolution.values()
-                 for keyword, prob in keywords])
-            output.setdefault(output_mode.label_encoding[truth], []).extend(
-                entry.as_dict() | {
-                    'ground_truth': output_mode.label_encoding[truth],
-                    'key': issue_key
-                }
-                for entry in kw
-            )
+                [(label, KeywordEntry(keyword, prob))
+                 for keywords_by_label in keywords_per_convolution.values()
+                 for label, keywords in keywords_by_label.items()
+                 for (keyword, prob) in keywords])
+            for label, entry in kw:
+                output.setdefault(output_mode.label_encoding[label], []).append(
+                    entry.as_dict() | {'ground_truth': output_mode.label_encoding[label], 'key': issue_key}
+                )
 
             bar()
         return output
 
-    def get_keywords_for_binary_output(self, vector, issue_key, ground_truth):
-        pre_predictions = self.__pre_output_model.predict(np.array([vector]))[0]
-
-        list_tuple_prob = []
-        for i, f in enumerate(pre_predictions):  # Loop over individual feature items
-            w = f * self.__dense_layer_weights
-            print(i, w)
-            prob = sigmoid(w[i])
-            # prob = softmax(w)
-
-            # if prob[pred] > float(1.0 / len(labels)):
-            if abs(prob - ground_truth) < 0.5:     # Strong vote towards a label
-                list_tuple_prob.append((i, prob, w[i]))
-
-        # dict_keywords = {}
-        # list_keywords = []
-        word_text = self.__original_text_lookup[issue_key]
-
-        votes_per_convolution = collections.defaultdict(lambda: collections.defaultdict(list))
-        # keywords_length = self.__convolution_sizes[conv_num]
-
-        for (ind, prob, w) in list_tuple_prob:
-            # localize the convolutional layer
-            conv_num = int(ind / self.__num_filters)
-            # localize the index in the convolutional layer
-            conv_ind = ind % self.__num_filters
-
-            # localize keywords index
-            features = self.__convolutions[conv_num].predict(np.array([vector]))[0]
-
-            keywords_index = np.where(features[:, conv_ind] == pre_predictions[ind])[0][0]
-
-            votes_per_convolution[conv_num][keywords_index].append(prob)
-
-        keywords_per_convolution = collections.defaultdict(list)
-        for convolution, votes in votes_per_convolution.items():
-            for keyword_index, probabilities in votes.items():
-                mean_strength = statistics.mean(votes)
-                if mean_strength >= 0.5:
-                    keyword_stop = min(
-                        keyword_index + self.__convolution_sizes[convolution],
-                        len(word_text)
-                    )
-                    keywords_per_convolution[convolution].append(
-                        (
-                            ' '.join([word_text[index] for index in range(keyword_index, keyword_stop)]),
-                            mean_strength
-                        )
-                    )
-
-        return [KeywordEntry(keyword, prob)
-                for keywords in keywords_per_convolution.values()
-                for keyword, prob in keywords]
-
 
 class OneHotConvolutionKeywordAnalyzer(_ConvolutionKeywordAnalyzer):
 
-    def get_candidates(self, pre_predictions, truth):
+    def get_candidates(self, pre_predictions, truth, dense_weights):
         list_tuple_prob = []
         truth_index = np.argmax(truth)
         for i, f in enumerate(pre_predictions):
-            w = f * self.__dense_layer_weights[i]
+            w = f * dense_weights[i]
             prob = softmax(w)
             if np.argmax(prob) == truth_index:
-                list_tuple_prob.append((i, prob[truth_index], w[truth_index]))
+                list_tuple_prob.append((i, tuple(truth), prob[truth_index], w[truth_index]))
         return list_tuple_prob
 
     def get_minimum_strength(self) -> float:
-        return 1 / self.__number_of_classes
+        return 1 / self.number_of_classes
 
 
 class BinaryConvolutionKeywordAnalyzer(_ConvolutionKeywordAnalyzer):
 
-    def get_candidates(self, pre_predictions, truth):
-        pass
+    def get_candidates(self, pre_predictions, truth, dense_weights):
+        warnings.warn(f'{self.__class__.__name__} does not collect keywords for the negative class')
+        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        list_tuple_prob = []
+        if not isinstance(truth, np.ndarray):
+            truth = np.array([truth])
+        for i, f in enumerate(pre_predictions):
+            w = f * dense_weights[i]
+            prob = 1 / (1 + np.exp(w))  # element-wise sigmoid
+            assert prob.shape == truth.shape
+            for j, (x, y) in enumerate(zip(prob, truth)):
+                if x >= 0.5 and y >= 0.5:
+                    match (output_mode, j):
+                        case (OutputMode.Detection, 0): # index is always 0
+                            label = True
+                        case (OutputMode.Classification3, 0):
+                            label = (1, 0, 0)
+                        case (OutputMode.Classification3, 1):
+                            label = (0, 1, 0)
+                        case (OutputMode.Classification3, 2):
+                            label = (0, 0, 1)
+                        case _ as x:
+                            raise ValueError(f'Cannot determine label for key {x}')
+                    list_tuple_prob.append((i, label, x, w[j]))
+        return list_tuple_prob
 
     def get_minimum_strength(self) -> float:
         return 0.5
