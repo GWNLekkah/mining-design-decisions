@@ -114,8 +114,9 @@ def _ensemble_collect_predictions(path: pathlib.Path, models, features):
 
 
 def _check_output_mode(output_mode):
-    if output_mode == OutputMode.Classification3:
-        raise ValueError('Support for Classification3 Not Implemented')
+    #if output_mode == OutputMode.Classification3:
+    #    raise ValueError('Support for Classification3 Not Implemented')
+    pass
 
 
 def _store_predictions(predictions, output_mode, *, probabilities=None):
@@ -132,6 +133,12 @@ def _store_predictions(predictions, output_mode, *, probabilities=None):
                         'Probability Executive',
                         'Probability Property',
                         'Probability Non-Architectural',
+                    ]
+                case OutputMode.Classification3:
+                    header += [
+                        'Probability Existence',
+                        'Probability Executive',
+                        'Probability Property'
                     ]
                 case OutputMode.Classification8:
                     header += [

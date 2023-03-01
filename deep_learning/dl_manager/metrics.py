@@ -5,7 +5,6 @@
 
 import collections
 import dataclasses
-import statistics
 
 import numpy
 import keras.callbacks
@@ -190,6 +189,11 @@ def compute_confusion_multi_class(y_true,
                                             false_negatives=false_negatives.item())
     return accuracy, class_metrics
 
+
+def compute_confusion_multi_label(y_true,
+                                  y_pred,
+                                  label_mapping) -> (float, dict[str, MetricSet]):
+    return 0.0, {}
 
 def minor(matrix, i, j):
     return numpy.delete(numpy.delete(matrix, i, axis=0), j, axis=1)

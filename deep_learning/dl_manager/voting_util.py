@@ -1,13 +1,17 @@
 import collections
 import numpy
 from .classifiers import OutputEncoding
+from .feature_generators import OutputMode
 
 
-def get_voting_predictions(output_mode, predictions):
+def get_voting_predictions(output_mode: OutputMode, predictions):
     if output_mode.output_encoding == OutputEncoding.Binary:
         hard_predictions = []
         for pred in predictions:
-            hard_pred = pred.flatten()
+            if output_mode.output_size == 1:    # Special case: Boolean output
+                hard_pred = pred.flatten()
+            else:
+                hard_pred = pred.copy()
             hard_pred[hard_pred < 0.5] = 0
             hard_pred[hard_pred >= 0.5] = 1
             hard_predictions.append(hard_pred)
@@ -22,8 +26,14 @@ def get_voting_predictions(output_mode, predictions):
     final_predictions = [mode(x) for x in prediction_matrix]
     # Step 2: Break ties using probabilities
     probability_matrix = numpy.asarray(predictions).sum(axis=0)
-    # noinspection PyTypeChecker
-    probability_classes: list = numpy.argmax(probability_matrix, axis=1).tolist()
+    if output_mode.output_encoding == OutputEncoding.OneHot:
+        # noinspection PyTypeChecker
+        probability_classes: list = numpy.argmax(probability_matrix, axis=1).tolist()
+    else:
+        probability_matrix[probability_matrix < 0.5*len(predictions)] = 0
+        probability_matrix[probability_matrix >= 0.5*len(predictions)] = 1
+        probability_classes: list = probability_matrix.tolist()
+    # Step 3: Compute actual probabilities
     final_predictions = numpy.asarray([
         final_pred if final_pred is not None else probability_classes[index]
         for index, final_pred in enumerate(final_predictions)
