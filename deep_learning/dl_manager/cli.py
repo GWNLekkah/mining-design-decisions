@@ -122,9 +122,9 @@ def build_app():
         'run.store-model', 'run.target-model-path'
     )
     app.add_constraint(
-        lambda do_save, force_regenerate: (not do_save) or (do_save and force_regenerate),
-        'Must use --force-regenerate-data when using --store-model.',
-        'run.store-model', 'run.force-regenerate-data'
+        lambda do_save, cache_features: (not do_save) or (do_save and not cache_features),
+        'May not use --cache-features when using --store-model.',
+        'run.store-model', 'run.cache-features'
     )
     app.add_constraint(
         lambda do_save, k, cross_project, quick_cross, test_study, test_project:
@@ -390,7 +390,7 @@ def run_classification_command():
     max_train = conf.get('run.max_train')
     k_cross = conf.get('run.k_cross')
     quick_cross = conf.get('run.quick_cross')
-    regenerate_data = conf.get('run.force_regenerate_data')
+    regenerate_data = not conf.get('run.cache-features')
     architectural_only = conf.get('run.architectural_only')
     hyper_parameters = conf.get('run.hyper-params')
     test_project = conf.get('run.test_project')

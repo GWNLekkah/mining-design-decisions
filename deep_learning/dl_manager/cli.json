@@ -175,9 +175,8 @@
           "style": "flag"
         },
         {
-          "name": "force-regenerate-data",
-          "alias": "fr",
-          "help": "Force regeneration of data.",
+          "name": "cache-features",
+          "help": "Force caching of features. NOTE: the pipeline does not handle cache invalidation!",
           "style": "flag"
         },
         {
