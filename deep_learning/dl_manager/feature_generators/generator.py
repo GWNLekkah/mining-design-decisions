@@ -14,6 +14,7 @@ import pathlib
 import random
 import typing
 import warnings
+import cProfile
 
 import gensim
 import nltk
@@ -439,7 +440,9 @@ class AbstractFeatureGenerator(abc.ABC):
         if self.input_encoding_type() == InputEncoding.Text:
             tokenized_issues = [['. '.join(text)] for text in texts]
         else:
-            tokenized_issues = self.preprocess(texts)
+            with cProfile.Profile() as p:
+                tokenized_issues = self.preprocess(texts)
+            p.dump_stats('profile.txt')
 
         log.info('Generating feature vectors')
         with timer('Feature Generation'):
@@ -477,6 +480,11 @@ class AbstractFeatureGenerator(abc.ABC):
             use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
             use_ontologies = conf.get('make-features.apply-ontology-classes')
 
+
+            from nltk.tag import _get_tagger as get_tagger_internal
+            from nltk.tag import _pos_tag as pos_tag_internal
+            tagger = get_tagger_internal(lang='eng')
+
             tokenized_issues = []
             for issue in issues:
                 all_words = []
@@ -491,7 +499,8 @@ class AbstractFeatureGenerator(abc.ABC):
 
                     # We always perform POS analysis because it's required for many
                     # subsequent steps.
-                    words = nltk.pos_tag(words)
+                    # words = nltk.pos_tag(words)
+                    words = pos_tag_internal(words, None, tagger, 'eng')
 
                     # Apply ontology simplification. Must be done before stemming/lemmatization
                     if use_ontologies:
