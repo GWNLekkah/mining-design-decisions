@@ -24,10 +24,11 @@ from .config import conf
 
 
 def _check_output_mode():
-    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-    if output_mode == OutputMode.Classification3:
-        raise ValueError(
-            'Metric computation not supported for 3-Classification')
+    # output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+    # if output_mode == OutputMode.Classification3:
+    #     raise ValueError(
+    #         'Metric computation not supported for 3-Classification')
+    pass
 
 
 def get_binary_metrics():
@@ -46,12 +47,20 @@ def get_multi_class_metrics():
     }
 
 
+def get_multi_label_metrics():
+    return {
+        'accuracy', 'loss', 'f_score_tf_macro'
+    }
+
+
 def get_metrics():
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     if output_mode.output_encoding == OutputEncoding.OneHot:
         return get_multi_class_metrics()
     _check_output_mode()
-    return get_binary_metrics()
+    if output_mode.output_size == 1:
+        return get_binary_metrics()
+    return get_multi_label_metrics()
 
 
 def get_metric_translation_table():
@@ -78,6 +87,12 @@ def round_binary_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
     predictions[predictions <= 0.5] = 0
     predictions[predictions > 0.5] = 1
     return predictions.flatten().astype(bool)
+
+
+def round_binary_predictions_no_flatten(predictions: numpy.ndarray) -> numpy.ndarray:
+    predictions[predictions <= 0.5] = 0
+    predictions[predictions > 0.5] = 1
+    return predictions
 
 
 def round_onehot_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
@@ -193,10 +208,40 @@ def compute_confusion_multi_class(y_true,
 def compute_confusion_multi_label(y_true,
                                   y_pred,
                                   label_mapping) -> (float, dict[str, MetricSet]):
-    return 0.0, {}
+    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+    c = output_mode.output_size
+    confusion_per_class = {i: {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0} for i in c}
+    correct = 0
+    incorrect = 0
+    for truth, pred in zip(y_true, y_pred):
+        for i, (t_i, p_i) in enumerate(zip(truth, pred)):
+            if t_i and p_i:
+                confusion_per_class[i]['tp'] += 1
+            if t_i and not p_i:
+                confusion_per_class[i]['fn'] += 1
+            if (not t_i) and p_i:
+                confusion_per_class[i]['fp'] += 1
+            if (not t_i) and (not p_i):
+                confusion_per_class[i]['tn'] += 1
+    accuracy = correct / incorrect
+    class_metrics = {
+        label_mapping[one_hot(c, cls)]: MetricSet(true_positives=confusion['tp'],
+                                                  true_negatives=confusion['tn'],
+                                                  false_positives=confusion['fp'],
+                                                  false_negatives=confusion['fn'])
+        for cls, confusion in confusion_per_class.items()
+    }
+    return accuracy, class_metrics
+
 
 def minor(matrix, i, j):
     return numpy.delete(numpy.delete(matrix, i, axis=0), j, axis=1)
+
+
+def one_hot(n, k):
+    v = [0] * n
+    v[k] = 1
+    return v
 
 
 ##############################################################################
@@ -325,6 +370,14 @@ class MetricLogger(keras.callbacks.Callback):
                                      logs,
                                      epoch)
 
+    def __log_mult_label_metrics(self, logs, epoch):
+        results = self.__model.evaluate(x=self.__test_x,
+                                        y=self.__test_y,
+                                        return_dict=True)
+        self.__update_metrics_helper(results,
+                                     logs,
+                                     epoch)
+
     def __update_metrics_helper(self, results, logs, epoch):
         trans = get_metric_translation_table()
         metrics = get_metrics()
@@ -353,8 +406,10 @@ class MetricLogger(keras.callbacks.Callback):
         self.__check_for_early_stopping(epoch)
 
         # Evaluate the model.
-        if self.__task_is_binary:
+        if self.__task_is_binary and self.__output_mode.output_size == 1:
             self.__log_binary_metrics(logs, epoch)
+        elif self.__task_is_binary:
+            self.__log_mult_label_metrics(logs, epoch)
         else:
             self.__log_multi_class_metrics(logs, epoch)
 
@@ -365,7 +420,10 @@ class MetricLogger(keras.callbacks.Callback):
         else:
             _check_output_mode()
             y_true = numpy.asarray(self.__test_y)
-            y_pred_class = round_binary_predictions(y_pred)
+            if self.__output_mode.output_size == 1:
+                y_pred_class = round_binary_predictions(y_pred)
+            else:
+                y_pred_class = round_binary_predictions_no_flatten(y_pred)
 
         self.__predictions.append(y_pred_class.tolist())
 
@@ -378,9 +436,13 @@ class MetricLogger(keras.callbacks.Callback):
                                                          metrics_for_class)
         else:
             _check_output_mode()
-            # We do not actually have to compute the metrics here,
-            # because they have already been computed by Keras.
-            pass
+            if self.__output_mode.output_size > 1:
+                accuracy, class_metrics = compute_confusion_multi_label(y_true,
+                                                                        y_pred,
+                                                                        self.__label_mapping)
+                for cls, metrics_for_class in class_metrics.items():
+                    self.__test_metrics.update_class_metrics(cls,
+                                                             metrics_for_class)
 
     def get_model_results_for_all_epochs(self):
         basis = {
