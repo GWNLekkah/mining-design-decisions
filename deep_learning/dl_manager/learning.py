@@ -205,7 +205,11 @@ def _separate_datasets(train, test, validation):
 
 def print_and_save_k_cross_results(results, best_results, filename_hint=None):
     dump_metrics(results, filename_hint)
-    metric_list = ['accuracy', 'f-score']
+    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+    if conf.get('run.include-detection-performance') and output_mode != OutputMode.Detection:
+        metric_list = ['accuracy', 'f-score', 'classification-as-detection-accuracy', 'classification-as-detection-f-score']
+    else:
+        metric_list = ['accuracy', 'f-score']
     for key in metric_list:
         stat_data = [metrics_[key] for metrics_ in best_results]
         print('-' * 72)

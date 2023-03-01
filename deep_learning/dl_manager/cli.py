@@ -153,7 +153,6 @@ def build_app():
         'Can not perform cross validation when extracting keywords',
         'run.analyze-keywords'
     )
-
     app.register_callback('predict', run_prediction_command)
     app.register_callback('run', run_classification_command)
     app.register_callback('visualize', run_visualize_command)
@@ -178,6 +177,7 @@ def build_app():
 
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
+    app.register_setup_callback(issue_warnings)
 
     log.debug('Finished building app')
     return app
@@ -197,6 +197,15 @@ def setup_storage():
     conf.register('system.storage.generators', list, [])
     conf.register('system.storage.auxiliary', list, [])
     conf.register('system.storage.auxiliary_map', dict, {})
+
+
+
+def issue_warnings():
+    if conf.is_registered('run.output-mode'):
+        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        include_detection = conf.get('run.include-detection-performance')
+        if output_mode == OutputMode.Detection and include_detection:
+            warnings.warn('--include-detection-performance is ignored when doing classification')
 
 
 ##############################################################################

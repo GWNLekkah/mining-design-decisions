@@ -259,7 +259,7 @@ class MetricCollection:
             'accuracy': [], 'precision': [], 'recall': [], 'f-score': [],
             'class-precision': collections.defaultdict(list),
             'class-recall': collections.defaultdict(list),
-            'class-f-score': collections.defaultdict(list)
+            'class-f-score': collections.defaultdict(list),
         }
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))
         self.__is_multi_class = output_mode.output_size > 1
@@ -323,6 +323,7 @@ class MetricLogger(keras.callbacks.Callback):
         self.__train_metrics = MetricCollection()
         self.__val_metrics = MetricCollection()
         self.__test_metrics = MetricCollection()
+        self.__test_metrics_for_classification_as_detection = MetricCollection()
         self.__predictions = []
         # End metrics
         self.__output_mode = output_mode
@@ -444,6 +445,25 @@ class MetricLogger(keras.callbacks.Callback):
                     self.__test_metrics.update_class_metrics(cls,
                                                              metrics_for_class)
 
+        if self.__output_mode != OutputMode.Detection and conf.get('run.include-detection-performance'):
+            match self.__output_mode:
+                case OutputMode.Classification3:
+                    y_true_bin = numpy.sum(y_true, axis=1, keepdims=True) > 0
+                    y_pred_bin = numpy.sum(y_pred_class, axis=1, keepdims=True) > 0
+                case OutputMode.Classification3Simplified:
+                    y_true_bin = y_true != 3    # index 3 is for non-architectural
+                    y_pred_bin = y_pred_class != 3
+                case OutputMode.Classification8:
+                    y_true_bin = y_true != 0    # index 0 is for non-architectural
+                    y_pred_bin = y_pred_class != 0
+                case _ as x:
+                    raise NotImplementedError(f'Unhandled output mode {x}')
+            accuracy, metrics = compute_confusion_binary(y_true_bin,
+                                                         y_pred_bin,
+                                                         OutputMode.Detection.label_encoding)
+            self.__test_metrics_for_classification_as_detection.update_metrics(**metrics)
+            self.__test_metrics_for_classification_as_detection.update_metrics(accuracy=accuracy)
+
     def get_model_results_for_all_epochs(self):
         basis = {
             'classes': self.__label_mapping,
@@ -462,17 +482,37 @@ class MetricLogger(keras.callbacks.Callback):
         train = self.__train_metrics.as_dictionary('train')
         val = self.__val_metrics.as_dictionary('val')
         test = self.__test_metrics.as_dictionary()
-        return basis | train | val | test
+        detection = self.__test_metrics_for_classification_as_detection.as_dictionary(
+            'classification-as-detection'
+        )
+        return basis | train | val | test | detection
 
     def get_main_model_metrics_at_stopping_epoch(self):
         data = self.get_model_results_for_all_epochs()
-        if self.__stopped_on_last_epoch:
-            return {'accuracy': data['accuracy'][-1],
-                    'f-score': data['f-score'][-1]}
+        if self.__output_mode == OutputMode.Detection or not conf.get('run.include-detection-performance'):
+            if self.__stopped_on_last_epoch:
+                return {'accuracy': data['accuracy'][-1],
+                        'f-score': data['f-score'][-1]}
+            else:
+                offset = conf.get('run.early-stopping-patience') + 1
+                return {'accuracy': data['accuracy'][-offset],
+                        'f-score': data['f-score'][-offset]}
         else:
-            offset = conf.get('run.early-stopping-patience') + 1
-            return {'accuracy': data['accuracy'][-offset],
-                    'f-score': data['f-score'][-offset]}
+            if self.__stopped_on_last_epoch:
+                return {
+                    'accuracy': data['accuracy'][-1],
+                    'f-score': data['f-score'][-1],
+                    'detection-accuracy': data['classification-as-detection-accuracy'][-1],
+                    'detection-f-score': data['classification-as-detection-f-score'][-1]
+                }
+            else:
+                offset = conf.get('run.early-stopping-patience') + 1
+                return {
+                    'accuracy': data['accuracy'][-offset],
+                    'f-score': data['f-score'][-offset],
+                    'detection-accuracy': data['classification-as-detection-accuracy'][-offset],
+                    'detection-f-score': data['classification-as-detection-f-score'][-offset]
+                }
 
 
 ##############################################################################

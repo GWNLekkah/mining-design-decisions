@@ -347,6 +347,11 @@
           "name": "analyze-keywords",
           "help": "Compute a list of important keywords (convolutional mode only)",
           "style": "flag"
+        },
+        {
+          "name": "include-detection-performance",
+          "help": "Include a separate evaluation of a classification model, as if it were used for detection",
+          "style": "flag"
         }
      ]
     },
