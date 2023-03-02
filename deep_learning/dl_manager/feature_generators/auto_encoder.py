@@ -1,5 +1,8 @@
 import json
+import os
+import shutil
 
+import keras.models
 import numpy
 import seaborn
 
@@ -21,11 +24,13 @@ class AutoEncoder(AbstractFeatureGenerator):
     def input_encoding_type() -> InputEncoding:
         return InputEncoding.Vector
 
-    def generate_vectors(self, tokenized_issues: list[list[str]], metadata, args: dict[str, str]):
+    def _train_encoder(self, tokenized_issues: list[list[str]], metadata, args: dict[str, str]):
         ######################################################################
         # Prepare Training data
         log.info('Building Features')
-        training_keys, training_data = self.prepare_features()
+        training_keys, training_data = self.prepare_features(
+            generator_name=self.params.get('inner-generator', 'BOWNormalized')
+        )
         shape = training_data['feature_shape']
         features = training_data['features']
         keys = set(self.issue_keys)
@@ -60,15 +65,16 @@ class AutoEncoder(AbstractFeatureGenerator):
         for i in reversed(range(1, 1 + int(self.params.get('number-of-hidden-layers', '1')))):
             x = int(self.params.get(f'hidden-layer-{i}-size', '8'))
             current = tf.keras.layers.Dense(x, **reg)(current)
-        out = tf.keras.layers.Dense(shape, **(reg | {'activation': self.params.get('activation-function', 'elu')}))(current)
+        out = tf.keras.layers.Dense(shape, **(reg | {'activation': self.params.get('activation-function', 'elu')}))(
+            current)
         model = tf.keras.Model(inputs=[inp], outputs=out)
         scheduler = tf.keras.optimizers.schedules.PolynomialDecay(
             0.01,
             200,
             end_learning_rate=0.001,
             power=1.0,
-            #cycle=False,
-            #name=None
+            # cycle=False,
+            # name=None
         )
         model.compile(loss=tf.keras.losses.MeanSquaredError(),
                       optimizer=tf.keras.optimizers.Adam(scheduler))
@@ -87,15 +93,54 @@ class AutoEncoder(AbstractFeatureGenerator):
         encoder = tf.keras.Model(inputs=model.input,
                                  outputs=model.get_layer('encoder_layer').output)
         ######################################################################
-        # Plot Test Data
-        log.info('Generating Testing Features')
-        with open(conf.get('system.storage.generators')[0]) as file:
+        # Evaluate encoder
+        with open(conf.get('system.storage.generators')[-1]) as file:
             settings = json.load(file)
         features = self.prepare_features(keys=self.issue_keys,
                                          issues=tokenized_issues,
-                                         settings=settings['settings'])[1]['features']
+                                         settings=settings['settings'],
+                                         generator_name=settings['generator'])[1]['features']
+        transformed = model.predict(features)
+        # For evaluation, compute the amount of preserved variance
+        difference = (features - transformed) ** 2
+        avg = difference.sum(axis=0) / 2072
+        log.info(f'Loss on test set: {avg.sum() / 2072}')
+        var_old = numpy.var(features, axis=1, ddof=1)
+        var_new = numpy.var(transformed, axis=1, ddof=1)
+        assert len(var_old) == 2179
+        log.info(f'Preserved variance: {var_new.sum() / var_old.sum()}')
+
+        ######################################################################
+        # return result
+        return encoder
+
+    def generate_vectors(self, tokenized_issues: list[list[str]], metadata, args: dict[str, str]):
+        if self.pretrained is None:
+            encoder = self._train_encoder(tokenized_issues, metadata, args)
+        else:
+            path = os.path.join(
+                conf.get('predict.model'),
+                conf.get('system.storage.auxiliary_prefix'),
+                self.pretrained['encoder-model']
+            )
+            encoder = keras.models.load_model(path)
+        ######################################################################
+        # Plot Test Data
+        log.info('Generating Testing Features')
+        if self.pretrained is None:
+            with open(conf.get('system.storage.generators')[-1]) as file:
+                settings = json.load(file)
+        else:
+            a_map = conf.get('system.storage.auxiliary_map')
+            with open(a_map[self.pretrained['wrapped-generator']]) as file:
+                settings = json.load(file)
+        features = self.prepare_features(keys=self.issue_keys,
+                                         issues=tokenized_issues,
+                                         settings=settings['settings'],
+                                         generator_name=settings['generator'])[1]['features']
         log.info('Mapping testing features')
         as_2d = encoder.predict(features)
+        # Debugging code: plotting features
         # log.info('Rendering plot')
         # import matplotlib.pyplot as pyplot
         # colors = numpy.asarray(self.colors)
@@ -106,62 +151,80 @@ class AutoEncoder(AbstractFeatureGenerator):
         # pyplot.legend(loc='upper left')
         # pyplot.show()
         # raise RuntimeError
-        transformed = model.predict(features)
-        difference = (features - transformed) ** 2
-        avg = difference.sum(axis=0) / 2072
-        log.info(f'Loss on test set: {avg.sum() / 2072}')
-        var_old = numpy.var(features, axis=1, ddof=1)
-        var_new = numpy.var(transformed, axis=1, ddof=1)
-        assert len(var_old) == 2179
-        log.info(f'Preserved variance: {var_new.sum() / var_old.sum()}')
-        import matplotlib.pyplot as pyplot
-        seaborn.heatmap(avg.reshape(37, 56), cmap='viridis')
-        pyplot.show()
+        #import matplotlib.pyplot as pyplot
+        #seaborn.heatmap(avg.reshape(37, 56), cmap='viridis')
+        #pyplot.show()
+        if self.pretrained is None:
+            wrapped_generator = conf.get('system.storage.generators').pop(-1)
+            encoder_dir = 'autoencoder'
+            if os.path.exists(encoder_dir):
+                shutil.rmtree(encoder_dir)
+            os.makedirs(encoder_dir, exist_ok=True)
+            encoder.save(encoder_dir)
+            feature_size = int(self.params['target-feature-size'])
+            self.save_pretrained(
+                {
+                    'wrapped-generator': wrapped_generator,
+                    'encoder-model': encoder_dir,
+                    'feature-size': feature_size
+                },
+                [
+                    os.path.join(path, f)
+                    for path, _, files in os.walk(encoder_dir)
+                    for f in files
+                    if os.path.isfile(os.path.join(path, f))
+                ] + [
+                    wrapped_generator
+                ]
+            )
+        else:
+            feature_size = self.pretrained['feature-size']
         return {
             'features': as_2d.tolist(),
-            'feature_shape': int(self.params['target-feature-size'])
+            'feature_shape': feature_size
         }
 
-    def prepare_features(self, keys=None, issues=None, settings=None):
-        if issues is None:
-            with open(self.params['training-data-file']) as file:
-                data = json.load(file)
-            keys = [issue['key'] for issue in data]
-            issues = [
-                issue['summary'] + issue['description']
-                for issue in data
-            ]
-        if settings is None:
-            params = self.params.copy()
-            params['min-doc-count'] = params['bow-min-count']
-            for name in self._get_extra_params():
-                try:
-                    del params[name]
-                except KeyError:
-                    pass
-            match self.params.get('inner-generator', 'BOWNormalized'):
-                case 'BOWFrequency':
-                    generator = BOWFrequency(**params)
-                case 'BOWNormalized':
-                    generator = BOWNormalized(**params)
-                case 'TfidfGenerator':
+    def prepare_features(self, keys=None, issues=None, settings=None, generator_name=None):
+        if True:
+            if issues is None:
+                with open(self.params['training-data-file']) as file:
+                    data = json.load(file)
+                keys = [issue['key'] for issue in data]
+                issues = [
+                    issue['summary'] + issue['description']
+                    for issue in data
+                ]
+            if settings is None:
+                params = self.params.copy()
+                params['min-doc-count'] = params['bow-min-count']
+                for name in self._get_extra_params():
                     try:
-                        del params['min-doc-count']
+                        del params[name]
                     except KeyError:
                         pass
-                    generator = TfidfGenerator(**params)
-                case _ as g:
-                    raise ValueError(f'Unsupported feature generator for auto-encoder: {g}')
-        else:
-            match self.params.get('inner-generator', 'BOWNormalized'):
-                case 'BOWFrequency':
-                    generator = BOWFrequency(pretrained_generator_settings=settings)
-                case 'BOWNormalized':
-                    generator = BOWNormalized(pretrained_generator_settings=settings)
-                case 'TfidfGenerator':
-                    generator = TfidfGenerator(pretrained_generator_settings=settings)
-                case _ as g:
-                    raise ValueError(f'Unsupported feature generator for auto-encoder: {g}')
+                match generator_name:
+                    case 'BOWFrequency':
+                        generator = BOWFrequency(**params)
+                    case 'BOWNormalized':
+                        generator = BOWNormalized(**params)
+                    case 'TfidfGenerator':
+                        try:
+                            del params['min-doc-count']
+                        except KeyError:
+                            pass
+                        generator = TfidfGenerator(**params)
+                    case _ as g:
+                        raise ValueError(f'Unsupported feature generator for auto-encoder: {g}')
+            else:
+                match generator_name:
+                    case 'BOWFrequency':
+                        generator = BOWFrequency(pretrained_generator_settings=settings)
+                    case 'BOWNormalized':
+                        generator = BOWNormalized(pretrained_generator_settings=settings)
+                    case 'TfidfGenerator':
+                        generator = TfidfGenerator(pretrained_generator_settings=settings)
+                    case _ as g:
+                        raise ValueError(f'Unsupported feature generator for auto-encoder: {g}')
         return keys, generator.generate_vectors(
             generator.preprocess(issues),
             [[] for _ in range(len(issues))],

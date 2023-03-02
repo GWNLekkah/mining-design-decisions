@@ -197,6 +197,7 @@ def setup_storage():
     conf.register('system.storage.generators', list, [])
     conf.register('system.storage.auxiliary', list, [])
     conf.register('system.storage.auxiliary_map', dict, {})
+    conf.register('system.storage.auxiliary_prefix', str, 'auxiliary')
 
 
 

@@ -74,6 +74,10 @@ def _escape(x):
     return x
 
 
+def escape_filename(x):
+    return _escape(x)
+
+
 def get_features(source_file: pathlib.Path,
                  input_mode: str,
                  output_mode: str,

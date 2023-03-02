@@ -15,6 +15,7 @@ import random
 import typing
 import warnings
 import cProfile
+import string
 
 import gensim
 import nltk
@@ -24,6 +25,8 @@ from ..custom_kfold import stratified_trim
 from .util import ontology
 from ..config import conf
 from ..logger import get_logger, timer
+
+
 log = get_logger('Base Feature Generator')
 
 from ..data_manager_bootstrap import get_raw_text_file_name
@@ -86,6 +89,15 @@ ATTRIBUTE_CONSTANTS = {
 ##############################################################################
 # Auxiliary Classes
 ##############################################################################
+
+
+def _escape(x):
+    for ws in string.whitespace:
+        x = x.replace(ws, '_')
+    x = x.replace('.', 'dot')
+    for illegal in '/<>:"/\\|?*\'':
+        x = x.replace(illegal, '')
+    return x
 
 
 class _NullDict(dict):
@@ -267,7 +279,8 @@ class AbstractFeatureGenerator(abc.ABC):
         settings = '_'.join(
             f'{key}-{value}' for key, value in self.__params.items()
         )
-        filename = f'{self.__class__.__name__}__{settings}.json'
+        filename = f'{self.__class__.__name__}__{settings}'
+        filename = _escape(filename) + '.json'
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
