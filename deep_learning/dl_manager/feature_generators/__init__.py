@@ -9,7 +9,7 @@ from .tfidf import TfidfGenerator
 from .metadata import Metadata
 from .ontology_features import OntologyFeatures
 from .auto_encoder import AutoEncoder
-
+from .kate_auto_encoder import KateAutoEncoder
 
 _generators = (
     Word2Vec1D,
@@ -20,7 +20,8 @@ _generators = (
     TfidfGenerator,
     Metadata,
     OntologyFeatures,
-    AutoEncoder
+    AutoEncoder,
+    KateAutoEncoder
 )
 generators = {
     cls.__name__: cls for cls in _generators

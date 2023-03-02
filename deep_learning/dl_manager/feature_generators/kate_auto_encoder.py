@@ -7,11 +7,15 @@ from ..classifiers import InputEncoding
 from .. import data_splitting
 from ..config import conf
 from ..logger import get_logger
-log = get_logger('Auto Encoder')
+
+log = get_logger('Kate Auto Encoder')
 
 import tensorflow as tf
 
-class AutoEncoder(AbstractAutoEncoder):
+from ..keras_extensions.k_competitive_layer import KCompetitive
+from ..keras_extensions.dense_tied_layer import Dense_tied
+
+class KateAutoEncoder(AbstractAutoEncoder):
     @staticmethod
     def input_encoding_type() -> InputEncoding:
         return InputEncoding.Vector
@@ -41,35 +45,29 @@ class AutoEncoder(AbstractAutoEncoder):
         log.info(f'Number of words in BOW model: {shape}')
         log.info('Building auto encoder network')
         inp = tf.keras.layers.Input(shape=(shape,))
-        current = inp
-        reg = {
-            'kernel_regularizer': tf.keras.regularizers.L2(0.01),
-            'bias_regularizer': tf.keras.regularizers.L2(0.01),
-            'activity_regularizer': tf.keras.regularizers.L1(0.01),
-            'use_bias': True,
-            'activation': self.params.get('activation-function', 'elu')
-        }
-        for i in range(1, 1 + int(self.params.get('number-of-hidden-layers', '1'))):
-            x = int(self.params.get(f'hidden-layer-{i}-size', '8'))
-            current = tf.keras.layers.Dense(x, **reg)(current)
-        middle = tf.keras.layers.Dense(int(self.params['target-feature-size']), name='encoder_layer', **reg)(current)
-        current = middle
-        for i in reversed(range(1, 1 + int(self.params.get('number-of-hidden-layers', '1')))):
-            x = int(self.params.get(f'hidden-layer-{i}-size', '8'))
-            current = tf.keras.layers.Dense(x, **reg)(current)
-        out = tf.keras.layers.Dense(shape, **(reg | {'activation': self.params.get('activation-function', 'elu')}))(
-            current)
-        model = tf.keras.Model(inputs=[inp], outputs=out)
-        scheduler = tf.keras.optimizers.schedules.PolynomialDecay(
-            0.01,
-            200,
-            end_learning_rate=0.001,
-            power=1.0,
-            # cycle=False,
-            # name=None
+
+        # The model code is based on
+        # https://github.com/hugochan/KATE/blob/master/autoencoder/core/ae.py
+        tied_layer = tf.keras.layers.Dense(
+            int(self.params.get('hidden-layer-size')), activation='tanh', kernel_initializer='glorot_normal'
         )
-        model.compile(loss=tf.keras.losses.MeanSquaredError(),
-                      optimizer=tf.keras.optimizers.Adam(scheduler))
+        hidden = tied_layer(inp)
+        encoded = KCompetitive(int(self.params.get('k-competitive')), 'kcomp', name='encoder_layer')(hidden)
+        decoded = Dense_tied(shape, activation='sigmoid', tied_to=tied_layer)(encoded)
+        model = tf.keras.Model(inputs=[inp], outputs=decoded)
+        #encoder_model = tf.keras.Model(inputs=[inp], outputs=encoded)
+        # match self.params.get('loss', 'binary_cross_entropy'):
+        #     case 'contractive':
+        #         selected_loss = contractive_loss(encoder_model)
+        #     case 'crossentropy':
+        #         selected_loss = 'binary_crossentropy'
+        #     case _ as x:
+        #         raise ValueError(f'Invalid loss for {self.__class__.__name__}: {x}')
+        model.compile(
+            optimizer=tf.keras.optimizers.Adadelta(lr=0.2),
+            loss='binary_crossentropy'
+        )
+
         ######################################################################
         # Train Model
         train, val = dataset.split_fraction(0.9)
@@ -78,8 +76,15 @@ class AutoEncoder(AbstractAutoEncoder):
         model.fit(x=train_x,
                   y=train_y,
                   validation_data=(val_x, val_y),
-                  epochs=30,
-                  batch_size=128)
+                  epochs=50,
+                  batch_size=100,
+                  shuffle=True,
+                  callbacks=[
+                      tf.keras.callbacks.ReduceLROnPlateau(monitor='val_loss', factor=0.2, patience=3, min_lr=0.01),
+                      tf.keras.callbacks.EarlyStopping(monitor='val_loss', min_delta=1e-5, patience=5, verbose=1, mode='auto'),
+                  ]
+        )
+
         ######################################################################
         # Build Encoder
         encoder = tf.keras.Model(inputs=model.input,
@@ -108,24 +113,14 @@ class AutoEncoder(AbstractAutoEncoder):
 
     @classmethod
     def get_parameters(cls) -> dict[str, ParameterSpec]:
-        return super(AutoEncoder, AutoEncoder).get_parameters() | cls.get_extra_params()
+        return super(KateAutoEncoder, KateAutoEncoder).get_parameters() | cls.get_extra_params()
 
     @staticmethod
     def get_extra_params():
-        layers = {f'hidden-layer-{i}-size': ParameterSpec(description=f'Size of layer {i}', type='int')
-                  for i in range(1, 17)}
-        return layers | {
+        return {
             'inner-generator': ParameterSpec(
                 description='Feature generator to transform issues to text',
                 type='str'
-            ),
-            'number-of-hidden-layers': ParameterSpec(
-                description='Number of hidden layers',
-                type='int'
-            ),
-            'target-feature-size': ParameterSpec(
-                description='Target feature size',
-                type='int'
             ),
             'training-data-file': ParameterSpec(
                 description='File of data to use to train the auto-encoder',
@@ -135,8 +130,16 @@ class AutoEncoder(AbstractAutoEncoder):
                 description='Minimum document count for bag of words',
                 type='int'
             ),
-            'activation-function': ParameterSpec(
-                description='Activation function to use in the auto encoder',
-                type='str'
-            )
+            'hidden-layer-size': ParameterSpec(
+                description='Size of the hidden layer',
+                type='int'
+            ),
+            'k-competitive': ParameterSpec(
+                description='Size of the K-Competitive layer',
+                type='int'
+            ),
+            # 'loss': ParameterSpec(
+            #     description='Loss to use for training the encoder. Either "contractive" or "crossentropy"',
+            #     type='str'
+            # )
         }
