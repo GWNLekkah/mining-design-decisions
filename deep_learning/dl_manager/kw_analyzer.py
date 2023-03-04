@@ -85,7 +85,7 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
     with open('../datasets/labels/BHAT_labels.json') as file:
         bhat = [item['key'] for item in json.load(file)]
 
-    with open(f'./maven-keywords-{suffix}.json', 'w') as file:
+    with open(f'./{conf.get("system.storage.file_prefix")}_maven-keywords-{suffix}.json', 'w') as file:
         print(keywords_per_class)
         maven_keywords = {
             cls: [
@@ -95,7 +95,7 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
         }
         json.dump(maven_keywords, file)
 
-    with open(f'./bottom-up-keywords-{suffix}.json', 'w') as file:
+    with open(f'./{conf.get("system.storage.file_prefix")}_bottom-up-keywords-{suffix}.json', 'w') as file:
         bottom_up_keywords = {
             cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in bottom_up
@@ -104,7 +104,7 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
         }
         json.dump(bottom_up_keywords, file)
 
-    with open(f'./top-down-keywords-{suffix}.json', 'w') as file:
+    with open(f'./{conf.get("system.storage.file_prefix")}_top-down-keywords-{suffix}.json', 'w') as file:
         top_down_keywords = {
             cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in top_down
@@ -113,7 +113,7 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
         }
         json.dump(top_down_keywords, file)
 
-    with open(f'./bhat-keywords-{suffix}.json', 'w') as file:
+    with open(f'./{conf.get("system.storage.file_prefix")}_bhat-keywords-{suffix}.json', 'w') as file:
         bhat_keywords = {
             cls: [
                 _pop(entry) for entry in entries if _trim(entry['key']) in bhat

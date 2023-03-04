@@ -9,6 +9,7 @@ import abc
 import ast
 import csv
 import enum
+import hashlib
 import json
 import pathlib
 import random
@@ -25,6 +26,7 @@ from ..custom_kfold import stratified_trim
 from .util import ontology
 from ..config import conf
 from ..logger import get_logger, timer
+from ..database import DatabaseAPI
 
 
 log = get_logger('Base Feature Generator')
@@ -252,7 +254,7 @@ class AbstractFeatureGenerator(abc.ABC):
                     self.__params[name] = self.__pretrained[name]
             if 'ontology-classes' in self.__pretrained:
                 aux = conf.get('system.storage.auxiliary_map')
-                conf.set('make-features.ontology-classes', aux[self.__pretrained['ontology-classes']])
+                conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
 
     @property
     def params(self) -> dict[str, str]:
@@ -280,16 +282,15 @@ class AbstractFeatureGenerator(abc.ABC):
             f'{key}-{value}' for key, value in self.__params.items()
         )
         filename = f'{self.__class__.__name__}__{settings}'
-        filename = _escape(filename) + '.json'
+
+        filename = hashlib.sha512(filename.encode()).hexdigest()
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
-        ontologies = conf.get('make-features.ontology-classes')
+        ontologies = conf.get('run.ontology-classes')
         if ontologies:
             pretrained_settings['ontology-classes'] = ontologies
             conf.get('system.storage.auxiliary').append(ontologies)
-        while filename in conf.get('system.storage.generators'):
-            filename = f'x_{filename}'
         conf.get('system.storage.generators').append(filename)
         conf.get('system.storage.auxiliary').extend(auxiliary_files)
         with open(filename, 'w') as file:
@@ -351,26 +352,11 @@ class AbstractFeatureGenerator(abc.ABC):
             ),
         }
 
-    def generate_features(self,
-                          source_filename: pathlib.Path,
-                          target_filename: pathlib.Path):
-        """Generate features from the data in the given source file,
-        and store the results in the given target file.
-        """
-        log.info(f'Loading features from file {source_filename}')
-        with open(source_filename) as file:
-            issues = json.load(file)
-            # DONT USE EVAL!
-            #metadata_attributes = eval(self.__params.get('metadata-attributes', '[]'), ATTRIBUTE_CONSTANTS)
-            metadata_attributes = [
-                attr for attr in self.__params.get('metadata-attributes', '').split(',') if attr
-            ]
-            for attr in metadata_attributes:
-                if attr not in ATTRIBUTE_CONSTANTS:
-                    raise ValueError(f'Unknown metadata attribute: {attr}')
-
-            texts = []
-            metadata = []
+    def load_data_from_db(self, query, metadata_attributes):
+        api: DatabaseAPI = conf.get('system.storage.database-api')
+        issue_keys = api.select_issues(query)
+        if self.pretrained is None:
+            raw_labels = api.get_labels(issue_keys)
             labels = {
                 'detection': [],
                 'classification3': [],
@@ -384,57 +370,72 @@ class AbstractFeatureGenerator(abc.ABC):
                 'Executive': [],
                 'Non-Architectural': []
             }
-            current_index = 0
-            self.__colors = []
-            self.__keys = []
-            for issue in issues:
-                self.__keys.append(issue['key'])
-                if self.pretrained is None:
-                    # Add labels if not using a pre-trained dataset.
-                    is_cat1 = issue['is-cat1']['value'] == 'True'
-                    is_cat2 = issue['is-cat2']['value'] == 'True'
-                    is_cat3 = issue['is-cat3']['value'] == 'True'
-                    key = (is_cat1, is_cat2, is_cat3)
+            for index, raw in enumerate(raw_labels):
+                self.update_labels(labels,
+                                   classification_indices,
+                                   index,
+                                   raw['existence'],
+                                   raw['executive'],
+                                   raw['property'])
+        else:
+            labels = []
+            classification_indices = []
+        attributes = ['summary', 'description'] + metadata_attributes
+        raw_data = api.get_issue_data(issue_keys, attributes, raise_on_partial_result=True)
+        texts = [
+            issue.pop('summary') + issue.pop('description') for issue in raw_data
+        ]
+        metadata = raw_data     # summary and description have been popped
+        return texts, metadata, labels, classification_indices
 
-                    if is_cat2:  # Executive
-                        labels['classification3simplified'].append((0, 1, 0, 0))
-                        classification_indices['Executive'].append(current_index)
-                        self.__colors.append(0)
-                    elif is_cat3:  # Property
-                        labels['classification3simplified'].append((0, 0, 1, 0))
-                        classification_indices['Property'].append(current_index)
-                        self.__colors.append(1)
-                    elif is_cat1:  # Existence
-                        labels['classification3simplified'].append((1, 0, 0, 0))
-                        classification_indices['Existence'].append(current_index)
-                        self.__colors.append(2)
-                    else:  # Non-architectural
-                        labels['classification3simplified'].append((0, 0, 0, 1))
-                        classification_indices['Non-Architectural'].append(current_index)
-                        self.__colors.append(3)
+    def update_labels(self,
+                      labels,
+                      classification_indices,
+                      current_index,
+                      is_existence,
+                      is_executive,
+                      is_property):
+        if is_executive:  # Executive
+            labels['classification3simplified'].append((0, 1, 0, 0))
+            classification_indices['Executive'].append(current_index)
+            self.__colors.append(0)
+        elif is_property:  # Property
+            labels['classification3simplified'].append((0, 0, 1, 0))
+            classification_indices['Property'].append(current_index)
+            self.__colors.append(1)
+        elif is_existence:  # Existence
+            labels['classification3simplified'].append((1, 0, 0, 0))
+            classification_indices['Existence'].append(current_index)
+            self.__colors.append(2)
+        else:  # Non-architectural
+            labels['classification3simplified'].append((0, 0, 0, 1))
+            classification_indices['Non-Architectural'].append(current_index)
+            self.__colors.append(3)
 
-                    if issue['is-design'] == 'True':
-                        labels['detection'].append(True)
-                    else:
-                        labels['detection'].append(False)
+        if is_executive or is_property or is_existence:
+            labels['detection'].append(True)
+        else:
+            labels['detection'].append(False)
 
-                    labels['classification8'].append(classification8_lookup[key])
-                    labels['classification3'].append(key)
-                    labels['issue_keys'].append(issue['key'] + '-' + issue['study'])
+        key = (is_existence, is_executive, is_property)
+        labels['classification8'].append(classification8_lookup[key])
+        labels['classification3'].append(key)
 
-                texts.append(issue['summary'] + issue['description'])
+    def generate_features(self,
+                          query,
+                          target_filename: pathlib.Path):
+        """Generate features from the data in the given source file,
+        and store the results in the given target file.
+        """
+        metadata_attributes = [
+            attr for attr in self.__params.get('metadata-attributes', '').split(',') if attr
+        ]
+        for attr in metadata_attributes:
+            if attr not in ATTRIBUTE_CONSTANTS:
+                raise ValueError(f'Unknown metadata attribute: {attr}')
 
-                new_metadata = []
-                for attribute in metadata_attributes:
-                    new_metadata.extend(issue['metadata'][attribute])
-                metadata.append(new_metadata)
-
-                current_index += 1
-
-        try:
-            texts
-        except NameError:   # This is necessary to make Pycharm shut up
-            raise ValueError('BUG')
+        texts, metadata, labels, classification_indices = self.load_data_from_db(query,
+                                                                                 metadata_attributes)
 
         limit = int(self.params.get('class-limit', -1))
         if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
@@ -478,7 +479,7 @@ class AbstractFeatureGenerator(abc.ABC):
     def preprocess(self, issues):
         log.info('Preprocessing Features')
         with timer('Feature Preprocessing'):
-            ontology_path = conf.get('make-features.ontology-classes')
+            ontology_path = conf.get('run.ontology-classes')
             if ontology_path != '':
                 ontology_table = ontology.load_ontology(ontology_path)
             else:
@@ -491,7 +492,7 @@ class AbstractFeatureGenerator(abc.ABC):
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
             use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
-            use_ontologies = conf.get('make-features.apply-ontology-classes')
+            use_ontologies = conf.get('run.apply-ontology-classes')
 
 
             from nltk.tag import _get_tagger as get_tagger_internal

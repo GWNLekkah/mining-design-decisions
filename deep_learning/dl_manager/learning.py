@@ -10,7 +10,6 @@ and it works.
 # Imports
 ##############################################################################
 
-import collections
 import datetime
 import gc
 import json
@@ -28,12 +27,10 @@ import numpy as np
 
 from collections import Counter
 
-from .classifiers import OutputEncoding
 from .feature_generators.generator import OutputMode
 
 from . config import conf
 from . import stacking
-from . import boosting
 from .metrics import MetricLogger
 from . import metrics
 from . import data_splitting as splitting
@@ -72,23 +69,18 @@ def _coerce_none(x: str) -> str | None:
 
 def run_single(model_or_models,
                epochs: int,
-               split_size: float,
-               max_train: int,
-               labels,
                output_mode: OutputMode,
                label_mapping: dict,
-               *features,
-               issue_keys,
-               test_project=None):
+               training_data,
+               testing_data):
+    max_train = conf.get('run.max-train')
     if max_train > 0:
         warnings.warn('The --max-train parameter is ignored in single runs.')
     spitter = splitting.SimpleSplitter(val_split_size=conf.get('run.split-size'),
                                        test_split_size=conf.get('run.split-size'),
-                                       test_study=_coerce_none(conf.get('run.test-study')),
-                                       test_project=_coerce_none(conf.get('run.test-project')),
                                        max_train=conf.get('run.max-train'))
     # Split returns an iterator; call next() to get data splits
-    train, test, validation, train_keys, val_keys, test_issue_keys = next(spitter.split(labels, issue_keys, *features))
+    train, test, validation, train_keys, val_keys, test_issue_keys = next(spitter.split(training_data, testing_data))
     comparator = metrics.ComparisonManager()
     if not conf.get('run.test-separately'):
         models = [model_or_models]
@@ -121,14 +113,10 @@ def run_single(model_or_models,
 
 def run_cross(model_factory,
               epochs: int,
-              k: int,
-              max_train: int,
-              quick_cross: bool,
-              labels,
               output_mode: OutputMode,
               label_mapping: dict,
-              *features,
-              issue_keys):
+              training_data,
+              testing_data):
     results = []
     best_results = []
     # if quick_cross:
@@ -157,7 +145,7 @@ def run_cross(model_factory,
             max_train=conf.get('run.max-train'),
         )
     comparator = metrics.ComparisonManager()
-    stream = splitter.split(labels, issue_keys, *features)
+    stream = splitter.split(training_data, testing_data)
     for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
         model_or_models = model_factory()
         if conf.get('run.test-separately'):
@@ -344,7 +332,7 @@ def upsample(features, labels):
 def dump_metrics(runs, filename_hint=None):
     if conf.get('system.peregrine'):
         data = pathlib.Path(conf.get('system.peregrine.data'))
-        directory = data / 'results'
+        directory = data / f'{conf.get("system.storage.file_prefix")}_results'
     else:
         directory = pathlib.Path('.')
     if not directory.exists():
@@ -353,10 +341,10 @@ def dump_metrics(runs, filename_hint=None):
         filename_hint = ''
     else:
         filename_hint = '_' + filename_hint
-    filename = f'run_results_{datetime.datetime.now().timestamp()}{filename_hint}.json'
+    filename = f'{conf.get("system.storage.file_prefix")}_run_results_{datetime.datetime.now().timestamp()}{filename_hint}.json'
     with open(directory / filename, 'w') as file:
         json.dump(runs, file)
-    with open(directory / 'most_recent_run.txt', 'w') as file:
+    with open(directory / '{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
         file.write(filename)
 
 ##############################################################################
@@ -365,34 +353,25 @@ def dump_metrics(runs, filename_hint=None):
 ##############################################################################
 
 
-def run_ensemble(factory, datasets, labels, issue_keys, label_mapping):
+def run_ensemble(factory, training_data, testing_data, label_mapping):
     match (strategy := conf.get('run.ensemble-strategy')):
         case 'stacking':
             run_stacking_ensemble(factory,
-                                  datasets,
-                                  labels,
-                                  issue_keys,
-                                  label_mapping)
-        case 'boosting':
-            run_boosting_ensemble(factory,
-                                  datasets,
-                                  labels,
-                                  issue_keys,
+                                  training_data,
+                                  testing_data,
                                   label_mapping)
         case 'voting':
             run_voting_ensemble(factory,
-                                datasets,
-                                labels,
-                                issue_keys,
+                                training_data,
+                                testing_data,
                                 label_mapping)
         case _:
             raise ValueError(f'Unknown ensemble mode {strategy}')
 
 
 def run_stacking_ensemble(factory,
-                          datasets,
-                          labels,
-                          issue_keys,
+                          training_data,
+                          testing_data,
                           label_mapping,
                           *, __voting_ensemble_hook=None):
     if conf.get('run.k-cross') > 0 and not conf.get('run.quick_cross'):
@@ -406,8 +385,6 @@ def run_stacking_ensemble(factory,
     if conf.get('run.k-cross') > 0:
         splitter = splitting.QuickCrossFoldSplitter(
             k=conf.get('run.k-cross'),
-            test_study=_coerce_none(conf.get('run.test-study')),
-            test_project=_coerce_none(conf.get('run.test-project')),
             max_train=conf.get('run.max-train'),
         )
     elif conf.get('run.cross-project'):
@@ -419,8 +396,6 @@ def run_stacking_ensemble(factory,
         splitter = splitting.SimpleSplitter(
             val_split_size=conf.get('run.split-size'),
             test_split_size=conf.get('run.split-size'),
-            test_study=_coerce_none(conf.get('run.test-study')),
-            test_project=_coerce_none(conf.get('run.test-project')),
             max_train=conf.get('run.max-train'),
         )
     if __voting_ensemble_hook is None:
@@ -433,7 +408,7 @@ def run_stacking_ensemble(factory,
     results = []
     best_results = []
     voting_result_data = []
-    stream = splitter.split(labels, issue_keys, *datasets)
+    stream = splitter.split(training_data, testing_data)
     for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
         # Step 1) Train all models and get their predictions
         #           on the training and validation set.
@@ -530,14 +505,12 @@ def run_stacking_ensemble(factory,
 
 
 def run_voting_ensemble(factory,
-                        datasets,
-                        labels,
-                        issue_keys,
+                        training_data,
+                        testing_data,
                         label_mapping):
     run_stacking_ensemble(factory,
-                          datasets,
-                          labels,
-                          issue_keys,
+                          training_data,
+                          testing_data,
                           label_mapping,
                           __voting_ensemble_hook=(_get_voting_predictions, _save_voting_data))
     
@@ -573,163 +546,3 @@ def _get_voting_predictions(truth, predictions):
             **{cls: metrics_for_class.as_dictionary()
                for cls, metrics_for_class in class_metrics.items()}
         }
-
-
-def run_boosting_ensemble(factory,
-                          datasets,
-                          labels,
-                          issue_keys,
-                          label_mapping):
-    raise NotImplementedError(
-        'The boosting ensemble has been disabled. '
-        'The code has to be updated before it can be used again. '
-        'Support must be implemented for the new `data_splitting` module. '
-        'Additionally, model saving and loading must be implemented. '
-        'Currently, the code is outdated, and may not work correctly.'
-    )
-    if conf.get('run.k-cross') > 0 and not conf.get('run.quick_cross'):
-        warnings.warn('Absence of --quick-cross is ignored when running with boosting')
-    boosting.check_adaboost_requirements()
-    number_of_classifiers = conf.get('run.boosting-rounds')
-    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-    stream = split_data_quick_cross(conf.get('run.k-cross'),
-                                    labels,
-                                    *datasets,
-                                    issue_keys=issue_keys,
-                                    max_train=conf.get('run.max-train'))
-    number_of_classes = output_mode.number_of_classes
-    sub_model_results = collections.defaultdict(list)
-    best_sub_model_results = collections.defaultdict(list)
-    results = []
-    for _, _, train, test, validation, test_issue_keys in stream:
-        models = []
-        alphas = []
-        training_labels = train[1]
-        weights = boosting.initialize_weights(training_labels)
-        for model_number in range(number_of_classifiers):
-            model = factory()
-            sub_results, best_sub_results = train_and_test_model(model,
-                                                                 dataset_train=train,
-                                                                 dataset_val=validation,
-                                                                 dataset_test=test,
-                                                                 epochs=conf.get('run.epochs'),
-                                                                 output_mode=OutputMode.from_string(
-                                                                     conf.get('run.output-mode')),
-                                                                 label_mapping=label_mapping,
-                                                                 test_issue_keys=test_issue_keys,
-                                                                 extra_model_params={'sample_weight': weights})
-            best_sub_model_results[model_number].append(best_sub_results)
-            sub_model_results[model_number].append(sub_results)
-            predictions = numpy.asarray(model.predict(train[0]))
-            # Convert predictions to some format
-            if output_mode.output_encoding == OutputEncoding.OneHot:
-                predictions = metrics.onehot_indices(predictions)
-                training_labels = metrics.onehot_indices(predictions)
-            else:
-                predictions = metrics.round_binary_predictions(predictions)
-            error = boosting.compute_error(training_labels, predictions, weights)
-            alpha = boosting.compute_classifier_weight(error, number_of_classes)
-            alphas.append(alpha)
-            weights = boosting.update_weights(training_labels, predictions, weights, alpha)
-            models.append(model)
-        # Now, finally, evaluate performance on the test set
-        training_predictions = []
-        validation_predictions = []
-        testing_predictions = []
-        for model in models:
-            training_predictions.append(model.predict(train[0]))
-            validation_predictions.append(model.predict(validation[0]))
-            testing_predictions.append(model.predict(test[0]))
-        y_pred_train = boosting.compute_final_classifications(alphas,
-                                                              number_of_classes,
-                                                              *training_predictions)
-        y_pred_val = boosting.compute_final_classifications(alphas,
-                                                            number_of_classes,
-                                                            *validation_predictions)
-        y_pred_test = boosting.compute_final_classifications(alphas,
-                                                             number_of_classes,
-                                                             *testing_predictions)
-        # Now, compare with y_true --- shit
-        round_result = {'alphas': alphas}
-        if output_mode.output_encoding == OutputEncoding.OneHot:
-            round_result |= _boosting_eval_multi(train[1],
-                                                 y_pred_train,
-                                                 output_mode.index_label_encoding,
-                                                 'train')
-            round_result |= _boosting_eval_multi(validation[1],
-                                                 y_pred_val,
-                                                 output_mode.index_label_encoding,
-                                                 'val')
-            round_result |= _boosting_eval_multi(test[1],
-                                                 y_pred_test,
-                                                 output_mode.index_label_encoding)
-        else:   # Detection / Binary
-            round_result |= _boosting_eval_detection(train[1],
-                                                     y_pred_train,
-                                                     output_mode.label_encoding,
-                                                     'train')
-            round_result |= _boosting_eval_detection(validation[1],
-                                                     y_pred_val,
-                                                     output_mode.label_encoding,
-                                                     'val')
-            round_result |= _boosting_eval_detection(test[1],
-                                                     y_pred_test,
-                                                     output_mode.label_encoding)
-        results.append(round_result)
-    # Print and save results
-    print('=' * 72)
-    for model_number, sub_model_data in sub_model_results.items():
-        print(f'Model {model_number} results:')
-        print_and_save_k_cross_results(sub_model_data,
-                                       best_sub_model_results[model_number],
-                                       f'boosting_sub_model_{model_number}')
-    print('=' * 72)
-    print('=' * 72)
-    print('Total Boosting Classifier Results:')
-    metric_names = sorted(set(results[0].keys()))
-    allowed_attributes = ['accuracy', 'f-score']
-    for metric_name in metric_names:
-        if metric_name not in allowed_attributes:
-            continue
-        print('=' * 72)
-        print(f'{metric_name.capitalize()}:')
-        data_points = [run[metric_name] for run in results if run[metric_name]]
-        print(f' * Mean: {statistics.mean(data_points)}')
-        print(f' * Median: {statistics.median(data_points)}')
-        print(f' * Standard Deviation: {statistics.stdev(data_points)}')
-    with open('boosting.json', 'w') as file:
-        json.dump(results, file)
-
-
-def _boosting_eval_detection(y_true, y_pred, labels, prefix=None):
-    accuracy, metric_set = metrics.compute_confusion_binary(y_true,
-                                                            y_pred,
-                                                            labels)
-    new_prefix = f'{prefix}-' if prefix else ''
-    base_dict = {f'{new_prefix}accuracy': accuracy}
-    return base_dict | metric_set.as_dictionary(prefix)
-
-
-def _boosting_eval_multi(y_true, y_pred, labels, prefix=None):
-    # y_true_converted = metrics.map_labels_to_names(
-    #     metrics.onehot_indices(y_true),
-    #     labels
-    # )
-    # y_pred_converted = metrics.map_labels_to_names(
-    #     metrics.onehot_indices(y_pred),
-    #     labels
-    # )
-    accuracy, metrics_per_class = metrics.compute_confusion_multi_class(
-        y_true, y_pred, labels
-    )
-    new_prefix = f'{prefix}-' if prefix else ''
-    base_dict = {f'{new_prefix}accuracy': accuracy}
-    for cls, metric_set in metrics_per_class.items():
-        for metric_name, value in metric_set.as_dictionary().items():
-            key = f'{new_prefix}class-{metric_name}'
-            base_dict.setdefault(key, {})[cls] = value
-    # also compute f-score
-    f_scores = [metric_set.f_score
-                for metric_set in metrics_per_class.values()]
-    base_dict['f-score'] = statistics.mean(f_scores)
-    return base_dict

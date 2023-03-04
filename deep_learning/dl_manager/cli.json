@@ -52,8 +52,8 @@
       ]
     },
     {
-      "name": "make-features",
-      "help": "Generate a collection of features",
+      "name": "run",
+      "help": "Train a classifier and store the results",
       "args": [
         {
           "name": "input-mode",
@@ -72,18 +72,6 @@
           "nargs": "1",
           "type": "str",
           "required": true
-        },
-        {
-          "name": "file",
-          "alias": "f",
-          "help": "Data input file.",
-          "style": "named",
-          "nargs": "1",
-          "type": "class",
-          "required": true,
-          "options": [
-            "pathlib.Path"
-          ]
         },
         {
           "name": "params",
@@ -106,21 +94,6 @@
           "help": "Enable application of ontology classes",
           "style": "flag"
         },
-        {
-          "name": "save-trained-generator",
-          "alias": "stg",
-          "help": "If given, store the pre-trained feature generator. This is necessary to generate features when using prediction mode",
-          "style": "flag"
-        }
-      ]
-    },
-    {
-      "name": "run",
-      "help": "Train a classifier and store the results",
-      "import_args": [
-        "make-features/*"
-      ],
-      "args": [
         {
           "name": "classifier",
           "help": "Classifier to use. Use `list` for options",
@@ -192,22 +165,6 @@
           "nargs": "+",
           "type": "dict",
           "style": "named"
-        },
-        {
-          "name": "test-project",
-          "help": "Name of project to be used as the test set",
-          "style": "named",
-          "nargs": "1",
-          "type": "str",
-          "default": "None"
-        },
-        {
-          "name": "test-study",
-          "help": "Name of the study to be used as the test set",
-          "style": "named",
-          "nargs": "1",
-          "type": "str",
-          "default": "None"
         },
         {
           "name": "class-balancer",
@@ -352,6 +309,33 @@
           "name": "include-detection-performance",
           "help": "Include a separate evaluation of a classification model, as if it were used for detection",
           "style": "flag"
+        },
+        {
+          "name": "training-data-query",
+          "help": "Query to obtain data from the database for training",
+          "type": "str",
+          "required": true,
+           "style": "named"
+        },
+        {
+          "name": "test-data-query",
+          "help": "Query to obtain data from the database for performance evaluation",
+          "type": "str",
+          "style": "named"
+        },
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "test-with-training-data",
+          "help": "Draw testing data from training data using train/test split",
+          "style": "flag",
+          "default": false
         }
      ]
     },
@@ -370,25 +354,12 @@
           ]
         },
         {
-          "name": "data",
+          "name": "data-query",
           "alias": "d",
           "required": true,
           "style": "named",
-          "type": "class",
-          "options": [
-            "pathlib.Path"
-          ]
+          "type": "str"
         }
-      ]
-    },
-    {
-      "name": "visualize",
-      "help": "Visualize a classifier",
-      "import_args": [
-        "run/classifier",
-        "make-features/*",
-        "run/output-mode",
-        "run/hyper-params"
       ]
     },
     {

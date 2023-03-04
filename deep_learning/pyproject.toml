@@ -21,7 +21,6 @@
         "gensim==4.1.2",
         "jira==3.2.0",
         "keras==2.8.0",
-        "Kivy==2.1.0",
         "matplotlib==3.5.0",
         "nltk==3.7",
         "numpy==1.22.3",
@@ -35,5 +34,6 @@
         "tensorflow_text==2.8.2",
         "texttable==1.6.4",
         "protobuf==3.20.*",
-        "imbalanced-learn==0.10.*"
+        "imbalanced-learn==0.10.*",
+        "requests==2.28.*"
     ]

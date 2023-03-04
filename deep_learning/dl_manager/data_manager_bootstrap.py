@@ -11,9 +11,10 @@ from .config import conf
 
 def get_raw_text_file_name() -> str:
     if conf.get('system.peregrine'):
-        path = os.path.join(conf.get('system.peregrine.data'), 'raw_words')
+        path = os.path.join(conf.get('system.peregrine.data'),
+                            f'{conf.get("system.storage.file_prefix")}_raw_words')
     else:
-        path = 'raw_words'
+        path = f'{conf.get("system.storage.file_prefix")}_raw_words'
     os.makedirs(path, exist_ok=True)
     options = []
     params = conf.get('make-features.params')
@@ -29,5 +30,5 @@ def get_raw_text_file_name() -> str:
     if conf.get('make-features.ontology-classes'):
         options.append('with_ontologies')
     options.sort()
-    filename = f'raw_words_{"__".join(options)}.json'
+    filename = os.path.join(path, f'{conf.get("system.storage.file_prefix")}_raw_words_{"__".join(options)}.json')
     return filename

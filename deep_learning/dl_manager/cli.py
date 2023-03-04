@@ -8,7 +8,6 @@ deep learning classifiers.
 # Imports
 ##############################################################################
 
-import argparse
 import collections
 import json
 import os.path
@@ -29,6 +28,7 @@ from . import data_manager
 from . import learning
 from .config import conf, CLIApp
 from .logger import get_logger
+from .database import DatabaseAPI
 log = get_logger('CLI')
 
 from . import analysis
@@ -155,12 +155,9 @@ def build_app():
     )
     app.register_callback('predict', run_prediction_command)
     app.register_callback('run', run_classification_command)
-    app.register_callback('visualize', run_visualize_command)
-    app.register_callback('make-features', run_make_features_command)
     app.register_callback('list', run_list_command)
     app.register_callback('hyperparams', run_hyper_params_command)
     app.register_callback('generator-params', run_generator_params_command)
-    app.register_callback('gui', run_gui_command)
     app.register_callback('combination-strategies', show_combination_strategies)
     app.register_callback('run_analysis.summarize',
                           analysis.run_summarize_command)
@@ -198,6 +195,9 @@ def setup_storage():
     conf.register('system.storage.auxiliary', list, [])
     conf.register('system.storage.auxiliary_map', dict, {})
     conf.register('system.storage.auxiliary_prefix', str, 'auxiliary')
+    conf.register('system.storage.file_prefix', str, 'dl_pipeline')
+    conf.clone('run.database-url', 'system.storage.database-url')
+    conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
 
 
 
@@ -207,24 +207,14 @@ def issue_warnings():
         include_detection = conf.get('run.include-detection-performance')
         if output_mode == OutputMode.Detection and include_detection:
             warnings.warn('--include-detection-performance is ignored when doing classification')
-
-
-##############################################################################
-##############################################################################
-# Command Dispatch - GUI command
-##############################################################################
-
-
-def run_gui_command():
-    from .ui import start_ui
-    start_ui()
+    if conf.is_registered('run.file') and conf.get('run.file'):
+        warnings.warn('--file is deprecated. Please use the database based API')
 
 
 ##############################################################################
 ##############################################################################
 # Command Dispatch - Combination Strategies
 ##############################################################################
-
 
 STRATEGIES = {
     'add': 'Add the values of layers to combine them.',
@@ -328,16 +318,22 @@ def run_generator_params_command():
 
 ##############################################################################
 ##############################################################################
-# Command Dispatch - make-features command
+# Feature Generation
 ##############################################################################
 
 
-def run_make_features_command():
-    source_file = conf.get('make-features.file')
-    input_mode = conf.get('make-features.input_mode')
-    output_mode = conf.get('make-features.output_mode')
-    params = conf.get('make-features.params')
+def generate_features_and_get_data(architectural_only: bool = False,
+                                   force_regenerate: bool = False):
+    input_mode = conf.get('run.input_mode')
+    output_mode = conf.get('run.output_mode')
+    params = conf.get('run.params')
     imode_counts = collections.defaultdict(int)
+    datasets_train = []
+    labels_train = None
+    binary_labels_train = None
+    datasets_test = []
+    labels_test = None
+    binary_labels_test = None
     for imode in input_mode:
         number = imode_counts[imode]
         imode_counts[imode] += 1
@@ -352,15 +348,69 @@ def run_make_features_command():
         for param_name in mode_params:
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
-        # Generate the features
-        filename = data_manager.get_feature_file(source_file,
-                                                 imode,
-                                                 output_mode,
-                                                 **mode_params)
-        data_manager.make_features(source_file,
-                                   filename,
-                                   imode,
-                                   **mode_params)
+        training_query = conf.get('run.training-data-query')
+        maybe_generate_data(training_query, imode, mode_params, force_regenerate)
+        dataset = data_manager.get_features(training_query, imode, output_mode, **mode_params)
+        if labels_train is not None:
+            assert labels_train == dataset.labels
+            assert binary_labels_train == dataset.binary_labels
+        else:
+            labels_train = dataset.labels
+            binary_labels_train = dataset.binary_labels
+        datasets_train.append(dataset)
+        if not conf.get('run.test-with-training-data'):
+            testing_query = conf.get('run.testing-data-query')
+            maybe_generate_data(testing_query, imode, mode_params, force_regenerate)
+            dataset = data_manager.get_features(training_query, imode, output_mode, **mode_params)
+            if labels_test is not None:
+                assert labels_test == dataset.labels
+                assert binary_labels_test == dataset.binary_labels
+            else:
+                labels_test = dataset.labels
+                binary_labels_test = dataset.binary_labels
+            datasets_test.append(dataset)
+
+    if architectural_only:
+        datasets_train, labels_train = select_architectural_only(datasets_train,
+                                                                 labels_train,
+                                                                 binary_labels_train)
+        datasets_test, labels_test = select_architectural_only(datasets_test,
+                                                               labels_test,
+                                                               binary_labels_test)
+
+    return (
+        (datasets_train, labels_train),
+        (datasets_test, labels_test)
+    )
+
+def maybe_generate_data(query, imode, mode_params, force_regenerate):
+    filename = data_manager.get_feature_file(query, imode, **mode_params)
+    if force_regenerate or not filename.exists():
+        data_manager.make_features(query, filename, imode, **mode_params)
+
+
+def select_architectural_only(datasets, labels, binary_labels):
+    new_features = [[] for _ in range(len(datasets))]
+    for index, is_architectural in enumerate(binary_labels):
+        if is_architectural:
+            for j, dataset in enumerate(datasets):
+                new_features[j].append(dataset.features[index])
+    new_datasets = []
+    for old_dataset, new_feature_list in zip(datasets, new_features):
+        new_dataset = data_manager.Dataset(
+            features=new_feature_list,
+            labels=[label for bin_label, label in zip(binary_labels, labels) if bin_label],
+            shape=old_dataset.shape,
+            embedding_weights=old_dataset.embedding_weights,
+            vocab_size=old_dataset.vocab_size,
+            weight_vector_length=old_dataset.weight_vector_length,
+            binary_labels=old_dataset.binary_labels,
+            issue_keys=old_dataset.issue_keys
+        )
+        new_datasets.append(new_dataset)
+    #datasets = new_datasets
+    #labels = datasets[0].labels
+    return new_datasets, new_datasets[0].labels
 
 
 ##############################################################################
@@ -369,52 +419,40 @@ def run_make_features_command():
 ##############################################################################
 
 
-def run_visualize_command():
-    classifier = conf.get('visualize.classifier')
-    input_mode = conf.get('visualize.input_mode')
-    output_mode = conf.get('visualize.output_mode')
-    source_file = conf.get('visualize.file')
-    params = conf.get('visualize.params')
-    hyper_parameters = conf.get('visualize.hyperparams')
-
-    _, _, factory = _get_model_factory(
-        input_mode, output_mode, params, hyper_parameters,
-        source_file, False, False, classifier
-    )
-
-    model = factory()
-
-    import visualkeras.visualkeras as visualkeras
-    visualkeras.graph_view(model,
-                           to_file='output.png', legend=True).show()
-
-
 def run_classification_command():
     classifier = conf.get('run.classifier')
     input_mode = conf.get('run.input_mode')
     output_mode = conf.get('run.output_mode')
-    source_file = conf.get('run.file')
     params = conf.get('run.params')
     epochs = conf.get('run.epochs')
-    split_size = conf.get('run.split_size')
-    max_train = conf.get('run.max_train')
     k_cross = conf.get('run.k_cross')
-    quick_cross = conf.get('run.quick_cross')
     regenerate_data = not conf.get('run.cache-features')
     architectural_only = conf.get('run.architectural_only')
     hyper_parameters = conf.get('run.hyper-params')
-    test_project = conf.get('run.test_project')
 
-    datasets, labels, factory = _get_model_factory(
+    datasets_train, labels_train, datasets_test, labels_test, factory = _get_model_factory(
         input_mode, output_mode, params, hyper_parameters,
-        source_file, architectural_only, regenerate_data, classifier
+        architectural_only, regenerate_data, classifier
     )
+
+    training_data = (
+        [ds.features for ds in datasets_train],
+        labels_train,
+        datasets_train[0].issue_keys
+    )
+    if datasets_test:
+        testing_data = (
+            [ds.features for ds in datasets_test],
+            labels_test,
+            datasets_test[0].issue_keys
+        )
+    else:
+        testing_data = None
 
     if conf.get('run.ensemble-strategy') != 'none':
         learning.run_ensemble(factory,
-                              [dataset.features for dataset in datasets],
-                              labels,
-                              datasets[0].issue_keys,
+                              training_data,
+                              testing_data,
                               OutputMode.from_string(output_mode).label_encoding)
         return
 
@@ -422,83 +460,29 @@ def run_classification_command():
     if k_cross == 0 and not conf.get('run.cross-project'):
         learning.run_single(factory(),
                             epochs,
-                            split_size,
-                            max_train,
-                            labels,
                             OutputMode.from_string(output_mode),
                             OutputMode.from_string(output_mode).label_encoding,
-                            *[dataset.features for dataset in datasets],
-                            issue_keys=datasets[0].issue_keys,
-                            test_project=test_project)
+                            training_data,
+                            testing_data)
     else:
         learning.run_cross(factory,
                            epochs,
-                           k_cross,
-                           max_train,
-                           quick_cross,
-                           labels,
                            OutputMode.from_string(output_mode),
                            OutputMode.from_string(output_mode).label_encoding,
-                           *[dataset.features for dataset in datasets],
-                           issue_keys=datasets[0].issue_keys)
+                           training_data,
+                           testing_data)
 
 
 def _get_model_factory(input_mode,
                        output_mode,
                        params,
                        hyper_parameters,
-                       source_file,
                        architectural_only,
                        regenerate_data,
                        classifier):
-    # 1) Re-generate data
-    if regenerate_data:
-        # We can directly delegate to the `make-features` command,
-        # which will also perform --param validation
-        run_make_features_command()
-
-    # 2) Collect all datasets
-    datasets = []
-    labels = None
-    binary_labels = None
-    imode_numbers = collections.defaultdict(int)
-    for imode in input_mode:
-        number = imode_numbers[imode]
-        imode_numbers[imode] += 1
-        mode_params = params.get(imode, {}) | params.get('default', {}) | params.get(f'{imode}[{number}]', {})
-        dataset = data_manager.get_features(source_file,
-                                            imode,
-                                            output_mode,
-                                            **mode_params)
-        if labels is not None:
-            assert labels == dataset.labels
-            assert binary_labels == dataset.binary_labels
-        else:
-            labels = dataset.labels
-            binary_labels = dataset.binary_labels
-        datasets.append(dataset)
-
-    if architectural_only:
-        new_features = [[] for _ in range(len(datasets))]
-        for index, is_architectural in enumerate(binary_labels):
-            if is_architectural:
-                for j, dataset in enumerate(datasets):
-                    new_features[j].append(dataset.features[index])
-        new_datasets = []
-        for old_dataset, new_feature_list in zip(datasets, new_features):
-            new_dataset = data_manager.Dataset(
-                features=new_feature_list,
-                labels=[label for bin_label, label in zip(binary_labels, labels) if bin_label],
-                shape=old_dataset.shape,
-                embedding_weights=old_dataset.embedding_weights,
-                vocab_size=old_dataset.vocab_size,
-                weight_vector_length=old_dataset.weight_vector_length,
-                binary_labels=old_dataset.binary_labels,
-                issue_keys=old_dataset.issue_keys
-            )
-            new_datasets.append(new_dataset)
-        datasets = new_datasets
-        labels = datasets[0].labels
+    ((datasets, labels), (datasets_test, labels_test)) = generate_features_and_get_data(
+        architectural_only, regenerate_data
+    )
 
     # 3) Define model factory
 
@@ -528,11 +512,11 @@ def _get_model_factory(input_mode,
                                                              output_size,
                                                              output_encoding)
             models.append(model)
-            number = model_counts[name]
+            model_number = model_counts[name]
             model_counts[name] += 1
             hyperparams = _normalize_param_names(
                 hyper_parameters.get(name, {}) |
-                hyper_parameters.get(f'{name}[{number}]', {}) |
+                hyper_parameters.get(f'{name}[{model_number}]', {}) |
                 hyper_parameters.get('default', {})
             )
             allowed_hyper_params = model.get_hyper_parameters()
@@ -559,7 +543,7 @@ def _get_model_factory(input_mode,
         final_model.summary()
         return final_model
 
-    return datasets, labels, factory
+    return datasets, labels, datasets_test, labels_test, factory
 
 
 def _normalize_param_names(params):
@@ -574,7 +558,7 @@ def _normalize_param_names(params):
 
 def run_prediction_command():
     # Step 1: Load model data
-    data: pathlib.Path = conf.get('predict.data')
+    data_query = conf.get('predict.data-query')
     model: pathlib.Path = conf.get('predict.model')
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
@@ -593,12 +577,13 @@ def run_prediction_command():
     for generator in model_metadata['feature_generators']:
         with open(model / generator) as file:
             generator_data = json.load(file)
-        feature_file = pathlib.Path('prediction_features.json')
+        prefix = conf.get('system.storage.file-prefix')
+        feature_file = pathlib.Path(f'{prefix}_prediction_features.json')
         generator_class = feature_generators.generators[generator_data['generator']]
         generator = generator_class(
             pretrained_generator_settings=generator_data['settings']
         )
-        generator.generate_features(data, feature_file)
+        generator.generate_features(data_query, feature_file)
         features = data_manager.load_features(feature_file, output_mode.name).features
         datasets.append(features)
     datasets = [numpy.asarray(d) for d in datasets]

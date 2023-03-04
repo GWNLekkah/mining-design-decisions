@@ -129,9 +129,10 @@ class DeepLearningData:
         # Collect bins of indices
         bins = collections.defaultdict(set)
         for index, issue_key in enumerate(self.issue_keys):
-            project = (project
-                       if (project := issue_key.split('-')[0]) != 'HBASE'
-                       else 'HADOOP')
+            # project = (project
+            #            if (project := issue_key.split('-')[0]) != 'HBASE'
+            #            else 'HADOOP')
+            project = issue_key.split('-')[0]
             bins[project].add(index)
         # Loop over bins
         for test_project, test_indices in bins.items():
@@ -196,22 +197,14 @@ class DataSplitter(abc.ABC):
 
     def __init__(self, **kwargs):
         self.max_train = t if (t := kwargs.pop('max_train', -1)) != -1 else None
-        self.test_project = kwargs.pop('test_project', None)
-        if self.test_project == 'None':
-            self.test_project = None
-        self.test_study = kwargs.pop('test_study', None)
-        if self.test_study == 'None':
-            self.test_study = None
         if kwargs:
             keys = ', '.join(kwargs)
             raise ValueError(
                 f'Illegal options for splitter {self.__class__.__name__}: {keys}'
             )
-        if self.test_project is not None and self.test_study is not None:
-            raise ValueError('Cannot combine test_project and test_study')
 
     @abc.abstractmethod
-    def split(self, labels, issue_keys, *features):
+    def split(self, training_data_raw, testing_data=None):
         pass
 
 
@@ -228,22 +221,26 @@ class SimpleSplitter(DataSplitter):
         self.test_split = kwargs.pop('test_split_size')
         super().__init__(**kwargs)
 
-    def split(self, labels, issue_keys, *features):
+    def split(self, training_data_raw, testing_data=None):
+        features, labels, issue_keys  = training_data_raw
         labels, issue_keys, *features = shuffle_raw_data(labels,
                                                          issue_keys,
                                                          *features)
         data = DeepLearningData(labels, issue_keys, *features)
-        if self.test_project is not None:
-            test_data, remainder = data.split_on_project(self.test_project)
-            val_data, training_data = remainder.split_fraction(self.val_split)
-        elif self.test_study is not None:
-            test_data, remainder = data.split_on_study(self.test_study)
-            val_data, training_data = remainder.split_fraction(self.val_split)
-        else:
+        if testing_data is None:
             size = self.val_split + self.test_split
             training_data, remainder = data.split_fraction(1 - size)
             size = self.val_split / (self.val_split + self.test_split)
             val_data, test_data = remainder.split_fraction(size)
+        else:
+            training_data, val_data = data.split_fraction(1 - self.val_split)
+            assert (
+                (self.val_split < 0.5 and training_data.labels.size > val_data.labels.size) or
+                (self.val_split > 0.5 and training_data.labels.size < val_data.labels.size)
+            )
+            features_test, labels_test, keys_test  = testing_data
+            labels_test, keys_test, *features_test = shuffle_raw_data(labels, issue_keys, *features_test)
+            test_data = DeepLearningData(labels_test, keys_test, *features_test)
         if self.max_train is not None:
             training_data = training_data.limit_size(self.max_train)
         yield (
@@ -261,12 +258,13 @@ class CrossFoldSplitter(DataSplitter):
     def __init__(self, **kwargs):
         self.k = kwargs.pop('k')
         super().__init__(**kwargs)
-        if self.test_study is not None or self.test_project is not None:
-            raise ValueError(
-                f'{self.__class__.__name__} does not support test_study or test_project'
-            )
 
-    def split(self, labels, issue_keys, *features):
+    def split(self, training_data_raw, testing_data=None):
+        if testing_data is not None:
+            raise ValueError(
+                f'{self.__class__.__name__} does not support splitting with explicit testing data'
+            )
+        features, labels, issue_keys = training_data_raw
         labels, issue_keys, *features = shuffle_raw_data(labels,
                                                          issue_keys,
                                                          *features)
@@ -291,28 +289,33 @@ class QuickCrossFoldSplitter(DataSplitter):
         self.k = kwargs.pop('k')
         super().__init__(**kwargs)
 
-    def split(self, labels, issue_keys, *features):
+    def split(self, training_data_raw, testing_data=None):
+        if testing_data is not None:
+            raise ValueError(
+                f'{self.__class__.__name__} does not support splitting with explicit testing data'
+            )
+        features, labels, issue_keys = training_data_raw
         labels, issue_keys, *features = shuffle_raw_data(labels,
                                                          issue_keys,
                                                          *features)
         data = DeepLearningData(labels, issue_keys, *features)
-        if self.test_project is not None or self.test_study is not None:
-            if self.test_project is not None:
-                testing_data, remainder = data.split_on_project(self.test_project)
-            else:
-                testing_data, remainder = data.split_on_study(self.test_study)
-            for training, validation in data.split_k_cross(self.k):
-                if self.max_train is not None:
-                    training = training.limit_size(self.max_train)
-                yield (
-                    training.to_dataset(),
-                    testing_data.to_dataset(),
-                    validation.to_dataset(),
-                    training.issue_keys,
-                    validation.issue_keys,
-                    testing_data.issue_keys
-                )
-        else:
+        # if self.test_project is not None or self.test_study is not None:
+        #     if self.test_project is not None:
+        #         testing_data, remainder = data.split_on_project(self.test_project)
+        #     else:
+        #         testing_data, remainder = data.split_on_study(self.test_study)
+        #     for training, validation in data.split_k_cross(self.k):
+        #         if self.max_train is not None:
+        #             training = training.limit_size(self.max_train)
+        #         yield (
+        #             training.to_dataset(),
+        #             testing_data.to_dataset(),
+        #             validation.to_dataset(),
+        #             training.issue_keys,
+        #             validation.issue_keys,
+        #             testing_data.issue_keys
+        #         )
+        if True:
             for training, validation, testing in data.split_k_cross_three(self.k):
                 if self.max_train is not None:
                     training = training.limit_size(self.max_train)
@@ -331,14 +334,15 @@ class CrossProjectSplitter(DataSplitter):
     def __init__(self, **kwargs):
         self.val_split = kwargs.pop('val_split_size')
         super().__init__(**kwargs)
-        if self.test_study is not None or self.test_project is not None:
-            raise ValueError(
-                f'{self.__class__.__name__} does not support test_study or test_project'
-            )
         if self.max_train is not None:
             raise ValueError(f'{self.__class__.__name__} does not support max_train')
 
-    def split(self, labels, issue_keys, *features):
+    def split(self, training_data_raw, testing_data=None):
+        if testing_data is not None:
+            raise ValueError(
+                f'{self.__class__.__name__} does not support splitting with explicit testing data'
+            )
+        features, labels, issue_keys = training_data_raw
         labels, issue_keys, *features = shuffle_raw_data(labels,
                                                          issue_keys,
                                                          *features)

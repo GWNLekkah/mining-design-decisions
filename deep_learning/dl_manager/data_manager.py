@@ -3,12 +3,13 @@
 # Imports
 ##############################################################################
 
+import hashlib
 import json
 import pathlib
 import string
 import typing
 
-from .feature_generators import generators, OutputMode
+from .feature_generators import generators
 
 from .config import conf
 
@@ -44,31 +45,33 @@ class Dataset(typing.NamedTuple):
 ##############################################################################
 
 
-def get_feature_file(source_file: pathlib.Path,
+def get_feature_file(query: str,
                      input_mode: str,
-                     output_mode: str,
                      **params):
-    base_name = f'{source_file.stem}_features_{input_mode}'
-    suffix = '_'.join(f'{key}-{_escape(value)}'
-                      for key, value in params.items()
-                      if key != 'metadata-attributes')
-    if len(suffix) >= 200:  # Temporary fix for long file names
-        suffix = str(hash(suffix))
+    base_name = f'{query}_features_{input_mode}'
+    suffix = '_'.join(
+        sorted(f'{key}-{_escape(value)}'
+               for key, value in params.items()
+               if key != 'metadata-attributes')
+    )
+    would_be_name = f'{base_name}_{suffix}.json'
+    prefix = conf.get('system.storage.file-prefix')
+    filename = f'{prefix}_{hashlib.sha512(would_be_name.encode()).hexdigest()}'
     if conf.get('system.peregrine'):
         data = pathlib.Path(conf.get('system.peregrine.data'))
         directory = data / 'features'
         if not directory.exists():
             directory.mkdir(exist_ok=True)
-        return directory / f'{base_name}_{suffix}.json'
+        return directory / filename
     if not FEATURE_FILE_DIRECTORY.exists():
         FEATURE_FILE_DIRECTORY.mkdir(exist_ok=True)
-    return FEATURE_FILE_DIRECTORY / f'{base_name}_{suffix}.json'
+    return FEATURE_FILE_DIRECTORY / filename
 
 
 def _escape(x):
     for ws in string.whitespace:
         x = x.replace(ws, '_')
-    x = x.replace('.', 'dot')
+    #x = x.replace('.', 'dot')
     for illegal in '/<>:"/\\|?*\'':
         x = x.replace(illegal, '')
     return x
@@ -78,23 +81,20 @@ def escape_filename(x):
     return _escape(x)
 
 
-def get_features(source_file: pathlib.Path,
+def get_features(query: str,
                  input_mode: str,
                  output_mode: str,
                  **params) -> Dataset:
-    feature_file = get_feature_file(source_file,
-                                    input_mode,
-                                    output_mode,
-                                    **params)
+    feature_file = get_feature_file(query, input_mode, **params)
     if not feature_file.exists():
-        make_features(source_file,
+        make_features(query,
                       feature_file,
                       input_mode,
                       **params)
     return load_features(feature_file, output_mode)
 
 
-def make_features(source_file: pathlib.Path,
+def make_features(query: str,
                   feature_file: pathlib.Path,
                   input_mode: str,
                   **params):
@@ -102,7 +102,7 @@ def make_features(source_file: pathlib.Path,
         generator = generators[input_mode](**params)
     except KeyError:
         raise ValueError(f'Invalid input mode {input_mode}')
-    generator.generate_features(source_file, feature_file)
+    generator.generate_features(query, feature_file)
 
 
 def load_features(filename: pathlib.Path, output_mode: str) -> Dataset:

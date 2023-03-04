@@ -17,8 +17,6 @@ import argparse
 import collections
 import importlib
 import json
-import re
-
 
 ##############################################################################
 ##############################################################################
@@ -63,7 +61,7 @@ class Config:
 
     def __new__(cls):
         if cls._self is None:
-            cls._self = self = super().__new__(cls)
+            cls._self = super().__new__(cls)
         return cls._self
 
     def __init__(self):
@@ -103,6 +101,8 @@ class Config:
         }
 
     def clone(self, source, target):
+        source = source.replace('-', '_')
+        target = target.replace('-', '_')
         self.register(target, self._types[source])
         self.set(target, self.get(source))
 
