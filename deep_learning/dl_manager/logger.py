@@ -12,7 +12,7 @@ handler.setFormatter(formatter)
 
 global_log = logging.getLogger(ROOT)
 global_log.addHandler(handler)
-global_log.setLevel(logging.DEBUG)
+global_log.setLevel(logging.INFO)
 
 
 def get_logger(name: str) -> logging.Logger:

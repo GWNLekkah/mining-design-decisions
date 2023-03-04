@@ -5,6 +5,7 @@
 
 import collections
 import json
+import warnings
 
 import requests
 
@@ -100,7 +101,7 @@ def select_issue_keys(query) -> list[str]:
 
 
 def get_issue_labels_by_key(keys: list[str]):
-    return _call_endpoint('manual-labels', {'keys': keys})
+    return _call_endpoint('manual-labels', {'keys': keys})['labels']
 
 
 def get_issue_data_by_keys(keys: list[str], attributes: list[str]):
@@ -110,7 +111,7 @@ def get_issue_data_by_keys(keys: list[str], attributes: list[str]):
             'keys': keys,
             'attributes': attributes
         }
-    )
+    )['data']
 
 
 def add_tag_to_issues(keys: list[str], tag: str):
@@ -159,9 +160,7 @@ class DatabaseAPI:
         required_keys = [key for key in keys if key not in cached_keys]
         if required_keys:
             labels = get_issue_labels_by_key(required_keys)
-            for label in labels:
-                key = label.pop('key')
-                local_cache[key] = label
+            local_cache.update(labels)
         return [local_cache[key] for key in keys]
 
     def get_issue_data(self,
@@ -181,10 +180,10 @@ class DatabaseAPI:
                 required_keys.append(key)
         if required_keys:
             data = get_issue_data_by_keys(required_keys, attributes)
-            for data_for_issue in data:
-                key = data_for_issue.pop('key')
-                local_cache[key] = data_for_issue
-        return [local_cache[key] for key in issue_keys]
+            local_cache.update(data)
+        wrong = [key for key in issue_keys if key not in local_cache]
+        warnings.warn('Remember to remove `wrong` array once database has been updated!')
+        return [local_cache[key] for key in issue_keys if key not in wrong]
 
     def add_tag(self, keys: list[str], tag: str):
         add_tag_to_issues(keys, tag)

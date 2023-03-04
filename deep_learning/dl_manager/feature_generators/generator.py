@@ -362,7 +362,7 @@ class AbstractFeatureGenerator(abc.ABC):
                 'classification3': [],
                 'classification3simplified': [],
                 'classification8': [],
-                'issue_keys': []
+                'issue_keys': issue_keys
             }
             classification_indices = {
                 'Existence': [],
@@ -382,9 +382,15 @@ class AbstractFeatureGenerator(abc.ABC):
             classification_indices = []
         attributes = ['summary', 'description'] + metadata_attributes
         raw_data = api.get_issue_data(issue_keys, attributes, raise_on_partial_result=True)
-        texts = [
-            issue.pop('summary') + issue.pop('description') for issue in raw_data
-        ]
+        warnings.warn('Replace code again once database wrapper has been fixed')
+        # texts = [
+        #     issue.pop('summary') + issue.pop('description') for issue in raw_data
+        # ]
+        texts = []
+        for issue in raw_data:
+            summary = x if (x := issue.pop('summary')) is not None else ''
+            description = x if (x := issue.pop('description')) is not None else ''
+            texts.append(summary + description)
         metadata = raw_data     # summary and description have been popped
         return texts, metadata, labels, classification_indices
 
@@ -395,6 +401,8 @@ class AbstractFeatureGenerator(abc.ABC):
                       is_existence,
                       is_executive,
                       is_property):
+        if self.__colors is None:
+            self.__colors = []
         if is_executive:  # Executive
             labels['classification3simplified'].append((0, 1, 0, 0))
             classification_indices['Executive'].append(current_index)
@@ -434,8 +442,9 @@ class AbstractFeatureGenerator(abc.ABC):
             if attr not in ATTRIBUTE_CONSTANTS:
                 raise ValueError(f'Unknown metadata attribute: {attr}')
 
-        texts, metadata, labels, classification_indices = self.load_data_from_db(query,
-                                                                                 metadata_attributes)
+        texts, metadata, labels, classification_indices = self.load_data_from_db(
+            query, metadata_attributes
+        )
 
         limit = int(self.params.get('class-limit', -1))
         if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
