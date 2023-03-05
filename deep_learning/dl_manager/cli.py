@@ -196,19 +196,21 @@ def setup_storage():
     conf.register('system.storage.auxiliary_map', dict, {})
     conf.register('system.storage.auxiliary_prefix', str, 'auxiliary')
     conf.register('system.storage.file_prefix', str, 'dl_pipeline')
-    conf.clone('run.database-url', 'system.storage.database-url')
+    if conf.is_active('run.database-url'):
+        conf.clone('run.database-url', 'system.storage.database-url')
+    if conf.is_active('predict.database-url'):
+        conf.clone('predict.database-url', 'system.storage.database-url')
+    log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
     conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
 
 
 
 def issue_warnings():
-    if conf.is_registered('run.output-mode'):
+    if conf.is_active('run.output-mode'):
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))
         include_detection = conf.get('run.include-detection-performance')
         if output_mode == OutputMode.Detection and include_detection:
             warnings.warn('--include-detection-performance is ignored when doing classification')
-    if conf.is_registered('run.file') and conf.get('run.file'):
-        warnings.warn('--file is deprecated. Please use the database based API')
 
 
 ##############################################################################
@@ -563,7 +565,7 @@ def run_prediction_command():
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
     output_mode = OutputMode.from_string(
-        model_metadata['feature_settings']['make_features.output_mode']
+        model_metadata['model_settings']['run.output_mode']
     )
 
     # Step 2: Load data

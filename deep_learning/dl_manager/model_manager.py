@@ -112,10 +112,6 @@ def _store_model(directory, number, model):
 
 def _get_cli_settings():
     return {
-        'feature_settings': {
-            key: _convert_value(value)
-            for key, value in conf.get_all('make-features').items()
-        },
         'model_settings': {
             key: _convert_value(value)
             for key, value in conf.get_all('run').items()

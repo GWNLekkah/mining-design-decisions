@@ -112,7 +112,15 @@ class Config:
         self._types[name] = type_or_validator
 
     def is_registered(self, name: str) -> bool:
+        name = name.replace('-', '_')
         return name in self._namespace
+
+    def is_active(self, name: str) -> bool:
+        prefix = name.split('.')[0]
+        return (
+                self.is_registered(name)
+                and self.get('system.active-command') == prefix
+        )
 
 
 conf = Config()
@@ -159,6 +167,7 @@ class CLIApp:
             args = self.__parser.parse_args(cli_args)
         self.__expand_dictionaries(args)
         active_name, active_qualname = self.__get_active_command(args)
+        conf.register('system.active-command', str, active_qualname)
         self.__resolve_borrows(args, active_name)
         for name, value in vars(args).items():
             if name.startswith('subcommand_name_'):

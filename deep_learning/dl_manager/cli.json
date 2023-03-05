@@ -359,6 +359,14 @@
           "required": true,
           "style": "named",
           "type": "str"
+        },
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
         }
       ]
     },

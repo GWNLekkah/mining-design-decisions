@@ -355,21 +355,21 @@ class AbstractFeatureGenerator(abc.ABC):
     def load_data_from_db(self, query, metadata_attributes):
         api: DatabaseAPI = conf.get('system.storage.database-api')
         issue_keys = api.select_issues(query)
+        labels = {
+            'detection': [],
+            'classification3': [],
+            'classification3simplified': [],
+            'classification8': [],
+            'issue_keys': issue_keys
+        }
+        classification_indices = {
+            'Existence': [],
+            'Property': [],
+            'Executive': [],
+            'Non-Architectural': []
+        }
         if self.pretrained is None:
             raw_labels = api.get_labels(issue_keys)
-            labels = {
-                'detection': [],
-                'classification3': [],
-                'classification3simplified': [],
-                'classification8': [],
-                'issue_keys': issue_keys
-            }
-            classification_indices = {
-                'Existence': [],
-                'Property': [],
-                'Executive': [],
-                'Non-Architectural': []
-            }
             for index, raw in enumerate(raw_labels):
                 self.update_labels(labels,
                                    classification_indices,
@@ -377,9 +377,6 @@ class AbstractFeatureGenerator(abc.ABC):
                                    raw['existence'],
                                    raw['executive'],
                                    raw['property'])
-        else:
-            labels = []
-            classification_indices = []
         attributes = ['summary', 'description'] + metadata_attributes
         raw_data = api.get_issue_data(issue_keys, attributes, raise_on_partial_result=True)
         warnings.warn('Replace code again once database wrapper has been fixed')
