@@ -5,12 +5,14 @@ import abc
 
 import keras.models
 from .generator import AbstractFeatureGenerator
+from .generator import ParameterSpec
 from ..classifiers import InputEncoding
 from .bow_frequency import BOWFrequency
 from .bow_normalized import BOWNormalized
 from .tfidf import TfidfGenerator
 from ..config import conf
 from ..logger import get_logger
+from ..database import DatabaseAPI
 
 log = get_logger('Abstract Auto Encoder')
 
@@ -102,9 +104,10 @@ class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
     def prepare_features(self, keys=None, issues=None, settings=None, generator_name=None):
         if True:
             if issues is None:
-                with open(self.params['training-data-file']) as file:
-                    data = json.load(file)
-                keys = [issue['key'] for issue in data]
+                query = self.params['training-data-query']
+                db: DatabaseAPI = conf.get('system.storage.database-api')
+                keys = db.select_issues(query)
+                data = db.get_issue_data(keys, ['summary', 'description'])
                 issues = [
                     issue['summary'] + issue['description']
                     for issue in data
@@ -145,3 +148,20 @@ class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
             [[] for _ in range(len(issues))],
             generator.params
         )
+
+    @classmethod
+    def get_parameters(cls) -> dict[str, ParameterSpec]:
+        return super(AbstractAutoEncoder, AbstractAutoEncoder).get_parameters() | {
+            'training-data-query': ParameterSpec(
+                description='Query to retrieve data used to train the auto-encoder',
+                type='str'
+            ),
+            'bow-min-count': ParameterSpec(
+                description='Minimum document count for bag of words',
+                type='int'
+            ),
+            'inner-generator': ParameterSpec(
+                description='Feature generator to transform issues to text',
+                type='str'
+            ),
+        }

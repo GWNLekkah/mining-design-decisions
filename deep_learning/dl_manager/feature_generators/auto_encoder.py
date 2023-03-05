@@ -86,21 +86,21 @@ class AutoEncoder(AbstractAutoEncoder):
                                  outputs=model.get_layer('encoder_layer').output)
         ######################################################################
         # Evaluate encoder
-        with open(conf.get('system.storage.generators')[-1]) as file:
-            settings = json.load(file)
-        features = self.prepare_features(keys=self.issue_keys,
-                                         issues=tokenized_issues,
-                                         settings=settings['settings'],
-                                         generator_name=settings['generator'])[1]['features']
-        transformed = model.predict(features)
+        # with open(conf.get('system.storage.generators')[-1]) as file:
+        #     settings = json.load(file)
+        # features = self.prepare_features(keys=self.issue_keys,
+        #                                  issues=tokenized_issues,
+        #                                  settings=settings['settings'],
+        #                                  generator_name=settings['generator'])[1]['features']
+        # transformed = model.predict(features)
         # For evaluation, compute the amount of preserved variance
-        difference = (features - transformed) ** 2
-        avg = difference.sum(axis=0) / 2072
-        log.info(f'Loss on test set: {avg.sum() / 2072}')
-        var_old = numpy.var(features, axis=1, ddof=1)
-        var_new = numpy.var(transformed, axis=1, ddof=1)
-        assert len(var_old) == 2179
-        log.info(f'Preserved variance: {var_new.sum() / var_old.sum()}')
+        # difference = (features - transformed) ** 2
+        # avg = difference.sum(axis=0) / 2072
+        # log.info(f'Loss on test set: {avg.sum() / 2072}')
+        # var_old = numpy.var(features, axis=1, ddof=1)
+        # var_new = numpy.var(transformed, axis=1, ddof=1)
+        # assert len(var_old) == 2179
+        # log.info(f'Preserved variance: {var_new.sum() / var_old.sum()}')
 
         ######################################################################
         # return result
@@ -115,24 +115,12 @@ class AutoEncoder(AbstractAutoEncoder):
         layers = {f'hidden-layer-{i}-size': ParameterSpec(description=f'Size of layer {i}', type='int')
                   for i in range(1, 17)}
         return layers | {
-            'inner-generator': ParameterSpec(
-                description='Feature generator to transform issues to text',
-                type='str'
-            ),
             'number-of-hidden-layers': ParameterSpec(
                 description='Number of hidden layers',
                 type='int'
             ),
             'target-feature-size': ParameterSpec(
                 description='Target feature size',
-                type='int'
-            ),
-            'training-data-file': ParameterSpec(
-                description='File of data to use to train the auto-encoder',
-                type='str'
-            ),
-            'bow-min-count': ParameterSpec(
-                description='Minimum document count for bag of words',
                 type='int'
             ),
             'activation-function': ParameterSpec(

@@ -91,21 +91,21 @@ class KateAutoEncoder(AbstractAutoEncoder):
                                  outputs=model.get_layer('encoder_layer').output)
         ######################################################################
         # Evaluate encoder
-        with open(conf.get('system.storage.generators')[-1]) as file:
-            settings = json.load(file)
-        features = self.prepare_features(keys=self.issue_keys,
-                                         issues=tokenized_issues,
-                                         settings=settings['settings'],
-                                         generator_name=settings['generator'])[1]['features']
-        transformed = model.predict(features)
+        # with open(conf.get('system.storage.generators')[-1]) as file:
+        #     settings = json.load(file)
+        # features = self.prepare_features(keys=self.issue_keys,
+        #                                  issues=tokenized_issues,
+        #                                  settings=settings['settings'],
+        #                                  generator_name=settings['generator'])[1]['features']
+        # transformed = model.predict(features)
         # For evaluation, compute the amount of preserved variance
-        difference = (features - transformed) ** 2
-        avg = difference.sum(axis=0) / 2072
-        log.info(f'Loss on test set: {avg.sum() / 2072}')
-        var_old = numpy.var(features, axis=1, ddof=1)
-        var_new = numpy.var(transformed, axis=1, ddof=1)
-        assert len(var_old) == 2179
-        log.info(f'Preserved variance: {var_new.sum() / var_old.sum()}')
+        # difference = (features - transformed) ** 2
+        # avg = difference.sum(axis=0) / 2072
+        # log.info(f'Loss on test set: {avg.sum() / 2072}')
+        # var_old = numpy.var(features, axis=1, ddof=1)
+        # var_new = numpy.var(transformed, axis=1, ddof=1)
+        # assert len(var_old) == 2179
+        # log.info(f'Preserved variance: {var_new.sum() / var_old.sum()}')
 
         ######################################################################
         # return result
@@ -118,18 +118,6 @@ class KateAutoEncoder(AbstractAutoEncoder):
     @staticmethod
     def get_extra_params():
         return {
-            'inner-generator': ParameterSpec(
-                description='Feature generator to transform issues to text',
-                type='str'
-            ),
-            'training-data-file': ParameterSpec(
-                description='File of data to use to train the auto-encoder',
-                type='str'
-            ),
-            'bow-min-count': ParameterSpec(
-                description='Minimum document count for bag of words',
-                type='int'
-            ),
             'hidden-layer-size': ParameterSpec(
                 description='Size of the hidden layer',
                 type='int'
