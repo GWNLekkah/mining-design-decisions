@@ -13,6 +13,7 @@ from .feature_generators import OutputMode
 from . import stacking
 from . import voting_util
 from . import metrics
+from .config import conf
 
 
 ##############################################################################
@@ -120,7 +121,8 @@ def _check_output_mode(output_mode):
 
 
 def _store_predictions(predictions, output_mode, *, probabilities=None):
-    with open('predictions.csv', 'w') as file:
+    prefix = conf.get('system.storage.file-prefix')
+    with open(f'{prefix}_predictions.csv', 'w') as file:
         writer = csv.writer(file)
         header = ['Prediction Name']
         if probabilities is not None:

@@ -56,7 +56,7 @@ def get_feature_file(query: str,
     )
     would_be_name = f'{base_name}_{suffix}.json'
     prefix = conf.get('system.storage.file-prefix')
-    filename = f'{prefix}_{hashlib.sha512(would_be_name.encode()).hexdigest()}'
+    filename = f'{prefix}_{hashlib.sha512(would_be_name.encode()).hexdigest()}.json'
     if conf.get('system.peregrine'):
         data = pathlib.Path(conf.get('system.peregrine.data'))
         directory = data / 'features'

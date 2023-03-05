@@ -344,7 +344,7 @@ def dump_metrics(runs, filename_hint=None):
     filename = f'{conf.get("system.storage.file_prefix")}_run_results_{datetime.datetime.now().timestamp()}{filename_hint}.json'
     with open(directory / filename, 'w') as file:
         json.dump(runs, file)
-    with open(directory / '{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
+    with open(directory / f'{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
         file.write(filename)
 
 ##############################################################################

@@ -282,8 +282,8 @@ class AbstractFeatureGenerator(abc.ABC):
             f'{key}-{value}' for key, value in self.__params.items()
         )
         filename = f'{self.__class__.__name__}__{settings}'
-
-        filename = hashlib.sha512(filename.encode()).hexdigest()
+        prefix = conf.get('system.storage.file-prefix')
+        filename = f'{prefix}_{hashlib.sha512(filename.encode()).hexdigest()}.json'
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
