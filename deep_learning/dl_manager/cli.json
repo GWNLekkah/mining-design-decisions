@@ -371,6 +371,90 @@
       ]
     },
     {
+      "name": "generate-embedding",
+      "description": "Generate a word or document embedding for use in a feature generator",
+      "args": [
+        {
+          "name": "generator",
+          "help": "Generator to use",
+          "style": "positional",
+          "nargs": "1",
+          "type": "enum",
+          "options": [
+            "Word2VecGenerator", "Doc2VecGenerator"
+          ]
+        },
+        {
+          "name": "target-file",
+          "alias": "f",
+          "help": "Target file to save the embedding to",
+          "required": true,
+          "style": "named",
+          "nargs": "1",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ]
+        },
+        {
+          "name": "params",
+          "alias": "p",
+          "help": "Parameters to pass to the embedding generator",
+          "required": "true",
+          "style": "named",
+          "type": "dict",
+          "nargs": "+"
+        },
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "training-data-query",
+          "help": "query to retrieve data to train the embedding",
+          "alias": "d",
+          "required": true,
+          "style": "named",
+          "type": "str"
+        },
+        {
+          "name": "formatting-handling",
+          "alias": "fh",
+          "help": "How to handling formatting",
+          "required": true,
+          "style": "named",
+          "type": "enum",
+          "options": [
+            "keep", "remove", "markers"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embedding-parameters",
+      "help": "Show available parameters for an embedding generator",
+      "args": [
+        {
+          "name": "generator",
+          "help": "Generator to use",
+          "style": "positional",
+          "nargs": "1",
+          "type": "enum",
+          "options": [
+            "Word2VecGenerator", "Doc2VecGenerator"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embedding-generators",
+      "description": "Show available embedding generators"
+    },
+    {
       "name": "combination-strategies",
       "help": "Give a comprehensive overview of all available model combination strategies."
     }

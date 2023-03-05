@@ -13,6 +13,7 @@ import json
 import os.path
 import pathlib
 import getpass
+import typing
 import warnings
 import shlex 
 
@@ -24,6 +25,7 @@ from .classifiers import HyperParameter
 from . import feature_generators
 from .feature_generators import ParameterSpec, OutputMode
 from . import data_manager
+from . import embeddings
 
 from . import learning
 from .config import conf, CLIApp
@@ -153,6 +155,13 @@ def build_app():
         'Can not perform cross validation when extracting keywords',
         'run.analyze-keywords'
     )
+    app.add_constraint(
+        lambda test_query, test_with_train: (
+            (not test_with_train) or test_query
+        ),
+        'Must either test with training data, or give a testing data query',
+        'run.testing-data-query', 'run.test-with-training-data'
+    )
     app.register_callback('predict', run_prediction_command)
     app.register_callback('run', run_classification_command)
     app.register_callback('list', run_list_command)
@@ -171,6 +180,9 @@ def build_app():
                           analysis.run_confusion_matrix_command)
     app.register_callback('run_analysis.compare-stats',
                           analysis.run_stat_command)
+    app.register_callback('generate-embedding', run_embedding_generation_command)
+    app.register_callback('embedding-parameters', run_embedding_param_command)
+    app.register_callback('embedding-generators', run_show_embeddings_command)
 
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
@@ -200,9 +212,11 @@ def setup_storage():
         conf.clone('run.database-url', 'system.storage.database-url')
     if conf.is_active('predict.database-url'):
         conf.clone('predict.database-url', 'system.storage.database-url')
-    log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
-    conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
-
+    if conf.is_active('generate-embedding.database-url'):
+        conf.clone('generate-embedding.database-url', 'system.storage.database-url')
+    if conf.is_active('system.storage.database-url'):
+        log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
+        conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
 
 
 def issue_warnings():
@@ -316,6 +330,50 @@ def run_generator_params_command():
         keys.append(f'{name} -- {param.description}')
     print(f'Parameters for {generator}:')
     _print_keys(keys)
+
+
+##############################################################################
+##############################################################################
+# Command Dispatch - embedding command
+#############################################################################
+
+def run_show_embeddings_command():
+    print(','.join(embeddings.generators.keys()))
+
+##############################################################################
+##############################################################################
+# Command Dispatch - embedding params  command
+#############################################################################
+
+
+def run_embedding_param_command():
+    generator: typing.Type[embeddings.AbstractEmbeddingGenerator]
+    generator = conf.get('embedding-parameters.generator')
+    if generator not in embeddings.generators:
+        return print(f'Unknown embedding generator: {generator}')
+    cls = embeddings.generators[generator]
+    keys = []
+    name: str
+    param: embeddings.EmbeddingGeneratorParam
+    for name, param in cls.get_params().items():
+        keys.append(f'{name} -- {param.description}')
+    print(f'Parameters for {generator}:')
+    _print_keys(keys)
+
+##############################################################################
+##############################################################################
+# Command Dispatch - Embedding Generation
+#############################################################################
+
+
+def run_embedding_generation_command():
+    gen = conf.get('generate-embedding.generator')
+    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[gen]
+    query = conf.get('generate-embedding.training-data-query')
+    path = conf.get('generate-embedding.target-file')
+    handling = conf.get('generate-embedding.formatting-handling')
+    g = generator(**conf.get('generate-embedding.params'))
+    g.make_embedding(query, path, handling)
 
 
 ##############################################################################

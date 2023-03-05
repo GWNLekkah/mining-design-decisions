@@ -3,7 +3,7 @@
 # Imports
 ##############################################################################
 
-import csv
+import enum
 import itertools
 import json
 import os
@@ -11,19 +11,47 @@ import re
 import string
 
 import contractions
+import gensim
 import nltk
 
 __all__ = [
-    'reporter',
-    'remove_formatting',
-    'fix_punctuation'
+    'clean_issue_text',
+    'FormattingHandling'
 ]
 
+##############################################################################
+##############################################################################
+# Public Interface
+##############################################################################
 
-class FormattingHandling:
-    Remove = 0
-    Markers = 1
-    Keep = 2
+
+def clean_issue_text(text: str, formatting_handling) -> list[str]:
+    text = fix_punctuation(remove_formatting(text, formatting_handling))
+    sentences = nltk.tokenize.sent_tokenize(text)
+    return [f"{' '.join(gensim.utils.tokenize(sent))}" for sent in sentences]
+
+
+##############################################################################
+##############################################################################
+# Utility
+##############################################################################
+
+class FormattingHandling(enum.Enum):
+    Remove = enum.auto()
+    Markers = enum.auto()
+    Keep = enum.auto()
+
+    @classmethod
+    def from_string(cls, x: str) -> 'FormattingHandling':
+        match x:
+            case 'keep':
+                return cls.Keep
+            case 'markers':
+                return cls.Markers
+            case 'remove':
+                return cls.Remove
+            case _:
+                raise ValueError(f'Invalid formatting handling: {x}')
 
 
 format_settings: FormattingHandling = FormattingHandling.Markers
@@ -36,6 +64,14 @@ def set_formatting_handling(h: FormattingHandling):
 
 def get_formatting_settings() -> FormattingHandling:
     return format_settings
+
+
+_markers = set()
+
+
+def make_marker(x):
+    _markers.add(x)
+    return x
 
 
 PATH_PREFIX = os.path.split(__file__)[0]
@@ -83,34 +119,30 @@ reporter = Reporter()
 def fix_punctuation(text: str) -> str:
     text = contractions.fix(text)
     text = _remove_double_punctuation(text)
-    # for sentence in nltk.sent_tokenize(text):
-    #     if sentence.count('.') > 1:
-    #         print('=' * 72)
-    #         print(sentence)
     return text
 
 
 def remove_formatting(text: str,
-                      key: str,
                       formatting_handling: FormattingHandling) -> str:
     if formatting_handling == FormattingHandling.Remove:
-        raise ValueError('Remove option no longer supported')
+        text = _remove_formatting(text, FormattingHandling.Markers)
+        for marker in _markers:
+            text = text.replace(marker, '')
+        return _remove_empty_lines(text)
     elif formatting_handling == FormattingHandling.Markers:
-        return _remove_formatting(text, key, FormattingHandling.Markers)
+        return _remove_formatting(text, FormattingHandling.Markers)
     else:
-        text = _remove_formatting(text, key, FormattingHandling.Keep)
-        return _remove_formatting(text, key, FormattingHandling.Markers)
+        return _remove_formatting(text, FormattingHandling.Keep)
 
 
 def _remove_formatting(text: str,
-                      key: str,
-                      formatting_handling: FormattingHandling) -> str:
+                       formatting_handling: FormattingHandling) -> str:
     set_formatting_handling(formatting_handling)
 
     # Do this first, because the removal of formatting
     # does not deal nicely with heuristic methods
     if formatting_handling != FormattingHandling.Keep:
-        text = _remove_unformatted_lines(key, text)
+        text = _remove_unformatted_lines(text)
     text = _remove_dates(text)
     text = _remove_ip_addresses(text)
 
@@ -139,10 +171,10 @@ def _remove_formatting(text: str,
                   reporter.wrap(_remove_inline_code, 'Inline Code'),
                   text)
     text = re.sub(r'\[\~[^\s]+\]',
-                  reporter.wrap(lambda *_: 'USERPROFILELINK', 'User Link'),
+                  reporter.wrap(lambda *_: make_marker('USERPROFILELINK'), 'User Link'),
                   text)
     text = re.sub(r'\!.*?\!',
-                  reporter.wrap(lambda *_: 'IMAGEATTACHMENT', 'Image'),
+                  reporter.wrap(lambda *_: make_marker('IMAGEATTACHMENT'), 'Image'),
                   text)
     text = re.sub(r'h[1-6]\.',
                   reporter.wrap(lambda *_: '', 'Header'),
@@ -199,8 +231,6 @@ def _remove_formatting(text: str,
 
     # Finally, clean up the lines once again
     text = _remove_empty_lines(text)
-    if 'panel' in text:
-        reporter.inc('panel')
     return text
 
 
@@ -235,14 +265,14 @@ def _remove_link(link: str) -> str:
     if get_formatting_settings() == FormattingHandling.Remove:
         return ''
     if link[0] == '^':
-        return 'ATTACHMENT'
+        return make_marker('ATTACHMENT')
     if _HTTP_VERSION_PATTERN.fullmatch(link) is not None:
         return link
     if link.startswith('https://github.com'):
-        return 'GITHUBLINK'
+        return make_marker('GITHUBLINK')
     if link.startswith('https://issues.apache.org/jira/browse/'):
-        return 'ISSUELINK'
-    return 'WEBLINK'
+        return make_marker('ISSUELINK')
+    return make_marker('WEBLINK')
 
 
 ##############################################################################
@@ -262,8 +292,12 @@ def _remove_dates(text: str) -> str:
 
 
 def _remove_date_ex(match):
+    if get_formatting_settings() == FormattingHandling.Remove:
+        return ''
+    if get_formatting_settings() == FormattingHandling.Keep:
+        return match.group()
     reporter.inc('Date')
-    return 'DATE'
+    return make_marker('DATE')
 
 
 #######################################################################
@@ -278,6 +312,10 @@ def _remove_ip_addresses(text: str) -> str:
 
 
 def _remove_ip_ex(match):
+    if get_formatting_settings() == FormattingHandling.Remove:
+        return ''
+    if get_formatting_settings() == FormattingHandling.Keep:
+        return match.group()
     reporter.inc('IP Address')
     return ''
 
@@ -311,7 +349,7 @@ def _remove_inline_code(match):
         return ''
     code = match.group('code')
     if not re.fullmatch(r'[a-zA-Z\d_\-\.:#]+(\(.*\))?', code) or len(code) <= 1:
-        return 'INLINECODESAMPLE'
+        return make_marker('INLINECODESAMPLE')
     return _determine_type(code)
 
 
@@ -345,8 +383,8 @@ def _replace_file_path(match):
     if get_formatting_settings() == FormattingHandling.Remove:
         return ''
     if match.group()[0] in ' \t\n':
-        return match.group()[0] + 'FilePath'
-    return 'FILEPATH'
+        return match.group()[0] + make_marker('FILEPATH')
+    return make_marker('FILEPATH')
 
 
 #######################################################################
@@ -377,27 +415,47 @@ def _replace_class_name(match):
                   'diff', 'php', 'lib', 'jsp', 'asc'}
     # Step 1: Filter out files
     if parts[-1].lower() in extensions:
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
         reporter.inc('File Path (Heuristic 4)')
-        return 'FILEPATH'
+        return make_marker('FILEPATH')
     # Step 2: Filter out rogue website names
     if parts[-1].lower() in {'com', 'edu'}:
         reporter.inc('Link (Heuristic 2)')
-        return 'WEBLINK'
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
+        return make_marker('WEBLINK')
     # Step 3: Filter out some common abbreviations
     if match.group().lower() in {'e.g.', 'i.e.', 'w.r.t', 'i.e', 'e.g', 'w.r.t.', 'p.s', 'p.s.', 'ph.d'}:
         return match.group().replace('.', '')
     # Step 4: Filter out version numbers. Version numbers may contain unknown/variable parts
     if re.fullmatch(r'(\w+|v)?((\d+|x|X|y|Y|z|Z)\.)*(\d+|x|X|y|Y|z|Z)', match.group()):
         reporter.inc('Version Number (1)')
-        return 'VERSIONNUMBER'
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
+        return make_marker('VERSIONNUMBER')
     # Step 5: Filter out XGB/MB etc
     if re.fullmatch(r'\d+\.\d+(M|G|K|KB|MB|GB|k|m|g|t|T|TB|B)', match.group()) is not None:
         reporter.inc('Storage Size')
-        return 'STORAGESIZE'
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
+        return make_marker('STORAGESIZE')
     # Step 6: More rogue web sites
     if parts[0] == 'www':
         reporter.inc('Link (Heuristic 3)')
-        return 'WEBLINK'
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
+        return make_marker('WEBLINK')
     # Step 7: Amazone instance types
     # A full check would be rather expensive, so we assume that the
     # size suffix is sufficient for detection.
@@ -407,11 +465,19 @@ def _replace_class_name(match):
     )
     if pattern.fullmatch(match.group()) is not None:
         reporter.inc('Instance Type')
-        return ''
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
+        return make_marker('CLOUDINSTANCE')
     # Step 8: Additional version number check. No wildcards this time
     if re.fullmatch(r'v?(\d\.)+\d_?[a-z\d]+', match.group()):
         reporter.inc('Version Number (2)')
-        return 'VERSIONNUMBER'
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        if get_formatting_settings() == FormattingHandling.Keep:
+            return match.group()
+        return make_marker('VERSIONNUMBER')
     # Step 9: Remove floating point numbers
     if re.fullmatch(r'\d+\.\d+f', match.group()) is not None:
         reporter.inc('Float')
@@ -433,18 +499,18 @@ def _determine_type(fullname: str) -> str:
     upper_camel_case = re.compile(r'([A-Z]\w*){2,}')
     if lower_camel_case.fullmatch(name) is not None:
         reporter.inc('Method/Field Name')
-        return 'METHODORVARIABLENAME'
+        return make_marker('METHODORVARIABLENAME')
     if upper_camel_case.fullmatch(name) is not None:
         reporter.inc('Class Name')
-        return 'CLASSNAME'
+        return make_marker('CLASSNAME')
     # Try to check for a package name
     for package in PACKAGES:
         if fullname in package:
             reporter.inc('Package')
-            return 'PACKAGE'
+            return make_marker('PACKAGE')
     # Default
     reporter.inc('Method/Field Name')
-    return 'METHODORVARIABLENAME'
+    return make_marker('METHODORVARIABLENAME')
 
 
 #######################################################################
@@ -466,10 +532,10 @@ def _remove_lower_cc(match):
         return match.group()
     if get_formatting_settings() == FormattingHandling.Remove:
         return whitespace
-    return whitespace + 'SIMPLEMETHODORVARIABLENAME'
+    return whitespace + make_marker('SIMPLEMETHODORVARIABLENAME')
 
 
-onto_path = os.path.join(PATH_PREFIX, '../../datasets/ontologies/Technology Names.csv')
+onto_path = os.path.join(PATH_PREFIX, 'Technology Names.csv')
 with open(onto_path) as file:
     TECHNOLOGIES = {line.strip().lower() for line in file}
 
@@ -483,7 +549,9 @@ def _remove_upper_cc(match):
         reporter.inc('Technology')
         if get_formatting_settings() == FormattingHandling.Keep:
             return match.group()
-        return match.group()[0] + 'Technology Names'
+        if get_formatting_settings() == FormattingHandling.Remove:
+            return ''
+        return match.group()[0] + make_marker('TECHNOLOGYNAMES')
     ignored_technologies = {
         'CGroups', 'JDiff', 'CentOS5', 'OpenJDK',
         'JUnit', 'OAUTH', 'OAUTH2', 'MapReduce',
@@ -520,7 +588,7 @@ def _remove_upper_cc(match):
         return match.group()
     if get_formatting_settings() == FormattingHandling.Remove:
         return ''
-    return match.group()[0] + 'SIMPLECLASSNAME'
+    return match.group()[0] + make_marker('SIMPLECLASSNAME')
 
 
 ##############################################################################
@@ -576,11 +644,11 @@ def _remove_list_item_heuristic(line: str) -> (str, bool):
 ##############################################################################
 
 
-def _remove_unformatted_lines(key: str, text: str):
+def _remove_unformatted_lines(text: str):
     if get_formatting_settings() == FormattingHandling.Keep:
         return text
     lines = text.splitlines()
-    trimmed = '\n'.join(_check_line(key, line) for line in lines)
+    trimmed = '\n'.join(_check_line(line) for line in lines)
     trimmed = re.sub(r'LLLOG(\s*LLLOG)*', ' UNFORMATTEDLOGGINGOUTPUT ', trimmed)
     trimmed = re.sub(r'TTTRACEBACK(\s*TTTRACEBACK)*', ' UNFORMATTEDTRACEBACK ', trimmed)
     if get_formatting_settings() == FormattingHandling.Remove:
@@ -589,13 +657,13 @@ def _remove_unformatted_lines(key: str, text: str):
     return trimmed
 
 
-def _check_line(key: str, line: str) -> str:
+def _check_line(line: str) -> str:
     if _test_is_log_line(line):
         reporter.inc('Log Line')
-        return 'LLLOG'
+        return make_marker('LLLOG')
     if _test_is_tb_line(line):
         reporter.inc('Traceback line')
-        return 'TTTRACEBACK'
+        return make_marker('TTTRACEBACK')
     return line
 
 
@@ -667,7 +735,7 @@ def _remove_code_blocks(text: str, *, place_markers=True) -> str:
     # print(f'Found {len(removals)} code blocks')
     for start, stop in reversed(removals):
         reporter.inc('Code Block')
-        marker = _guess_marker(text[start:stop], 'STRUCTUREDCODEBLOCK')
+        marker = _guess_marker(text[start:stop], make_marker('STRUCTUREDCODEBLOCK'))
         text = f'{text[:start]} {f"{marker} " if place_markers else ""}{text[stop + 1:]}'
     return text
 
@@ -691,19 +759,19 @@ def _remove_no_format_blocks(text: str, *, place_markers=True) -> str:
     # print(f'Found {len(blocks)} no-format blocks')
     for start, stop in reversed(blocks):
         reporter.inc('No-Format Block')
-        marker = _guess_marker(text[start:stop], 'NOFORMATBLOCK')
+        marker = _guess_marker(text[start:stop], make_marker('NOFORMATBLOCK'))
         text = f'{text[:start]} {f"{marker} " if place_markers else ""}{text[stop:]}'
     return text
 
 
 def _guess_marker(text, default):
     stripped = _remove_unformatted_lines('', text)
-    log_key = 'UNFORMATTEDLOGGINGOUTPUT'
-    ex_key = 'UNFORMATTEDTRACEBACK'
+    log_key = make_marker('UNFORMATTEDLOGGINGOUTPUT')
+    ex_key = make_marker('UNFORMATTEDTRACEBACK')
     if ex_key in stripped:
-        return 'FORMATTEDTRACEBACK'
+        return make_marker('FORMATTEDTRACEBACK')
     if log_key in stripped:
-        return 'FORMATTEDLOGGINGOUTPUT'
+        return make_marker('FORMATTEDLOGGINGOUTPUT')
     return default 
 
 
@@ -742,7 +810,7 @@ def _remove_unformatted_code(text: str) -> str:
         if not is_candidate:
             new_lines.extend(group)
         elif _is_likely_json(group):
-            new_lines.append('JSONORSCHEMA')
+            new_lines.append(make_marker('JSONORSCHEMA'))
         elif not _has_strong_candidate(group):
             new_lines.extend(group)
         else:
@@ -751,7 +819,7 @@ def _remove_unformatted_code(text: str) -> str:
                 if not key:
                     new_lines.extend(x[1] for x in grouper)
                 else:
-                    new_lines.append('UNFORMATTEDCODE')
+                    new_lines.append(make_marker('UNFORMATTEDCODE'))
 
     if lines != new_lines:
         print('=' * 72)
