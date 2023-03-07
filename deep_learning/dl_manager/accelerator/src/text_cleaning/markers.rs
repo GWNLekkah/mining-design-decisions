@@ -30,7 +30,35 @@ pub enum Marker {
 
 impl Marker {
     pub fn all_markers() -> Vec<Marker> {
-        vec![]
+        vec![
+            Self::Attachment,
+            Self::ClassName,
+            Self::CloudInstanceSpec,
+            Self::Date,
+            Self::FilePath,
+            Self::FormattedLogging,
+            Self::FormattedTraceback,
+            Self::GithubLink,
+            Self::ImageAttachment,
+            Self::InlineCode,
+            Self::IssueLink,
+            Self::IPAddress,
+            Self::Log,
+            Self::MethodOrVariableName,
+            Self::NoFormatBlock,
+            Self::PackageName,
+            Self::SimpleClassName,
+            Self::SimpleMethodOrVariableName,
+            Self::StorageSize,
+            Self::StructuredCodeBlock,
+            Self::TechnologyName,
+            Self::Traceback,
+            Self::UnformattedLog,
+            Self::UnformattedTraceback,
+            Self::UserProfileLink,
+            Self::VersionNumber,
+            Self::WebLink
+        ]
     }
 
     pub fn string_marker(&self) -> String {

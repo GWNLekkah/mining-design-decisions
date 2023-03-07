@@ -25,12 +25,6 @@ pub fn clean_text(mut text: String, handling: FormattingHandling) -> String {
     lazy_static! {
         static ref PATTERN: Regex = Regex::new(r"\{code:\w+\}").unwrap();
     }
-    if handling != FormattingHandling::Keep {
-        text = remove_unformatted_lines(text, handling);
-    }
-    text = remove_dates(text, handling);
-    text = remove_ip_addresses(text, handling);
-    text = remove_links(text, handling);
 
     if handling == FormattingHandling::Keep {
         text = text.replace("{code}", "");
@@ -38,15 +32,36 @@ pub fn clean_text(mut text: String, handling: FormattingHandling) -> String {
         text = text.replace("{noformat}", "");
     } else {
         text = remove_code_blocks(text, handling);
+        //println!("code blocks");
         text = remove_no_format_blocks(text, handling);
+        //println!("noformat");
     }
 
+    //println!("START");
+    if handling != FormattingHandling::Keep {
+        text = remove_unformatted_lines(text, handling);
+    }
+    //println!("UNFORMATTED");
+    text = remove_dates(text, handling);
+    //println!("Dates");
+    text = remove_ip_addresses(text, handling);
+    //println!("IP");
+    text = remove_links(text, handling);
+    //println!("links");
+
     text = remove_simple_jira_formatting(text, handling);
+    //println!("simple jira");
     text = remove_empty_lines(text);
+    //println!("empty lines");
     text = remove_lists_from_text(text);
+    //println!("lists");
     text = remove_file_paths_heuristically(text, handling);
+    //println!("filepaths heur");
     text = remove_class_names_heuristically(text, handling);
+    //println!("class name heuir");
     text = replace_class_names_no_path_heuristically(text, handling);
+    //println!("simple class names heur");
     text = remove_empty_lines(text);
+    //println!("empty lines");
     text
 }

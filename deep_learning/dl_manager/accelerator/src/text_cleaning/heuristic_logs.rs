@@ -74,7 +74,7 @@ fn line_is_traceback(line: &String) -> bool {
             [
                 r"\s*at [$#]?\w+([\.$#]\w+)*\(.*\)\s*",
                 r"\s*Caused by: \w+(\.\w+)*: .*\s*",
-                r"\s*(\w+\.)*\w+(Error|Exception)(: (\w+\.)*\w+(Error|Exception))*\s*"
+                r"\s*(\w+\.)*\w+(Error|Exception)(: (\w+\.)*\w+(Error|Exception))*\s*:.+"
             ]
         ).unwrap();
     }

@@ -120,7 +120,7 @@ fn remove_list_item_heuristic(line: &str) -> (String, bool) {
     }
     let m = PATTERN.find_at(line, 0);
     if let Some(mat) = m {
-        if mat.end() == line.len() - 1 {
+        if mat.start() == 0 && mat.end() == line.len() - 1 {
             let mut remainder = mat
                 .as_str()
                 .chars()

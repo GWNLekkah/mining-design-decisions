@@ -11,6 +11,9 @@ pub fn determine_type(full_name: &str, handling: FormattingHandling) -> String {
         static ref LOWER_CC: Regex = Regex::new(r"[a-z][a-z\d]*([A-Z]\w*)+").unwrap();
         static ref UPPER_CC: Regex = Regex::new(r"([A-Z]\w*){2,}").unwrap();
     }
+    if full_name.chars().all(|c| c.is_uppercase() || c.is_whitespace()) {
+        return full_name.to_string();
+    }
     match handling {
         FormattingHandling::Keep => full_name.to_string(),
         FormattingHandling::Remove => "".into(),
@@ -208,10 +211,10 @@ fn remove_upper_case(c: &Captures, handling: FormattingHandling) -> String {
         ]);
     }
     let text = c.get(0).expect("Expected a match").as_str();
-    let whitespace = &text[0..0];
-    if text.chars().all(char::is_uppercase) {
-        return text.to_string();
-    } else if TECHNOLOGIES.contains(&text.to_lowercase()) {
+    let whitespace = &text[0..1];
+    if text.chars().all(|c| c.is_uppercase() || c.is_whitespace()) {
+        text.to_string()
+    } else if TECHNOLOGIES.contains(text.to_lowercase().trim()) {
         match handling {
             FormattingHandling::Keep => text.to_string(),
             FormattingHandling::Remove => "".into(),
@@ -238,7 +241,7 @@ fn read_ontology_file() -> HashSet<String> {
         "WinRT", "DistCP", "RxJava", "Jira", "HiveQL"
     ];
     for t in extra_technologies {
-        base.insert(t.to_string());
+        base.insert(t.to_lowercase().to_string());
     }
     base
 }

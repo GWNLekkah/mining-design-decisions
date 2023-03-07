@@ -23,7 +23,7 @@ pub fn remove_code_blocks(mut text: String, handling: FormattingHandling) -> Str
     markers.sort_by_key(|(m, _) | m.start());
     let mut index: usize = 0;
     let mut removals: Vec<(usize, usize)> = Vec::new();
-    while markers.len() >= 2 && index < markers.len() - 2 {     // RHS may overflow
+    while index + 1 < markers.len() {
         let (start, start_is_pure) = markers[index];
         let (end, end_is_pure) = markers[index + 1];
         if end_is_pure {
@@ -32,19 +32,28 @@ pub fn remove_code_blocks(mut text: String, handling: FormattingHandling) -> Str
             continue;
         }
         removals.push((start.start(), end.end()));
+        index += 2;
     }
-    if markers.len() > 0 && index != markers.len() - 1 {
+    if index + 1 < markers.len() {
         let (marker, is_pure) = markers[index+1];
         removals.push((marker.start(), text.len()));
     }
     removals.reverse();
     for (start, stop) in removals {
         if handling == FormattingHandling::Remove {
-            text = text[0..start].to_string() + &text[stop+1..text.len()];
+            if stop + 1 >= text.len() {
+                text = text[0..start].to_string();
+            } else {
+                text = text[0..start].to_string() + &text[stop+1..text.len()];
+            }
         } else {
             assert!(handling == FormattingHandling::Markers);
             let marker = guess_marker(&text[start..stop], Marker::StructuredCodeBlock);
-            text = text[0..start].to_string() + " " + &marker + " " + &text[stop+1..text.len()];
+            if stop + 1 >= text.len() {
+                text = text[0..start].to_string() + " " + &marker;
+            } else {
+                text = text[0..start].to_string() + " " + &marker + " " + &text[stop+1..text.len()];
+            }
         }
     }
     text
@@ -64,15 +73,28 @@ pub fn remove_no_format_blocks(mut text: String, handling: FormattingHandling) -
     if markers.len() % 2 == 1 {
         markers.push(text.len());
     }
-    for i in 0..markers.len() / 2 {
+    let mut nums = (0..markers.len() / 2).collect::<Vec<usize>>();
+    nums.reverse();
+    for i in nums {
         let start = markers[2*i];
         let stop = markers[2*i + 1];
         if handling == FormattingHandling::Remove {
-            text = text[0..start].to_string() + &text[stop+1..text.len()];
+            if stop + 1 >= text.len() {
+                text = text[0..start].to_string();
+            } else {
+                text = text[0..start].to_string() + &text[stop+1..text.len()];
+            }
         } else {
             assert!(handling == FormattingHandling::Markers);
+            if stop > text.len() {
+                println!("YO WHAT THE FUCK. LEN IS {}, but stop is {}", text.len(), stop);
+            }
             let marker = guess_marker(&text[start..stop], Marker::NoFormatBlock);
-            text = text[0..start].to_string() + " " + &marker + " " + &text[stop+1..text.len()];
+            if stop + 1 >= text.len() {
+                text = text[0..start].to_string() + " " + &marker;
+            } else {
+                text = text[0..start].to_string() + " " + &marker + " " + &text[stop+1..text.len()];
+            }
         }
     }
     text
