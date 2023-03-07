@@ -4,7 +4,7 @@ use crate::text_cleaning::FormattingHandling;
 use crate::text_cleaning::markers::Marker;
 
 
-fn remove_unformatted_lines(text: String, handling: FormattingHandling) -> String {
+pub fn remove_unformatted_lines(text: String, handling: FormattingHandling) -> String {
     if handling == FormattingHandling::Keep {
         return text;
     }
@@ -22,11 +22,11 @@ fn remove_unformatted_lines(text: String, handling: FormattingHandling) -> Strin
         .collect::<Vec<_>>()
         .join( "\n");
     if handling == FormattingHandling::Markers {
-        let replaced = LOG_PATTERN.replace(&trimmed,
-                                           Marker::UnformattedLog.string_marker());
-        replaced = TB_PATTERN.replace(&replaced,
-                                      Marker::UnformattedTraceback.string_marker());
-        replaced.into()
+        let replaced = LOG_PATTERN.replace_all(
+            &trimmed, Marker::UnformattedLog.string_marker());
+        let replaced2 = TB_PATTERN.replace_all(
+            &replaced, Marker::UnformattedTraceback.string_marker());
+        replaced2.into()
     } else {
         trimmed
     }
@@ -58,7 +58,7 @@ fn line_is_log(line: &String) -> bool {
                 r"\s*\[(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|SEVERE)\] .*\s*",
                 r"\s*\d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d (DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|SEVERE) .*\s*",
                 r"\s*(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|SEVERE) .*? \d\d\d\d-\d\d-\d\d \d\d:\d\d:\d\d,\d\d\d .*\s*",
-                r"\s*[A-Z][a-z]{,2} \d\d?, \d\d\d\d \d\d?:\d\d?:\d\d? (AM|PM) .*?\s*",
+                r"\s*[A-Z][a-z]{0,2} \d\d?, \d\d\d\d \d\d?:\d\d?:\d\d? (AM|PM) .*?\s*",
                 r"\s*(DEBUG|INFO|WARNING|WARN|ERROR|CRITICAL|SEVERE): .*\s*",
                 r"\s*ERROR - .*\s*",
                 r"\s*INFO .*\s*",

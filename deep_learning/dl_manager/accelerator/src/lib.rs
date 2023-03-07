@@ -9,6 +9,7 @@ mod pos;
 mod text_cleaning;
 
 use pos::PerceptronTagger;
+use crate::text_cleaning::{clean_text, FormattingHandling};
 
 #[pyclass]
 pub struct Tagger {
@@ -65,8 +66,31 @@ impl Tagger {
     }
 }
 
+#[pyfunction]
+fn bulk_clean_text_parallel(documents: Vec<String>,
+                            formatting_handling: String,
+                            num_threads: usize) -> PyResult<Vec<String>> {
+    let handling = if formatting_handling == "keep" {
+        FormattingHandling::Keep
+    } else if formatting_handling == "remove" {
+        FormattingHandling::Remove
+    } else if formatting_handling == "markers" {
+        FormattingHandling::Markers
+    } else {
+        return Err(PyValueError::new_err("Invalid formatting handling mode"));
+    };
+    Ok(
+        create_pool(num_threads)?.install(|| {
+            documents.into_par_iter().map(
+                |document| clean_text(document, handling)
+            )
+        }).collect()
+    )
+}
+
 #[pymodule]
 fn accelerator(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Tagger>()?;
+    m.add_function(wrap_pyfunction!(bulk_clean_text_parallel, m)?)?;
     Ok(())
 }

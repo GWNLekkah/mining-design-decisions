@@ -535,7 +535,7 @@ def _remove_lower_cc(match):
     return whitespace + make_marker('SIMPLEMETHODORVARIABLENAME')
 
 
-onto_path = os.path.join(PATH_PREFIX, 'Technology Names.csv')
+onto_path = os.path.join(PATH_PREFIX, 'technologies.csv')
 with open(onto_path) as file:
     TECHNOLOGIES = {line.strip().lower() for line in file}
 
