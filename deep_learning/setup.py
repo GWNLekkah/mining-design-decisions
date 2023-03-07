@@ -10,7 +10,7 @@ nltk.download('averaged_perceptron_tagger')
 
 setup(
     rust_extensions=[
-        RustExtension("dl_manager.accelerator", path='dl_manager/accelerator/Cargo.toml', binding=Binding.PyO3)
+        RustExtension("dl_manager.accelerator", path='dl_manager/accelerator/Cargo.toml', binding=Binding.PyO3, debug=False)
     ],
     zip_safe=False
 )

@@ -505,9 +505,9 @@ def _determine_type(fullname: str) -> str:
         return make_marker('CLASSNAME')
     # Try to check for a package name
     for package in PACKAGES:
-        if fullname in package:
-            reporter.inc('Package')
-            return make_marker('PACKAGE')
+       if fullname in package:
+           reporter.inc('Package')
+           return make_marker('PACKAGE')
     # Default
     reporter.inc('Method/Field Name')
     return make_marker('METHODORVARIABLENAME')
@@ -765,7 +765,7 @@ def _remove_no_format_blocks(text: str, *, place_markers=True) -> str:
 
 
 def _guess_marker(text, default):
-    stripped = _remove_unformatted_lines('', text)
+    stripped = _remove_unformatted_lines(text)
     log_key = make_marker('UNFORMATTEDLOGGINGOUTPUT')
     ex_key = make_marker('UNFORMATTEDTRACEBACK')
     if ex_key in stripped:

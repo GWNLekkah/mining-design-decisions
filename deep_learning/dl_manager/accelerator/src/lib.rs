@@ -6,6 +6,7 @@ use pyo3::exceptions::PyValueError;
 use rayon::prelude::*;
 
 mod pos;
+mod text_cleaning;
 
 use pos::PerceptronTagger;
 
