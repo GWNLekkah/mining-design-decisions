@@ -7,7 +7,7 @@ It provides an easy to configure way to set up
 an elaborate, automatically handled command
 line interface
 """
-
+import abc
 ##############################################################################
 ##############################################################################
 # Imports
@@ -132,7 +132,7 @@ conf = Config()
 ##############################################################################
 
 
-class CLIApp:
+class _App(abc.ABC):
 
     def __init__(self, filename: str):
         with open(filename) as file:
@@ -144,6 +144,9 @@ class CLIApp:
         self.__callbacks = {}
         self.__constraints = []
         self.__setup_callbacks = []
+
+    def get_parser(self):
+        return self.__parser
 
     def callback(self, event):
         def wrapper(func):
@@ -160,16 +163,17 @@ class CLIApp:
     def add_constraint(self, predicate, message, *keys):
         self.__constraints.append((keys, predicate, message))
 
-    def parse_and_dispatch(self, cli_args=None):
-        if cli_args is None:
-            args = self.__parser.parse_args()
-        else:
-            args = self.__parser.parse_args(cli_args)
+    @abc.abstractmethod
+    def prepare_args(self, raw_args):
+        pass
+
+    def parse_and_dispatch(self, raw_args=None):
+        args = self.prepare_args(raw_args)
         self.__expand_dictionaries(args)
         active_name, active_qualname = self.__get_active_command(args)
         conf.register('system.active-command', str, active_qualname)
         self.__resolve_borrows(args, active_name)
-        for name, value in vars(args).items():
+        for name, value in args.items():
             if name.startswith('subcommand_name_'):
                 continue
             full_name = f'{active_qualname}.{name}'
@@ -193,7 +197,7 @@ class CLIApp:
         while f'subcommand_name_{i+1}' in args:
             i += 1
         pieces = [
-            getattr(args, f'subcommand_name_{j}')
+            args[f'subcommand_name_{j}']
             for j in range(i + 1)
         ]
         return pieces[-1], '.'.join(pieces)
@@ -201,23 +205,42 @@ class CLIApp:
     def __expand_dictionaries(self, args):
         for name in self.__dict_values:
             name = name.replace('-', '_')
-            if name not in vars(args):
+            if name not in args:
                 continue
-            value = getattr(args, name)
+            value = args.get(name, None)
             if value is None:
-                setattr(args, name, {})
+                #setattr(args, name, {})
+                args[name] = {}
             else:
-                setattr(args, name, _dict_converter(value))
+                #setattr(args, name, _dict_converter(value))
+                args[name] = _dict_converter(value)
 
     def __resolve_borrows(self, args, owner):
         borrowed_from = set()
         for original, name in self.__borrowed[owner]:
             full_name = f'{original}.{name}'
             full_name = self.__qualnames[full_name]
-            conf.set(full_name, getattr(args, name.replace('-', '_')))
+            #conf.set(full_name, getattr(args, name.replace('-', '_')))
+            conf.set(full_name, args[name.replace('-', '_')])
             borrowed_from.add(original)
         for parent in borrowed_from:
             self.__resolve_borrows(args, parent)
+
+
+class CLIApp(_App):
+
+    def prepare_args(self, raw_args):
+        if raw_args is None:
+            return vars(self.get_parser().parse_args())
+        else:
+            return vars(self.get_parser().parse_args(raw_args))
+
+
+class APIApp(_App):
+
+    def prepare_args(self, raw_args):
+        return raw_args
+
 
 
 def _dict_converter(items):

@@ -367,6 +367,14 @@
           "type": "str",
           "required": true,
           "style": "named"
+        },
+        {
+          "name": "with-tag",
+          "alias": "t",
+          "help": "Optional tag to add to all predicted issues",
+          "style": "named",
+          "type": "str",
+          "nargs": "1"
         }
       ]
     },
@@ -452,11 +460,26 @@
     },
     {
       "name": "embedding-generators",
-      "description": "Show available embedding generators"
+      "help": "Show available embedding generators"
     },
     {
       "name": "combination-strategies",
       "help": "Give a comprehensive overview of all available model combination strategies."
+    },
+    {
+      "name": "serve",
+      "help": "Run the pipeline as a web api",
+      "args": [
+        {
+          "name": "port",
+          "alias": "p",
+          "type": "int",
+          "default": "9011",
+          "nargs": "1",
+          "style": "named",
+          "help": "Port to bind to"
+        }
+      ]
     }
   ],
   "subparsers": [

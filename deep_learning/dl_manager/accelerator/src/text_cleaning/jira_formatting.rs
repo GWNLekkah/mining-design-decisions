@@ -85,7 +85,9 @@ pub fn remove_lists_from_text(text: String) -> String {
     let mut capitalize_next = false;
     for in_line in text.lines() {
         let capitalize =  capitalize_next;
-        let (mut line, capitalize_next) = remove_list_item(in_line);
+        let pair = remove_list_item(in_line);
+        capitalize_next = pair.1;
+        let mut line = pair.0;
         if capitalize {
             line = capitalize_string(line);
         }

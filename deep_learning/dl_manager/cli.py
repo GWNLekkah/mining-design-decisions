@@ -28,7 +28,7 @@ from . import data_manager
 from . import embeddings
 
 from . import learning
-from .config import conf, CLIApp
+from .config import conf, CLIApp, APIApp
 from .logger import get_logger
 from .database import DatabaseAPI
 log = get_logger('CLI')
@@ -50,7 +50,7 @@ def main(args=None):
     app.parse_and_dispatch(args)
 
 
-def invoke_pipeline(command: str) -> None | Exception:
+def invoke_pipeline_with_command(command: str) -> None | Exception:
     conf.reset()
     try:
         main(shlex.split(command))
@@ -58,11 +58,24 @@ def invoke_pipeline(command: str) -> None | Exception:
         return e
 
 
+def invoke_pipeline_with_config(args: dict) -> None | Exception:
+    conf.reset()
+    app = build_app(api=True)
+    log.info(f'Dispatching config: {args}')
+    try:
+        app.parse_and_dispatch(args)
+    except Exception as e:
+        return e
 
-def build_app():
+
+
+def build_app(*, api=False):
     location = os.path.split(__file__)[0]
     log.debug(f'Building CLI app from file {location}')
-    app = CLIApp(os.path.join(location, 'cli.json'))
+    if not api:
+        app = CLIApp(os.path.join(location, 'cli.json'))
+    else:
+        app = APIApp(os.path.join(location, 'cli.json'))
 
     def add_eq_len_constraint(p, q):
         app.add_constraint(lambda x, y: len(x) == len(y),
@@ -180,6 +193,10 @@ def build_app():
                           analysis.run_confusion_matrix_command)
     app.register_callback('run_analysis.compare-stats',
                           analysis.run_stat_command)
+
+    if not api:
+        app.register_callback('serve', run_api)
+
     app.register_callback('generate-embedding', run_embedding_generation_command)
     app.register_callback('embedding-parameters', run_embedding_param_command)
     app.register_callback('embedding-generators', run_show_embeddings_command)
@@ -226,6 +243,25 @@ def issue_warnings():
         if output_mode == OutputMode.Detection and include_detection:
             warnings.warn('--include-detection-performance is ignored when doing classification')
 
+
+def run_api():
+    port = conf.get('serve.port')
+    conf.reset()
+    import uvicorn
+    import fastapi
+
+    app = fastapi.FastAPI()
+
+    @app.post('/invoke')
+    async def run_command(request: fastapi.Request):
+        params = await request.json()
+        log.info('Running pipeline with params', params)
+        result = invoke_pipeline_with_config(params)
+        if result is None:
+            return {}
+        return {'error': str(result)}
+
+    uvicorn.run(app, port=port)
 
 ##############################################################################
 ##############################################################################

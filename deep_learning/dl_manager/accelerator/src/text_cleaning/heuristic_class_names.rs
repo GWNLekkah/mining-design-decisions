@@ -170,7 +170,7 @@ fn replace_file_path(c: &Captures, handling: FormattingHandling) -> String {
 pub fn replace_class_names_no_path_heuristically(mut text: String, handling: FormattingHandling) -> String {
     lazy_static! {
         static ref LOWER_CC: Regex = Regex::new(r"\s[a-z][a-z\d]*([A-Z]\w*)+").unwrap();
-        static ref UPPER_CC: Regex = Regex::new(r"\s([A-Z]\w*){2,}").unwrap();
+        static ref UPPER_CC: Regex = Regex::new(r"(\s|\(|\[)([A-Z]\w*){2,}").unwrap();
     }
     text = LOWER_CC.replace_all(&text, |c: &Captures| remove_lower_case(c, handling)).into();
     text = UPPER_CC.replace_all(&text, |c: &Captures| remove_upper_case(c, handling)).into();
@@ -212,15 +212,17 @@ fn remove_upper_case(c: &Captures, handling: FormattingHandling) -> String {
     }
     let text = c.get(0).expect("Expected a match").as_str();
     let whitespace = &text[0..1];
+    #[allow(clippy::if_same_then_else)]
     if text.chars().all(|c| c.is_uppercase() || c.is_whitespace()) {
         text.to_string()
     } else if TECHNOLOGIES.contains(text.to_lowercase().trim()) {
-        match handling {
-            FormattingHandling::Keep => text.to_string(),
-            FormattingHandling::Remove => "".into(),
-            FormattingHandling::Markers => whitespace.to_string() + Marker::TechnologyName.string_marker().as_str()
-        }
-    } else if ABBREVIATIONS.contains(text) {
+        //match handling {
+        //    FormattingHandling::Keep => text.to_string(),
+        //    FormattingHandling::Remove => "".into(),
+        //    FormattingHandling::Markers => whitespace.to_string() + Marker::TechnologyName.string_marker().as_str()
+        //}
+        text.to_string()
+    } else if ABBREVIATIONS.contains(text) || text.len() <= 6 {     // magic number
         text.to_string()
     } else {
         match handling {

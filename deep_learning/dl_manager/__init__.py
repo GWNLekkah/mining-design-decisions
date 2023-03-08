@@ -1,7 +1,8 @@
 import contextlib
 import io
 
-from .cli import invoke_pipeline as _invoke
+from .cli import invoke_pipeline_with_command as _invoke
+from .cli import invoke_pipeline_with_config as _invoke_api
 from .cli import main as _main
 from .classifiers import AbstractModel
 from .classifiers import models as _models
@@ -22,6 +23,17 @@ def run_command(cmd: str, *, capture_output=False):
                 _invoke(cmd)
         return out.getvalue(), err.getvalue()
     _invoke(cmd)
+
+
+def run_config(config: dict, *, capture_output=False):
+    if capture_output:
+        out = io.StringIO()
+        err = io.StringIO()
+        with contextlib.redirect_stdout(out):
+            with contextlib.redirect_stderr(err):
+                _invoke_api(config)
+        return out.getvalue(), err.getvalue()
+    _invoke_api(config)
 
 
 def get_available_models() -> dict[str, type[AbstractModel]]:
