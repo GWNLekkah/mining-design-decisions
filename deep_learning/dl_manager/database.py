@@ -97,7 +97,7 @@ def _call_endpoint(endpoint, payload):
 def select_issue_keys(query) -> list[str]:
     parsed = parse_query(query)
     validate_query(parsed)
-    return _call_endpoint('issue-keys', {'filter': parsed})['keys']
+    return _call_endpoint('issue-ids', {'filter': parsed})['keys']
 
 
 def get_issue_labels_by_key(keys: list[str]):

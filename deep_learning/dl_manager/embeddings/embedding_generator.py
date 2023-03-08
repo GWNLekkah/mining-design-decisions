@@ -1,11 +1,11 @@
 import abc
 import dataclasses
+import itertools
 import pathlib
 import typing
 
 import nltk
-from nltk.tag import _get_tagger as get_tagger_internal
-from nltk.tag import _pos_tag as pos_tag_internal
+from .. import accelerator
 
 from ..config import conf
 from ..database import DatabaseAPI
@@ -52,9 +52,12 @@ class AbstractEmbeddingGenerator(abc.ABC):
         self.params = params
 
     def make_embedding(self, query: str, path: pathlib.Path, formatting_handling: str):
+        # Loading issues from database
         db: DatabaseAPI = conf.get('system.storage.database-api')
         issues = db.select_issues(query)
         data = db.get_issue_data(issues, ['summary', 'description'])
+
+        # Setting up NLP stuff
         handling = FormattingHandling.from_string(formatting_handling)
         stopwords = nltk.corpus.stopwords.words('english')
         use_lemmatization = self.params.get('use-lemmatization', 'False') == 'True'
@@ -70,15 +73,36 @@ class AbstractEmbeddingGenerator(abc.ABC):
             stemmer = nltk.stem.PorterStemmer()
         if use_lemmatization:
             lemmatizer = nltk.stem.WordNetLemmatizer()
-        tagger = get_tagger_internal(lang='eng')
+        weights, tagdict, classes = nltk.load(
+            'taggers/averaged_perceptron_tagger/averaged_perceptron_tagger.pickle'
+        )
+        tagger = accelerator.Tagger(weights, classes, tagdict)
+
+        # Bulk processing
+        summaries = [issue['summary'] for issue in data]
+        descriptions = [issue['description'] for issue in data]
+        summaries = accelerator.bulk_clean_text_parallel(
+            summaries, handling.as_string(), conf.get('system.resources.threads')
+        )
+        summaries = [clean_issue_text(summary) for summary in summaries]
+        descriptions = accelerator.bulk_clean_text_parallel(
+            descriptions, handling.as_string(), conf.get('system.resources.threads')
+        )
+        descriptions = [clean_issue_text(description) for description in descriptions]
+        texts = [
+            [
+                nltk.word_tokenize(sent.lower())
+                for sent in itertools.chain(summary, description)
+            ]
+            for summary, description in zip(summaries, descriptions)
+        ]
+        texts = tagger.bulk_tag_parallel(texts, conf.get('system.resources.threads'))
+
+        # Per-issue processing
         documents = []
-        for issue in data:
-            summary = clean_issue_text(issue['summary'], handling)
-            description = clean_issue_text(issue['description'], handling)
-            text = summary + description
-            for sentence in (sent.lower() for sent in text):
-                words = nltk.word_tokenize(sentence)
-                words = pos_tag_internal(words, None, tagger, 'eng')
+        for issue in texts:
+            document = []
+            for words in issue:
                 words = [(word, tag) for word, tag in words if word not in stopwords]
                 if use_lemmatization:
                     words = [
@@ -91,11 +115,14 @@ class AbstractEmbeddingGenerator(abc.ABC):
                     words = [f'{word}_{POS_CONVERSION.get(tag, tag)}' for word, tag in words]
                 else:
                     words = [word for word, _ in words]
-                documents.append(words)
+                document.extend(words)
+            documents.append(document)
+
+        # Embedding generation
         self.generate_embedding(documents, path)
 
     @abc.abstractmethod
-    def generate_embedding(self, issues: list[str], path: pathlib.Path):
+    def generate_embedding(self, issues: list[list[str]], path: pathlib.Path):
         pass
 
     @staticmethod

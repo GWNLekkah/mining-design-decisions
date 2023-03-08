@@ -220,11 +220,14 @@ def setup_peregrine():
 
 
 def setup_storage():
+    # Storage space and constants
     conf.register('system.storage.generators', list, [])
     conf.register('system.storage.auxiliary', list, [])
     conf.register('system.storage.auxiliary_map', dict, {})
     conf.register('system.storage.auxiliary_prefix', str, 'auxiliary')
     conf.register('system.storage.file_prefix', str, 'dl_pipeline')
+
+    # Setup database
     if conf.is_active('run.database-url'):
         conf.clone('run.database-url', 'system.storage.database-url')
     if conf.is_active('predict.database-url'):
@@ -234,6 +237,17 @@ def setup_storage():
     if conf.is_active('system.storage.database-url'):
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
         conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
+
+
+def setup_resources():
+    if conf.is_active('run.num-threads'):
+        conf.clone('run.num-threads', 'system.resources.threads')
+    if conf.is_active('predict.num-threads'):
+        conf.clone('predict.num-threads', 'system.resources.threads')
+    if conf.is_active('generate-embedding.num-threads'):
+        conf.clone('generate-embedding.num-threads', 'system.resources.threads')
+    if conf.is_active('system.resources.threads'):
+        log.info(f'Available threads for preprocessing: {conf.get("system.resources.threads")}')
 
 
 def issue_warnings():

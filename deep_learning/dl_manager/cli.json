@@ -336,6 +336,14 @@
           "help": "Draw testing data from training data using train/test split",
           "style": "flag",
           "default": false
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
         }
      ]
     },
@@ -374,6 +382,14 @@
           "help": "Optional tag to add to all predicted issues",
           "style": "named",
           "type": "str",
+          "nargs": "1"
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
           "nargs": "1"
         }
       ]
@@ -439,6 +455,14 @@
           "options": [
             "keep", "remove", "markers"
           ]
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
         }
       ]
     },

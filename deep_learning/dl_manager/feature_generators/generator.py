@@ -6,10 +6,10 @@
 from __future__ import annotations
 
 import abc
-import ast
 import csv
 import enum
 import hashlib
+import itertools
 import json
 import pathlib
 import random
@@ -18,9 +18,10 @@ import warnings
 import cProfile
 import string
 
-import gensim
 import nltk
 
+from .util.text_cleaner import FormattingHandling, clean_issue_text
+from .. import accelerator
 from ..classifiers import InputEncoding, OutputEncoding
 from ..custom_kfold import stratified_trim
 from .util import ontology
@@ -387,7 +388,7 @@ class AbstractFeatureGenerator(abc.ABC):
         for issue in raw_data:
             summary = x if (x := issue.pop('summary')) is not None else ''
             description = x if (x := issue.pop('description')) is not None else ''
-            texts.append(summary + description)
+            texts.append((summary, description))
         metadata = raw_data     # summary and description have been popped
         return texts, metadata, labels, classification_indices
 
@@ -499,30 +500,39 @@ class AbstractFeatureGenerator(abc.ABC):
             lemmatizer = nltk.stem.WordNetLemmatizer()
             use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
             use_ontologies = conf.get('run.apply-ontology-classes')
+            handling_string = self.__params.get('formatting-handling', 'markers')
+            handling = FormattingHandling.from_string(handling_string)
+            weights, tagdict, classes = nltk.load(
+                'taggers/averaged_perceptron_tagger/averaged_perceptron_tagger.pickle'
+            )
+            tagger = accelerator.Tagger(weights, classes, tagdict)
 
-
-            from nltk.tag import _get_tagger as get_tagger_internal
-            from nltk.tag import _pos_tag as pos_tag_internal
-            tagger = get_tagger_internal(lang='eng')
-
+            summaries, descriptions = (list(x) for x in zip(*issues))
+            summaries = accelerator.bulk_clean_text_parallel(
+                summaries, handling.as_string(), conf.get('system.resources.threads')
+            )
+            summaries = [clean_issue_text(summary) for summary in summaries]
+            descriptions = accelerator.bulk_clean_text_parallel(
+                descriptions, handling.as_string(), conf.get('system.resources.threads')
+            )
+            descriptions = [clean_issue_text(description) for description in descriptions]
+            texts = [
+                [
+                    nltk.word_tokenize(sent.lower() if use_lowercase else sent)
+                    for sent in itertools.chain(summary, description)
+                ]
+                for summary, description in zip(summaries, descriptions)
+            ]
+            tagged = tagger.bulk_tag_parallel(
+                texts, conf.get('system.resources.threads')
+            )
             tokenized_issues = []
-            for issue in issues:
+            for issue in tagged:
                 all_words = []
 
                 # Tokenize
-                for sentence in issue:
-                    # Transform to lowercase.
-                    # Do this before tokenization for maximum performance.
-                    if use_lowercase:
-                        sentence = sentence.lower()
-                    words = nltk.word_tokenize(sentence)
-
-                    # We always perform POS analysis because it's required for many
-                    # subsequent steps.
-                    # words = nltk.pos_tag(words)
-                    words = pos_tag_internal(words, None, tagger, 'eng')
-
-                    # Apply ontology simplification. Must be done before stemming/lemmatization
+                for words in issue:
+                     # Apply ontology simplification. Must be done before stemming/lemmatization
                     if use_ontologies:
                         #assert ontology_table is not None, 'Missing --ontology-classes'
                         words = ontology.apply_ontologies_to_sentence(words, ontology_table)
