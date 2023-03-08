@@ -14,6 +14,7 @@ from . import stacking
 from . import voting_util
 from . import metrics
 from .config import conf
+from .database import DatabaseAPI
 
 
 ##############################################################################
@@ -22,7 +23,11 @@ from .config import conf
 ##############################################################################
 
 
-def predict_simple_model(path: pathlib.Path, model_metadata, features, output_mode):
+def predict_simple_model(path: pathlib.Path,
+                         model_metadata,
+                         features,
+                         output_mode,
+                         issue_ids):
     _check_output_mode(output_mode)
     model = load_model(path / model_metadata['model_path'])
     if len(features) == 1:
@@ -35,6 +40,7 @@ def predict_simple_model(path: pathlib.Path, model_metadata, features, output_mo
         canonical_predictions = _predictions_to_canonical(output_mode, indices)
     _store_predictions(canonical_predictions,
                        output_mode,
+                       issue_ids,
                        probabilities=predictions)
 
 
@@ -44,7 +50,11 @@ def predict_simple_model(path: pathlib.Path, model_metadata, features, output_mo
 ##############################################################################
 
 
-def predict_stacking_model(path: pathlib.Path, model_metadata, features, output_mode):
+def predict_stacking_model(path: pathlib.Path,
+                           model_metadata,
+                           features,
+                           output_mode,
+                           issue_ids):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
                                                 model_metadata['child_models'],
@@ -63,6 +73,7 @@ def predict_stacking_model(path: pathlib.Path, model_metadata, features, output_
         canonical_predictions = _predictions_to_canonical(output_mode, indices)
     _store_predictions(canonical_predictions,
                        output_mode,
+                       issue_ids,
                        probabilities=final_predictions)
 
 
@@ -72,7 +83,11 @@ def predict_stacking_model(path: pathlib.Path, model_metadata, features, output_
 ##############################################################################
 
 
-def predict_voting_model(path: pathlib.Path, model_metadata, features, output_mode):
+def predict_voting_model(path: pathlib.Path,
+                         model_metadata,
+                         features,
+                         output_mode,
+                         issue_ids):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
                                                 model_metadata['child_models'],
@@ -85,7 +100,7 @@ def predict_voting_model(path: pathlib.Path, model_metadata, features, output_mo
     else:
         converted_predictions = voting_predictions
 
-    _store_predictions(converted_predictions, output_mode)
+    _store_predictions(converted_predictions, output_mode, issue_ids)
 
 
 ##############################################################################
@@ -120,45 +135,128 @@ def _check_output_mode(output_mode):
     pass
 
 
-def _store_predictions(predictions, output_mode, *, probabilities=None):
-    prefix = conf.get('system.storage.file-prefix')
-    with open(f'{prefix}_predictions.csv', 'w') as file:
-        writer = csv.writer(file)
-        header = ['Prediction Name']
-        if probabilities is not None:
-            match output_mode:
-                case OutputMode.Detection:
-                    header += ['Probability Architectural']
-                case OutputMode.Classification3Simplified:
-                    header += [
-                        'Probability Existence',
-                        'Probability Executive',
-                        'Probability Property',
-                        'Probability Non-Architectural',
-                    ]
-                case OutputMode.Classification3:
-                    header += [
-                        'Probability Existence',
-                        'Probability Executive',
-                        'Probability Property'
-                    ]
-                case OutputMode.Classification8:
-                    header += [
-                        'Probability Non-Architecectural',
-                        'Probability Property',
-                        'Probability Executive',
-                        'Probability Executive/Property',
-                        'Probability Existence',
-                        'Probability Existence/Property',
-                        'Probability Existence/Executive',
-                        'Probability Existence/Executive/Property',
-                    ]
-                case _:
-                    raise ValueError(output_mode)
-        writer.writerow(header)
-        label_encoding = output_mode.label_encoding
-        for index in range(len(predictions)):
-            row = [label_encoding[predictions[index]]]
-            if probabilities is not None:
-                row += [f'{x:.5f}' for x in probabilities[index]]
-            writer.writerow(row)
+def _store_predictions(predictions, output_mode, issue_ids, *, probabilities=None):
+    predictions_by_id = {}
+    for i, (pred, issue_id) in enumerate(zip(predictions, issue_ids)):
+        match output_mode:
+            case OutputMode.Detection:
+                predictions_by_id[issue_id] = {
+                    'architectural': {
+                        'prediction': pred,
+                        'probability': probabilities[i] if probabilities is not None else None
+                    }
+                }
+            case OutputMode.Classification3:
+                predictions_by_id[issue_id] = {
+                    'existence': {
+                        'prediction': pred[0],
+                        'probability': probabilities[i][0] if probabilities is not None else None
+                    },
+                    'executive': {
+                        'prediction': pred[1],
+                        'probability': probabilities[i][1] if probabilities is not None else None
+                    },
+                    'property': {
+                        'prediction': pred[2],
+                        'probability': probabilities[i][2] if probabilities is not None else None
+                    }
+                }
+            case OutputMode.Classification3Simplified:
+                predictions_by_id[issue_id] = {
+                    'existence': {
+                        'prediction': pred == 0,
+                        'probability': probabilities[i][0] if probabilities is not None else None
+                    },
+                    'executive': {
+                        'prediction': pred == 1,
+                        'probability': probabilities[i][1] if probabilities is not None else None
+                    },
+                    'property': {
+                        'prediction': pred == 2,
+                        'probability': probabilities[i][2] if probabilities is not None else None
+                    },
+                    'non-architectural': {
+                        'prediction': pred == 3,
+                        'probability': probabilities[i][3] if probabilities is not None else None
+                    }
+                }
+            case OutputMode.Classification8:
+                predictions_by_id[issue_id] = {
+                    'non-architectural': {
+                        'prediction': pred == 0,
+                        'probability': probabilities[i][0] if probabilities is not None else None
+                    },
+                    'property': {
+                        'prediction': pred == 1,
+                        'probability': probabilities[i][1] if probabilities is not None else None
+                    },
+                    'executive': {
+                        'prediction': pred == 2,
+                        'probability': probabilities[i][2] if probabilities is not None else None
+                    },
+                    'executive/property': {
+                        'prediction': pred == 3,
+                        'probability': probabilities[i][3] if probabilities is not None else None
+                    },
+                    'existence': {
+                        'prediction': pred == 4,
+                        'probability': probabilities[i][4] if probabilities is not None else None
+                    },
+                    'existence/property': {
+                        'prediction': pred == 5,
+                        'probability': probabilities[i][5] if probabilities is not None else None
+                    },
+                    'existence/executive': {
+                        'prediction': pred == 6,
+                        'probability': probabilities[i][6] if probabilities is not None else None
+                    },
+                    'existence/executive/property': {
+                        'prediction': pred == 7,
+                        'probability': probabilities[i][7] if probabilities is not None else None
+                    }
+                }
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    db.save_predictions('XXX', predictions_by_id)
+    if (tag := conf.get('predict.with-tag')) != '':
+        db.add_tag(issue_ids, tag)
+    # prefix = conf.get('system.storage.file-prefix')
+    # with open(f'{prefix}_predictions.csv', 'w') as file:
+    #     writer = csv.writer(file)
+    #     header = ['Prediction Name']
+    #     if probabilities is not None:
+    #         match output_mode:
+    #             case OutputMode.Detection:
+    #                 header += ['Probability Architectural']
+    #             case OutputMode.Classification3Simplified:
+    #                 header += [
+    #                     'Probability Existence',
+    #                     'Probability Executive',
+    #                     'Probability Property',
+    #                     'Probability Non-Architectural',
+    #                 ]
+    #             case OutputMode.Classification3:
+    #                 header += [
+    #                     'Probability Existence',
+    #                     'Probability Executive',
+    #                     'Probability Property'
+    #                 ]
+    #             case OutputMode.Classification8:
+    #                 header += [
+    #                     'Probability Non-Architecectural',
+    #                     'Probability Property',
+    #                     'Probability Executive',
+    #                     'Probability Executive/Property',
+    #                     'Probability Existence',
+    #                     'Probability Existence/Property',
+    #                     'Probability Existence/Executive',
+    #                     'Probability Existence/Executive/Property',
+    #                 ]
+    #             case _:
+    #                 raise ValueError(output_mode)
+    #     writer.writerow(header)
+    #     label_encoding = output_mode.label_encoding
+    #     for index in range(len(predictions)):
+    #         row = [label_encoding[predictions[index]]]
+    #         if probabilities is not None:
+    #             row += [f'{x:.5f}' for x in probabilities[index]]
+    #         writer.writerow(row)

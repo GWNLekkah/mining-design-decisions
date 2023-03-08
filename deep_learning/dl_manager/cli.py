@@ -684,6 +684,7 @@ def run_prediction_command():
         for file, path in model_metadata['auxiliary_files'].items()
     }
     conf.get('system.storage.auxiliary_map').update(auxiliary_files)
+    ids = None
     for generator in model_metadata['feature_generators']:
         with open(model / generator) as file:
             generator_data = json.load(file)
@@ -694,17 +695,19 @@ def run_prediction_command():
             pretrained_generator_settings=generator_data['settings']
         )
         generator.generate_features(data_query, feature_file)
-        features = data_manager.load_features(feature_file, output_mode.name).features
-        datasets.append(features)
+        data_stuff = data_manager.load_features(feature_file, output_mode.name)
+        if ids is None:
+            ids = data_stuff.ids
+        datasets.append(data_stuff.features)
     datasets = [numpy.asarray(d) for d in datasets]
 
     # Step 3: Load the model and get the predictions
     match model_metadata['model_type']:
         case 'single':
-            prediction.predict_simple_model(model, model_metadata, datasets, output_mode)
+            prediction.predict_simple_model(model, model_metadata, datasets, output_mode, ids)
         case 'stacking':
-            prediction.predict_stacking_model(model, model_metadata, datasets, output_mode)
+            prediction.predict_stacking_model(model, model_metadata, datasets, output_mode, ids)
         case 'voting':
-            prediction.predict_voting_model(model, model_metadata, datasets, output_mode)
+            prediction.predict_voting_model(model, model_metadata, datasets, output_mode, ids)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')

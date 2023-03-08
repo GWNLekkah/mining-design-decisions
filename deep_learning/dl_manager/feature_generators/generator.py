@@ -355,13 +355,14 @@ class AbstractFeatureGenerator(abc.ABC):
 
     def load_data_from_db(self, query, metadata_attributes):
         api: DatabaseAPI = conf.get('system.storage.database-api')
-        issue_keys = api.select_issues(query)
+        issue_ids = api.select_issues(query)
         labels = {
             'detection': [],
             'classification3': [],
             'classification3simplified': [],
             'classification8': [],
-            'issue_keys': issue_keys
+            'issue_keys': [],
+            'issue_ids': issue_ids
         }
         classification_indices = {
             'Existence': [],
@@ -370,7 +371,7 @@ class AbstractFeatureGenerator(abc.ABC):
             'Non-Architectural': []
         }
         if self.pretrained is None:
-            raw_labels = api.get_labels(issue_keys)
+            raw_labels = api.get_labels(issue_ids)
             for index, raw in enumerate(raw_labels):
                 self.update_labels(labels,
                                    classification_indices,
@@ -378,8 +379,8 @@ class AbstractFeatureGenerator(abc.ABC):
                                    raw['existence'],
                                    raw['executive'],
                                    raw['property'])
-        attributes = ['summary', 'description'] + metadata_attributes
-        raw_data = api.get_issue_data(issue_keys, attributes, raise_on_partial_result=True)
+        attributes = ['summary', 'description', 'key'] + metadata_attributes
+        raw_data = api.get_issue_data(issue_ids, attributes, raise_on_partial_result=True)
         warnings.warn('Replace code again once database wrapper has been fixed')
         # texts = [
         #     issue.pop('summary') + issue.pop('description') for issue in raw_data
@@ -388,6 +389,7 @@ class AbstractFeatureGenerator(abc.ABC):
         for issue in raw_data:
             summary = x if (x := issue.pop('summary')) is not None else ''
             description = x if (x := issue.pop('description')) is not None else ''
+            labels['issue_keys'].append(issue.pop('key'))
             texts.append((summary, description))
         metadata = raw_data     # summary and description have been popped
         return texts, metadata, labels, classification_indices

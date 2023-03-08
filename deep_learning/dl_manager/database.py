@@ -8,6 +8,7 @@ import json
 import warnings
 
 import requests
+import typing
 
 from .config import conf
 from .logger import get_logger
@@ -84,54 +85,63 @@ def _invalid_query(q, msg=None):
 ##############################################################################
 
 
-def _call_endpoint(endpoint, payload):
+def _call_endpoint(endpoint, payload, verb):
     url = f'{conf.get("system.storage.database-url")}/{endpoint}'
     log.info(f'Calling endpoint {endpoint}')
     log.debug(f'Request payload: {payload}')
-    response = requests.get(url, json=payload)
-    response_payload = response.json()
-    log.debug(f'Response payload: {response_payload}')
-    return response_payload
+    match verb:
+        case 'GET':
+            response = requests.get(url, json=payload)
+            response_payload = response.json()
+            log.debug(f'Response payload: {response_payload}')
+            return response_payload
+        case 'POST':
+            requests.post(url, json=payload)
+        case _ as x:
+            raise ValueError(f'Invalid verb: {x}')
 
 
-def select_issue_keys(query) -> list[str]:
+def select_issue_ids(query) -> list[str]:
     parsed = parse_query(query)
     validate_query(parsed)
-    return _call_endpoint('issue-ids', {'filter': parsed})['keys']
+    return _call_endpoint('issue-ids', {'filter': parsed}, 'GET')['ids']
 
 
-def get_issue_labels_by_key(keys: list[str]):
-    return _call_endpoint('manual-labels', {'keys': keys})['labels']
+def get_issue_labels_by_key(ids: list[str]):
+    return _call_endpoint('manual-labels', {'ids': ids}, 'GET')['labels']
 
 
-def get_issue_data_by_keys(keys: list[str], attributes: list[str]):
+def get_issue_data_by_keys(ids: list[str], attributes: list[str]):
     return _call_endpoint(
         'issue-data',
         {
-            'keys': keys,
+            'ids': ids,
             'attributes': attributes
-        }
+        },
+        'GET'
     )['data']
 
 
-def add_tag_to_issues(keys: list[str], tag: str):
+def add_tag_to_issues(ids: list[str], tag: str):
     return _call_endpoint(
         'add-tags',
         {
-            'keys': keys,
+            'ids': ids,
             'tags': [tag]
-        }
+        },
+        'POST'
     )
 
 
 def save_predictions(model_name: str,
-                     predictions_by_key: dict[str, dict[str, bool]]):
+                     predictions_by_id: dict[str, dict[str, typing.Any]]):
     _call_endpoint(
         'save-predictions',
         {
             'model-id': model_name,
-            'predictions': predictions_by_key
-        }
+            'predictions': predictions_by_id
+        },
+        'POST'
     )
 
 
@@ -148,30 +158,30 @@ class DatabaseAPI:
 
     def select_issues(self, query):
         key = json.dumps(query)
-        if key not in self.__cache['select-issue-keys']:
-            self.__cache['select-issue-keys'][key] = select_issue_keys(query)
-        return self.__cache['select-issue-keys'][key]
+        if key not in self.__cache['select-issue-ids']:
+            self.__cache['select-issue-ids'][key] = select_issue_ids(query)
+        return self.__cache['select-issue-ids'][key]
 
-    def get_labels(self, keys: list[str]):
+    def get_labels(self, ids: list[str]):
         local_cache = self.__cache['issue-labels']
         cached_keys = {key
-                       for key in keys
+                       for key in ids
                        if key in local_cache}
-        required_keys = [key for key in keys if key not in cached_keys]
+        required_keys = [key for key in ids if key not in cached_keys]
         if required_keys:
             labels = get_issue_labels_by_key(required_keys)
             local_cache.update(labels)
-        return [local_cache[key] for key in keys]
+        return [local_cache[key] for key in ids]
 
     def get_issue_data(self,
-                       issue_keys: list[str],
+                       issue_ids: list[str],
                        attributes: list[str],
                        *,
                        raise_on_partial_result=False):
         local_cache = self.__cache['issue-data']
         attrs = set(attributes)
         required_keys = []
-        for key in issue_keys:
+        for key in issue_ids:
             if key not in local_cache:
                 required_keys.append(key)
             elif not (attrs.issubset(local_cache['key'])):
@@ -181,14 +191,14 @@ class DatabaseAPI:
         if required_keys:
             data = get_issue_data_by_keys(required_keys, attributes)
             local_cache.update(data)
-        wrong = [key for key in issue_keys if key not in local_cache]
+        wrong = [key for key in issue_ids if key not in local_cache]
         warnings.warn('Remember to remove `wrong` array once database has been updated!')
-        return [local_cache[key] for key in issue_keys if key not in wrong]
+        return [local_cache[key] for key in issue_ids if key not in wrong]
 
-    def add_tag(self, keys: list[str], tag: str):
-        add_tag_to_issues(keys, tag)
+    def add_tag(self, ids: list[str], tag: str):
+        add_tag_to_issues(ids, tag)
 
     def save_predictions(self,
                          model_name: str,
-                         predictions_by_key: dict[str, dict[str, bool]]):
-        save_predictions(model_name, predictions_by_key)
+                         predictions_by_id: dict[str, dict[str, typing.Any]]):
+        save_predictions(model_name, predictions_by_id)

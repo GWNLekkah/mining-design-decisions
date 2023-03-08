@@ -30,6 +30,7 @@ class Dataset(typing.NamedTuple):
     vocab_size: None | int
     weight_vector_length: None | int
     issue_keys: list
+    ids: list
 
     def is_embedding(self):
         return (
@@ -116,7 +117,8 @@ def load_features(filename: pathlib.Path, output_mode: str) -> Dataset:
         vocab_size=data.get('vocab_size', None),
         weight_vector_length=data.get('word_vector_length', None),
         binary_labels=data['labels']['detection'],
-        issue_keys=data['labels']['issue_keys']
+        issue_keys=data['labels']['issue_keys'],
+        ids=data['labels']['issue_ids']
     )
     return dataset
 
