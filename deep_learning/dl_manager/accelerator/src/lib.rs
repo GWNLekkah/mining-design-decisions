@@ -35,11 +35,11 @@ impl Tagger {
         Tagger{p: PerceptronTagger::from_weights_and_classes(weights, classes, tagdict)}
     }
 
-    pub fn tag(&self, sentence: Vec<String>) -> Vec<String> {
+    pub fn tag(&self, sentence: Vec<String>) -> Vec<(String, String)> {
         self.p.tag(sentence)
     }
 
-    pub fn bulk_tag(&self, documents: Vec<Vec<Vec<String>>>) -> Vec<Vec<Vec<String>>> {
+    pub fn bulk_tag(&self, documents: Vec<Vec<Vec<String>>>) -> Vec<Vec<Vec<(String, String)>>> {
         documents
             .into_iter()
             .map(
@@ -51,7 +51,7 @@ impl Tagger {
             .collect()
     }
 
-    pub fn bulk_tag_parallel(&self, documents: Vec<Vec<Vec<String>>>, num_threads: usize) -> PyResult<Vec<Vec<Vec<String>>>> {
+    pub fn bulk_tag_parallel(&self, documents: Vec<Vec<Vec<String>>>, num_threads: usize) -> PyResult<Vec<Vec<Vec<(String, String)>>>> {
         Ok(
             create_pool(num_threads)?.install(|| {
                 documents.into_par_iter().map(

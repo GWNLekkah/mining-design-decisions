@@ -204,6 +204,7 @@ def build_app(*, api=False):
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
     app.register_setup_callback(issue_warnings)
+    app.register_setup_callback(setup_resources)
 
     log.debug('Finished building app')
     return app
@@ -234,7 +235,7 @@ def setup_storage():
         conf.clone('predict.database-url', 'system.storage.database-url')
     if conf.is_active('generate-embedding.database-url'):
         conf.clone('generate-embedding.database-url', 'system.storage.database-url')
-    if conf.is_active('system.storage.database-url'):
+    if conf.is_registered('system.storage.database-url'):
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
         conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
 
@@ -246,7 +247,7 @@ def setup_resources():
         conf.clone('predict.num-threads', 'system.resources.threads')
     if conf.is_active('generate-embedding.num-threads'):
         conf.clone('generate-embedding.num-threads', 'system.resources.threads')
-    if conf.is_active('system.resources.threads'):
+    if conf.is_registered('system.resources.threads'):
         log.info(f'Available threads for preprocessing: {conf.get("system.resources.threads")}')
 
 

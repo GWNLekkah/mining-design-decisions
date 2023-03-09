@@ -1,5 +1,7 @@
 use lazy_static::lazy_static;
 use regex::Regex;
+use deunicode::deunicode;
+
 use crate::text_cleaning::blocks::{remove_code_blocks, remove_no_format_blocks};
 use crate::text_cleaning::heuristic_class_names::{remove_class_names_heuristically, remove_file_paths_heuristically, replace_class_names_no_path_heuristically};
 use crate::text_cleaning::heuristic_logs::remove_unformatted_lines;
@@ -25,6 +27,8 @@ pub fn clean_text(mut text: String, handling: FormattingHandling) -> String {
     lazy_static! {
         static ref PATTERN: Regex = Regex::new(r"\{code:\w+\}").unwrap();
     }
+
+    text = deunicode(&text);
 
     if handling == FormattingHandling::Keep {
         text = text.replace("{code}", "");

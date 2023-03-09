@@ -41,7 +41,7 @@ impl PerceptronTagger {
         }
     }
 
-    pub fn tag(&self, tokens: Vec<String>) -> Vec<String> {
+    pub fn tag(&self, tokens: Vec<String>) -> Vec<(String, String)> {
         let mut prev: String = "-START-".into();
         let mut prev2: String = "-START2-".into();
         let mut output = Vec::with_capacity(tokens.len());
@@ -49,7 +49,7 @@ impl PerceptronTagger {
         context.extend_from_slice(&["-START-".into(), "-START2-".into()]);
         context.extend(tokens.iter().map(|t| self.normalize(t)));
         context.extend_from_slice(&["-END-".into(), "-END2-".into()]);
-        for (i, word) in tokens.into_iter().enumerate() {
+        for (i, word) in tokens.iter().cloned().enumerate() {
             let tag = match self.tagdict.get(&word) {
                 Some(x) => x.clone(),
                 None => {
@@ -61,7 +61,7 @@ impl PerceptronTagger {
             prev2 = prev;
             prev = tag;
         }
-        output
+        tokens.into_iter().zip(output.into_iter()).collect()
     }
 
     fn normalize(&self, word: &String) -> String {
