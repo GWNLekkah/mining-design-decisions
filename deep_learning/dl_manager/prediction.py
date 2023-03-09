@@ -3,7 +3,6 @@
 # Imports
 ##############################################################################
 
-import csv
 import pathlib
 
 from keras.models import load_model
@@ -27,7 +26,9 @@ def predict_simple_model(path: pathlib.Path,
                          model_metadata,
                          features,
                          output_mode,
-                         issue_ids):
+                         issue_ids,
+                         model_id,
+                         model_version):
     _check_output_mode(output_mode)
     model = load_model(path / model_metadata['model_path'])
     if len(features) == 1:
@@ -41,6 +42,8 @@ def predict_simple_model(path: pathlib.Path,
     _store_predictions(canonical_predictions,
                        output_mode,
                        issue_ids,
+                       model_id,
+                       model_version,
                        probabilities=predictions)
 
 
@@ -54,7 +57,9 @@ def predict_stacking_model(path: pathlib.Path,
                            model_metadata,
                            features,
                            output_mode,
-                           issue_ids):
+                           issue_ids,
+                           model_id,
+                           model_version):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
                                                 model_metadata['child_models'],
@@ -74,6 +79,8 @@ def predict_stacking_model(path: pathlib.Path,
     _store_predictions(canonical_predictions,
                        output_mode,
                        issue_ids,
+                       model_id,
+                       model_version,
                        probabilities=final_predictions)
 
 
@@ -87,7 +94,9 @@ def predict_voting_model(path: pathlib.Path,
                          model_metadata,
                          features,
                          output_mode,
-                         issue_ids):
+                         issue_ids,
+                         model_id,
+                         model_version):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
                                                 model_metadata['child_models'],
@@ -100,7 +109,11 @@ def predict_voting_model(path: pathlib.Path,
     else:
         converted_predictions = voting_predictions
 
-    _store_predictions(converted_predictions, output_mode, issue_ids)
+    _store_predictions(converted_predictions,
+                       output_mode,
+                       issue_ids,
+                       model_id,
+                       model_version)
 
 
 ##############################################################################
@@ -135,7 +148,13 @@ def _check_output_mode(output_mode):
     pass
 
 
-def _store_predictions(predictions, output_mode, issue_ids, *, probabilities=None):
+def _store_predictions(predictions,
+                       output_mode,
+                       issue_ids,
+                       model_id,
+                       model_version,
+                       *,
+                       probabilities=None):
     predictions_by_id = {}
     for i, (pred, issue_id) in enumerate(zip(predictions, issue_ids)):
         match output_mode:
@@ -216,47 +235,6 @@ def _store_predictions(predictions, output_mode, issue_ids, *, probabilities=Non
                     }
                 }
     db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.save_predictions('XXX', predictions_by_id)
+    db.save_predictions(model_id, model_version, predictions_by_id)
     if (tag := conf.get('predict.with-tag')) != '':
         db.add_tag(issue_ids, tag)
-    # prefix = conf.get('system.storage.file-prefix')
-    # with open(f'{prefix}_predictions.csv', 'w') as file:
-    #     writer = csv.writer(file)
-    #     header = ['Prediction Name']
-    #     if probabilities is not None:
-    #         match output_mode:
-    #             case OutputMode.Detection:
-    #                 header += ['Probability Architectural']
-    #             case OutputMode.Classification3Simplified:
-    #                 header += [
-    #                     'Probability Existence',
-    #                     'Probability Executive',
-    #                     'Probability Property',
-    #                     'Probability Non-Architectural',
-    #                 ]
-    #             case OutputMode.Classification3:
-    #                 header += [
-    #                     'Probability Existence',
-    #                     'Probability Executive',
-    #                     'Probability Property'
-    #                 ]
-    #             case OutputMode.Classification8:
-    #                 header += [
-    #                     'Probability Non-Architecectural',
-    #                     'Probability Property',
-    #                     'Probability Executive',
-    #                     'Probability Executive/Property',
-    #                     'Probability Existence',
-    #                     'Probability Existence/Property',
-    #                     'Probability Existence/Executive',
-    #                     'Probability Existence/Executive/Property',
-    #                 ]
-    #             case _:
-    #                 raise ValueError(output_mode)
-    #     writer.writerow(header)
-    #     label_encoding = output_mode.label_encoding
-    #     for index in range(len(predictions)):
-    #         row = [label_encoding[predictions[index]]]
-    #         if probabilities is not None:
-    #             row += [f'{x:.5f}' for x in probabilities[index]]
-    #         writer.writerow(row)

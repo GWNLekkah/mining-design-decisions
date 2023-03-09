@@ -7,8 +7,12 @@ import json
 import os
 import pathlib
 import shutil
+import zipfile
 
 from .config import conf
+from .database import DatabaseAPI
+
+MODEL_DIR = 'model'
 
 ##############################################################################
 ##############################################################################
@@ -53,7 +57,8 @@ def _get_and_copy_auxiliary_files(directory: str):
 ##############################################################################
 
 
-def save_single_model(directory: str, model):
+def save_single_model(model):
+    directory = MODEL_DIR
     _prepare_directory(directory)
     _store_model(directory, 0, model)
     metadata = {
@@ -64,12 +69,13 @@ def save_single_model(directory: str, model):
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
+    _upload_zip_data(directory)
 
 
-def save_stacking_model(directory: str,
-                        meta_model,
+def save_stacking_model(meta_model,
                         conversion_strategy: str,
                         *child_models):
+    directory = MODEL_DIR
     _prepare_directory(directory)
     _store_model(directory, 0, meta_model)
     for nr, model in enumerate(child_models, start=1):
@@ -86,9 +92,11 @@ def save_stacking_model(directory: str,
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
+    _upload_zip_data(directory)
 
 
-def save_voting_model(directory: str, *models):
+def save_voting_model(*models):
+    directory = MODEL_DIR
     _prepare_directory(directory)
     for nr, model in enumerate(models):
         _store_model(directory, nr, model)
@@ -100,6 +108,7 @@ def save_voting_model(directory: str, *models):
     } | _get_cli_settings()
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
+    _upload_zip_data(directory)
 
 
 def _store_model(directory, number, model):
@@ -124,20 +133,23 @@ def _convert_value(x):
         return str(x)
     return x
 
+
+def _upload_zip_data(path):
+    # with open(os.path.join(path, 'model.zip'), 'rb') as file:
+    #     return file.read()
+    shutil.make_archive('model.zip', 'zip', path)
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    db.store_model(conf.get('run.model-id'), path)
+
+
 ##############################################################################
 ##############################################################################
 # Model Loading
 ##############################################################################
 
 
-def load_single_model(path: str):
-    pass
-
-
-def load_stacking_model(path: str):
-    pass
-
-
-def load_voting_model(path: str):
-    pass
+def load_model_from_zip(data: bytes):
+    zip_file = zipfile.ZipFile(data, 'r')
+    zip_file.extractall(MODEL_DIR)
+    zip_file.close()
 

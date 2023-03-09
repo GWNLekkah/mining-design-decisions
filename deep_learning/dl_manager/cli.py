@@ -9,17 +9,19 @@ deep learning classifiers.
 ##############################################################################
 
 import collections
+import datetime
 import json
 import os.path
 import pathlib
 import getpass
 import typing
+import threading
 import warnings
 import shlex 
 
 import numpy
 
-from . import classifiers, kw_analyzer
+from . import classifiers, kw_analyzer, model_manager
 from .classifiers import HyperParameter
 
 from . import feature_generators
@@ -125,16 +127,9 @@ def build_app(*, api=False):
         'run.k-cross', 'run.quick-cross'
     )
     app.add_constraint(
-        lambda cross_project, test_study, test_project: not (
-                cross_project and (test_study != 'None' or test_project != 'None')
-        ),
-        'Cannot use --test-study or --test-project in --cross-project mode',
-        'run.cross-project', 'run.test-study', 'run.test-project'
-    )
-    app.add_constraint(
-        lambda do_save, path: (not do_save) or (do_save and path),
-        '--target-model-path must be given when storing a model.',
-        'run.store-model', 'run.target-model-path'
+        lambda do_save, model_id: (not do_save) or (do_save and model_id),
+        '--model-id must be given when storing a model.',
+        'run.store-model', 'run.model-id'
     )
     app.add_constraint(
         lambda do_save, cache_features: (not do_save) or (do_save and not cache_features),
@@ -142,20 +137,16 @@ def build_app(*, api=False):
         'run.store-model', 'run.cache-features'
     )
     app.add_constraint(
-        lambda do_save, k, cross_project, quick_cross, test_study, test_project:
+        lambda do_save, k, cross_project, quick_cross:
             (not do_save)
             or (k == 0
                 and not cross_project
-                and not quick_cross
-                and test_study == 'None'
-                and test_project == 'None'),
+                and not quick_cross),
         'Cannot run cross validation (or cross study) scheme when saving a model.',
         'run.store-model',
         'run.k-cross',
         'run.cross-project',
-        'run.quick-cross',
-        'run.test-study',
-        'run.test-project'
+        'run.quick-cross'
     )
     app.add_constraint(
         lambda do_analyze, _:
@@ -193,6 +184,7 @@ def build_app(*, api=False):
                           analysis.run_confusion_matrix_command)
     app.register_callback('run_analysis.compare-stats',
                           analysis.run_stat_command)
+    app.register_callback('train', run_training_session)
 
     if not api:
         app.register_callback('serve', run_api)
@@ -205,6 +197,8 @@ def build_app(*, api=False):
     app.register_setup_callback(setup_storage)
     app.register_setup_callback(issue_warnings)
     app.register_setup_callback(setup_resources)
+
+    conf.register('system.app', object, app)
 
     log.debug('Finished building app')
     return app
@@ -243,6 +237,8 @@ def setup_storage():
 def setup_resources():
     if conf.is_active('run.num-threads'):
         conf.clone('run.num-threads', 'system.resources.threads')
+    if conf.is_active('train.num-threads'):
+        conf.clone('train.num-threads', 'system.resources.threads')
     if conf.is_active('predict.num-threads'):
         conf.clone('predict.num-threads', 'system.resources.threads')
     if conf.is_active('generate-embedding.num-threads'):
@@ -262,21 +258,52 @@ def issue_warnings():
 def run_api():
     port = conf.get('serve.port')
     conf.reset()
+
     import uvicorn
     import fastapi
 
     app = fastapi.FastAPI()
 
+    api_lock = threading.Lock()
+
     @app.post('/invoke')
-    async def run_command(request: fastapi.Request):
-        params = await request.json()
-        log.info('Running pipeline with params', params)
-        result = invoke_pipeline_with_config(params)
-        if result is None:
-            return {}
-        return {'error': str(result)}
+    async def run_command(request: fastapi.Request, response: fastapi.Response):
+        if not api_lock.acquire(blocking=False):
+            response.status_code = 503  # Unavailable
+            return {'error': 'dl_manager is currently busy executing another command'}
+        try:
+            params = await request.json()
+            log.info('Running pipeline with params', params)
+            result = invoke_pipeline_with_config(params)
+            if result is None:
+                if conf.get('system.active-command') in {'run', 'train'}:
+                    return {'run-id': conf.get('system.training-start-time')}
+                return {}
+            return {'error': str(result)}
+        finally:
+            api_lock.release()
 
     uvicorn.run(app, port=port)
+
+
+def run_training_session():
+    config_id = conf.get('train.model-config')
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    settings = db.get_model_config(config_id)
+    settings |= {
+        'subcommand_name_0': 'run',
+        'num-threads': conf.get('system.resources.num-threads')
+    }
+    state = conf.get('system.app').execute_session(
+        settings,
+        retrieve_configs=['system.training-start-time']
+    )
+    conf.register(
+        'system.training-start-time',
+        str,
+        state['system.training-start-time']
+    )
+
 
 ##############################################################################
 ##############################################################################
@@ -516,7 +543,8 @@ def select_architectural_only(datasets, labels, binary_labels):
             vocab_size=old_dataset.vocab_size,
             weight_vector_length=old_dataset.weight_vector_length,
             binary_labels=old_dataset.binary_labels,
-            issue_keys=old_dataset.issue_keys
+            issue_keys=old_dataset.issue_keys,
+            ids=old_dataset.ids
         )
         new_datasets.append(new_dataset)
     #datasets = new_datasets
@@ -531,6 +559,8 @@ def select_architectural_only(datasets, labels, binary_labels):
 
 
 def run_classification_command():
+    conf.register('system.training-start-time', str, datetime.datetime.utcnow().isoformat())
+
     classifier = conf.get('run.classifier')
     input_mode = conf.get('run.input_mode')
     output_mode = conf.get('run.output_mode')
@@ -565,6 +595,7 @@ def run_classification_command():
                               training_data,
                               testing_data,
                               OutputMode.from_string(output_mode).label_encoding)
+        log.info(f'Model ID: {conf.get("system.training-start-time")}')
         return
 
     # 5) Invoke actual DL process
@@ -582,6 +613,7 @@ def run_classification_command():
                            OutputMode.from_string(output_mode).label_encoding,
                            training_data,
                            testing_data)
+    log.info(f'Model ID: {conf.get("system.training-start-time")}')
 
 
 def _get_model_factory(input_mode,
@@ -670,7 +702,13 @@ def _normalize_param_names(params):
 def run_prediction_command():
     # Step 1: Load model data
     data_query = conf.get('predict.data-query')
-    model: pathlib.Path = conf.get('predict.model')
+    model_id: str = conf.get('predict.model')
+    model_version = conf.get('predict.version')
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    if model_version == 'most-recent':
+        model_version = db.get_most_recent_model(model_id)
+    model_manager.load_model_from_zip(db.retrieve_model(model_id, model_version))
+    model = model_manager.MODEL_DIR
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
     output_mode = OutputMode.from_string(
@@ -705,10 +743,28 @@ def run_prediction_command():
     # Step 3: Load the model and get the predictions
     match model_metadata['model_type']:
         case 'single':
-            prediction.predict_simple_model(model, model_metadata, datasets, output_mode, ids)
+            prediction.predict_simple_model(model,
+                                            model_metadata,
+                                            datasets,
+                                            output_mode,
+                                            ids,
+                                            model_id,
+                                            model_version)
         case 'stacking':
-            prediction.predict_stacking_model(model, model_metadata, datasets, output_mode, ids)
+            prediction.predict_stacking_model(model,
+                                              model_metadata,
+                                              datasets,
+                                              output_mode,
+                                              ids,
+                                              model_id,
+                                              model_version)
         case 'voting':
-            prediction.predict_voting_model(model, model_metadata, datasets, output_mode, ids)
+            prediction.predict_voting_model(model,
+                                            model_metadata,
+                                            datasets,
+                                            output_mode,
+                                            ids,
+                                            model_id,
+                                            model_version)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')

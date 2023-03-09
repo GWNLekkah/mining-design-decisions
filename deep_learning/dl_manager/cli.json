@@ -294,8 +294,8 @@
           "style": "flag"
         },
         {
-          "name": "target-model-path",
-          "help": "Directory to store model to.",
+          "name": "model-id",
+          "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
           "style": "named",
           "type": "str",
           "default": ""
@@ -348,6 +348,36 @@
      ]
     },
     {
+      "name": "train",
+      "help": "Variant of the `run` command which loads a config from the database.",
+      "args": [
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
+          "style": "named",
+          "type": "str",
+          "default": "",
+          "required": true
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
+        }
+      ]
+    },
+    {
       "name": "predict",
       "help": "Use an existing classifier to make predictions on new data.",
       "args": [
@@ -356,10 +386,18 @@
           "alias": "m",
           "required": true,
           "style": "named",
-          "type": "class",
+          "type": "str",
           "options": [
             "pathlib.Path"
           ]
+        },
+        {
+          "name": "version",
+          "alias": "v",
+          "required": true,
+          "style": "named",
+          "type": "named",
+          "default": "most-recent"
         },
         {
           "name": "data-query",

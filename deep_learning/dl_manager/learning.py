@@ -10,13 +10,9 @@ and it works.
 # Imports
 ##############################################################################
 
-import datetime
 import gc
-import json
-import pathlib
 import random
 import statistics
-import time
 import warnings
 
 import numpy
@@ -27,6 +23,7 @@ import numpy as np
 
 from collections import Counter
 
+from .database import DatabaseAPI
 from .feature_generators.generator import OutputMode
 
 from . config import conf
@@ -102,7 +99,7 @@ def run_single(model_or_models,
         # Save model can only be true if not testing separately,
         # which means the loop only runs once.
         if conf.get('run.store-model'):
-            model_manager.save_single_model(conf.get('run.target-model-path'), trained_model)
+            model_manager.save_single_model(trained_model)
         dump_metrics([metrics_])
         comparator.add_result(metrics_)
     comparator.add_truth(test[1])
@@ -330,22 +327,24 @@ def upsample(features, labels):
 
 
 def dump_metrics(runs, filename_hint=None):
-    if conf.get('system.peregrine'):
-        data = pathlib.Path(conf.get('system.peregrine.data'))
-        directory = data / f'{conf.get("system.storage.file_prefix")}_results'
-    else:
-        directory = pathlib.Path('.')
-    if not directory.exists():
-        directory.mkdir(exist_ok=True)
-    if filename_hint is None:
-        filename_hint = ''
-    else:
-        filename_hint = '_' + filename_hint
-    filename = f'{conf.get("system.storage.file_prefix")}_run_results_{datetime.datetime.now().timestamp()}{filename_hint}.json'
-    with open(directory / filename, 'w') as file:
-        json.dump(runs, file)
-    with open(directory / f'{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
-        file.write(filename)
+    # if conf.get('system.peregrine'):
+    #     data = pathlib.Path(conf.get('system.peregrine.data'))
+    #     directory = data / f'{conf.get("system.storage.file_prefix")}_results'
+    # else:
+    #     directory = pathlib.Path('.')
+    # if not directory.exists():
+    #     directory.mkdir(exist_ok=True)
+    # if filename_hint is None:
+    #     filename_hint = ''
+    # else:
+    #     filename_hint = '_' + filename_hint
+    # filename = f'{conf.get("system.storage.file_prefix")}_run_results_{datetime.datetime.now().timestamp()}{filename_hint}.json'
+    # with open(directory / filename, 'w') as file:
+    #     json.dump(runs, file)
+    # with open(directory / f'{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
+    #     file.write(filename)
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    db.save_training_results(runs)
 
 ##############################################################################
 ##############################################################################
@@ -467,7 +466,6 @@ def run_stacking_ensemble(factory,
 
             if conf.get('run.store-model'):     # only ran in single-shot mode
                 model_manager.save_stacking_model(
-                    conf.get('run.target-model-path'),
                     input_conversion_method.to_json(),
                     epoch_model,
                     *trained_sub_models
@@ -483,7 +481,6 @@ def run_stacking_ensemble(factory,
 
             if conf.get('run.store-model'):
                 model_manager.save_voting_model(
-                    conf.get('run.target-model-path'),
                     *trained_sub_models
                 )
 
@@ -516,11 +513,13 @@ def run_voting_ensemble(factory,
     
 
 def _save_voting_data(data):
-    filename = f'voting_ensemble_{time.time()}.json'
-    with open(filename, 'w') as file:
-        json.dump(data, file)
-    with open('most_recent_run.txt', 'w') as file:
-        file.write(filename)
+    # filename = f'voting_ensemble_{time.time()}.json'
+    # with open(filename, 'w') as file:
+    #     json.dump(data, file)
+    # with open('most_recent_run.txt', 'w') as file:
+    #     file.write(filename)
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    db.save_training_results(data)
 
 
 def _get_voting_predictions(truth, predictions):

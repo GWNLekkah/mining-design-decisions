@@ -4,6 +4,7 @@
 ##############################################################################
 
 import collections
+import datetime
 import json
 import warnings
 
@@ -96,9 +97,14 @@ def _call_endpoint(endpoint, payload, verb):
             log.debug(f'Response payload: {response_payload}')
             return response_payload
         case 'POST':
-            requests.post(url, json=payload)
+            response = requests.post(url, json=payload)
+            response.raise_for_status()
         case _ as x:
             raise ValueError(f'Invalid verb: {x}')
+
+
+def get_model_config(config_id: str):
+    return _call_endpoint(f'models/{config_id}', {}, 'GET')['config']
 
 
 def select_issue_ids(query) -> list[str]:
@@ -133,16 +139,49 @@ def add_tag_to_issues(ids: list[str], tag: str):
     )
 
 
-def save_predictions(model_name: str,
+def save_predictions(model_id: str,
+                     model_version: str,
                      predictions_by_id: dict[str, dict[str, typing.Any]]):
     _call_endpoint(
-        'save-predictions',
+        f'models/{model_id}/versions/{model_version}/predictions',
         {
-            'model-id': model_name,
             'predictions': predictions_by_id
         },
         'POST'
     )
+
+
+def store_model(model_id: str, time: str, filename: str) -> str:
+    # Special endpoint, takes form data
+    endpoint = f'models/{model_id}/versions'
+    url = f'{conf.get("system.storage.database-url")}/{endpoint}'
+    log.info(f'Calling endpoint {endpoint}')
+    response = requests.post(
+        url,
+        files={
+            'time': (None, time),
+            'file': (filename, open(filename, 'rb'))
+        }
+    )
+    return response.json()['file-id']
+
+
+def get_most_recent_model(model_id: str) -> str:
+    versions = _call_endpoint(f'models/{model_id}/versions', {}, 'GET')['versions']
+    return max(versions, key=lambda x: datetime.datetime.fromisoformat(x['time']).timestamp())
+
+
+def retrieve_model(model_id: str, version_id: str) -> bytes:
+    endpoint = f'models/{model_id}/versions/{version_id}'
+    url = f'{conf.get("system.storage.database-url")}/{endpoint}'
+    log.info(f'Calling endpoint {endpoint}')
+    response = requests.get(url)
+    return response.content
+
+
+def save_model_results(model_id: str, version_id: str, results):
+    endpoint = f'models/{model_id}/performances/{version_id}'
+    _call_endpoint(endpoint, results, 'POST')
 
 
 ##############################################################################
@@ -155,6 +194,25 @@ class DatabaseAPI:
 
     def __init__(self):
         self.__cache = collections.defaultdict(dict)
+
+    def get_model_config(self, config_id: str):
+        get_model_config(config_id)
+
+    def store_model(self, model_id: str, filename: str) -> str:
+        return store_model(model_id, conf.get('system.training-start-time'), filename)
+
+    def get_most_recent_model(self, model_id: str) -> str:
+        return get_most_recent_model(model_id)
+
+    def retrieve_model(self, model_id: str, version_id: str):
+        return retrieve_model(model_id, version_id)
+
+    def save_training_results(self, results):
+        save_model_results(
+            conf.get('run.model-id'),
+            conf.get('system.training-start-time'),
+            results
+        )
 
     def select_issues(self, query):
         key = json.dumps(query)
@@ -200,5 +258,6 @@ class DatabaseAPI:
 
     def save_predictions(self,
                          model_name: str,
+                         model_version: str,
                          predictions_by_id: dict[str, dict[str, typing.Any]]):
-        save_predictions(model_name, predictions_by_id)
+        save_predictions(model_name, model_version, predictions_by_id)

@@ -15,6 +15,7 @@ import abc
 
 import argparse
 import collections
+import contextlib
 import importlib
 import json
 
@@ -122,6 +123,16 @@ class Config:
                 and self.get('system.active-command') == prefix
         )
 
+    @contextlib.contextmanager
+    def session(self):
+        old_state = (self._namespace.copy(), self._types.copy())
+        self.reset()
+        try:
+            yield
+        finally:
+            self.reset()
+            self._namespace, self._types = old_state
+
 
 conf = Config()
 
@@ -190,6 +201,14 @@ class _App(abc.ABC):
         for callback in self.__setup_callbacks:
             callback()
         self.__callbacks[active_qualname]()
+
+    def execute_session(self, raw_args, *, retrieve_configs=None):
+        if retrieve_configs is None:
+            retrieve_configs = []
+        with conf.session():
+            self.parse_and_dispatch(raw_args)
+            state = {key: conf.get(key) for key in retrieve_configs}
+        return state
 
     @staticmethod
     def __get_active_command(args):
