@@ -20,6 +20,7 @@ import warnings
 import shlex 
 
 import numpy
+import requests
 
 from . import classifiers, kw_analyzer, model_manager
 from .classifiers import HyperParameter
@@ -197,8 +198,10 @@ def build_app(*, api=False):
     app.register_setup_callback(setup_storage)
     app.register_setup_callback(issue_warnings)
     app.register_setup_callback(setup_resources)
+    app.register_setup_callback(setup_security)
 
     conf.register('system.app', object, app)
+    conf.register('system.is-cli', bool, not api)
 
     log.debug('Finished building app')
     return app
@@ -247,6 +250,34 @@ def setup_resources():
         log.info(f'Available threads for preprocessing: {conf.get("system.resources.threads")}')
 
 
+def setup_security():
+    conf.register(
+        'system.security.allow-self-signed',
+        bool,
+        os.environ.get('DL_MANAGER_ALLOW_SELF_SIGNED_CERTIFICATE', False)
+    )
+    conf.register(
+        'system.security.certificate-authority',
+        object,
+        os.environ.get('DL_MANAGER_LOCAL_PUBLIC_KEY', True)
+    )
+    if conf.get('system.security.certificate-authority') is not True:
+        if not conf.get('system.security.allow-self-signed'):
+            raise ValueError('Cannot use self-signed certificates')
+
+    if not conf.get('system.is-cli'):
+        if conf.is_active('train.keyfile'):
+            conf.clone('train.keyfile', 'system.security.ssl-keyfile')
+        if conf.is_active('train.certfile'):
+            conf.clone('train.certfile', 'system.security.ssl-certfile')
+        db: DatabaseAPI = conf.get('system.storage.database-api')
+        conf.register('system.security.db-token',
+                      object,
+                      db.get_token(os.environ['DL_MANAGER_USERNAME'], os.environ['DL_MANAGER_PASSWORD']))
+    else:
+        conf.register('system.security.db-token', object, None)
+
+
 def issue_warnings():
     if conf.is_active('run.output-mode'):
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))
@@ -271,10 +302,13 @@ def run_api():
         if not api_lock.acquire(blocking=False):
             response.status_code = 503  # Unavailable
             return {'error': 'dl_manager is currently busy executing another command'}
+        payload = await request.json()
+        conf.set('system.security.db-token', payload['auth']['token'])
         try:
-            params = await request.json()
+            params = payload['config']
             log.info('Running pipeline with params', params)
             result = invoke_pipeline_with_config(params)
+            conf.set('system.security.db-token', None)
             if result is None:
                 if conf.get('system.active-command') in {'run', 'train'}:
                     return {'run-id': conf.get('system.training-start-time')}
@@ -283,7 +317,12 @@ def run_api():
         finally:
             api_lock.release()
 
-    uvicorn.run(app, port=port)
+    uvicorn.run(
+        app,
+        port=port,
+        ssl_keyfile=conf.get('system.security.ssl-keyfile'),
+        ssl_certfile=conf.get('system.security.ssl-certfile')
+    )
 
 
 def run_training_session():
@@ -292,7 +331,8 @@ def run_training_session():
     settings = db.get_model_config(config_id)
     settings |= {
         'subcommand_name_0': 'run',
-        'num-threads': conf.get('system.resources.num-threads')
+        'num-threads': conf.get('system.resources.num-threads'),
+        'database-url': conf.get('system.storage.database-url')
     }
     state = conf.get('system.app').execute_session(
         settings,

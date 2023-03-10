@@ -92,15 +92,34 @@ def _call_endpoint(endpoint, payload, verb):
     log.debug(f'Request payload: {payload}')
     match verb:
         case 'GET':
-            response = requests.get(url, json=payload)
+            response = requests.get(url,
+                                    json=payload,
+                                    verify=conf.get('system.security.local-certificate-authority'))
             response_payload = response.json()
             log.debug(f'Response payload: {response_payload}')
             return response_payload
         case 'POST':
-            response = requests.post(url, json=payload)
+            response = requests.post(url,
+                                     json=payload,
+                                     verify=conf.get('system.security.local-certificate-authority'))
             response.raise_for_status()
         case _ as x:
             raise ValueError(f'Invalid verb: {x}')
+
+
+def get_token(username, password):
+    endpoint = f'token'
+    url = f'{conf.get("system.storage.database-url")}/{endpoint}'
+    log.info(f'Calling endpoint {endpoint}')
+    response = requests.post(
+        url,
+        files={
+            'username': (None, username),
+            'password': (None, password)
+        },
+        verify=conf.get('system.security.local-certificate-authority')
+    )
+    return response.json()['token']
 
 
 def get_model_config(config_id: str):
@@ -161,7 +180,8 @@ def store_model(model_id: str, time: str, filename: str) -> str:
         files={
             'time': (None, time),
             'file': (filename, open(filename, 'rb'))
-        }
+        },
+        verify=conf.get('system.security.local-certificate-authority')
     )
     return response.json()['file-id']
 
@@ -175,7 +195,7 @@ def retrieve_model(model_id: str, version_id: str) -> bytes:
     endpoint = f'models/{model_id}/versions/{version_id}'
     url = f'{conf.get("system.storage.database-url")}/{endpoint}'
     log.info(f'Calling endpoint {endpoint}')
-    response = requests.get(url)
+    response = requests.get(url, verify=conf.get('system.security.local-certificate-authority'))
     return response.content
 
 
@@ -194,6 +214,9 @@ class DatabaseAPI:
 
     def __init__(self):
         self.__cache = collections.defaultdict(dict)
+
+    def get_token(self, username, password):
+        return get_token(username, password)
 
     def get_model_config(self, config_id: str):
         get_model_config(config_id)

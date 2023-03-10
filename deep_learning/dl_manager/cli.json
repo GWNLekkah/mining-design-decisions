@@ -541,6 +541,26 @@
           "nargs": "1",
           "style": "named",
           "help": "Port to bind to"
+        },
+        {
+          "name": "keyfile",
+          "help": "SLL Keyfile",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ],
+          "style": "named",
+          "required": true
+        },
+        {
+          "name": "certfile",
+          "help": "SSL cerfile",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ],
+          "style": "named",
+          "required": true
         }
       ]
     }
