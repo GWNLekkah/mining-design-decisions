@@ -101,7 +101,10 @@ def _call_endpoint(endpoint, payload, verb):
         case 'POST':
             response = requests.post(url,
                                      json=payload,
-                                     verify=conf.get('system.security.local-certificate-authority'))
+                                     verify=conf.get('system.security.local-certificate-authority'),
+                                     headers={
+                                         'Authorization': 'Bearer ' + conf.get('system.security.db-token')
+                                     })
             response.raise_for_status()
         case _ as x:
             raise ValueError(f'Invalid verb: {x}')
@@ -181,7 +184,10 @@ def store_model(model_id: str, time: str, filename: str) -> str:
             'time': (None, time),
             'file': (filename, open(filename, 'rb'))
         },
-        verify=conf.get('system.security.local-certificate-authority')
+        verify=conf.get('system.security.local-certificate-authority'),
+        headers={
+            'Authorization': 'Bearer ' + conf.get('system.security.db-token')
+        }
     )
     return response.json()['file-id']
 
