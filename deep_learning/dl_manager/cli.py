@@ -83,7 +83,10 @@ def build_app(*, api=False):
         app = CLIApp(location)
     else:
         app = APIApp(location)
+    setup_app_constraints(app, api=api)
 
+
+def setup_app_constraints(app, *, api=False):
     def add_eq_len_constraint(p, q):
         app.add_constraint(lambda x, y: len(x) == len(y),
                            'Argument lists must have equal length.',
@@ -328,6 +331,7 @@ def run_api():
                 copied = APIApp.execute_session(
                     get_arg_spec(),
                     params,
+                    app_initializer=setup_app_constraints,
                     with_config=cfg,
                     retrieve_configs=['system.training-start-time']
                 )

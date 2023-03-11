@@ -203,13 +203,21 @@ class _App(abc.ABC):
         self.__callbacks[active_qualname]()
 
     @classmethod
-    def execute_session(cls, spec_file, raw_args, *, retrieve_configs=None, with_config=None):
+    def execute_session(cls,
+                        spec_file,
+                        raw_args,
+                        *,
+                        retrieve_configs=None,
+                        with_config=None,
+                        app_initializer=None):
         if retrieve_configs is None:
             retrieve_configs = []
         if with_config is None:
             with_config = {}
         with conf.session():
             self = cls(spec_file)
+            if app_initializer is not None:
+                app_initializer(self)
             for key, (tp, value) in with_config.items():
                 conf.register(key, tp, value)
             self.parse_and_dispatch(raw_args)
