@@ -17,7 +17,8 @@ import getpass
 import typing
 import threading
 import warnings
-import shlex 
+import shlex
+import traceback
 
 import numpy
 import requests
@@ -84,6 +85,7 @@ def build_app(*, api=False):
     else:
         app = APIApp(location)
     setup_app_constraints(app, api=api)
+    return app
 
 
 def setup_app_constraints(app, *, api=False):
@@ -235,6 +237,8 @@ def setup_storage():
     # Setup database
     if conf.is_active('run.database-url'):
         conf.clone('run.database-url', 'system.storage.database-url')
+    if conf.is_active('train.database-url'):
+        conf.clone('train.database-url', 'system.storage.database-url')
     if conf.is_active('predict.database-url'):
         conf.clone('predict.database-url', 'system.storage.database-url')
     if conf.is_active('generate-embedding.database-url'):
@@ -268,6 +272,7 @@ def setup_security():
         object,
         os.environ.get('DL_MANAGER_LOCAL_PUBLIC_KEY', True)
     )
+    conf.set('system.security.certificate-authority', False)
     if conf.get('system.security.certificate-authority') is not True:
         if not conf.get('system.security.allow-self-signed'):
             raise ValueError('Cannot use self-signed certificates')
@@ -336,6 +341,8 @@ def run_api():
                     retrieve_configs=['system.training-start-time']
                 )
             except Exception as e:
+                log.warning(f'An exception occurred during user command: {e}')
+                log.warning(' '.join(traceback.format_exception(e)))
                 copied = None   # Shut up, PyCharm
                 result = e
             else:
@@ -359,16 +366,18 @@ def run_api():
 
 
 def run_training_session():
-    config_id = conf.get('train.model-config')
+    config_id = conf.get('train.model-id')
     db: DatabaseAPI = conf.get('system.storage.database-api')
     settings = db.get_model_config(config_id)
     settings |= {
         'subcommand_name_0': 'run',
-        'num-threads': conf.get('system.resources.num-threads'),
+        'num-threads': conf.get('system.resources.threads'),
         'database-url': conf.get('system.storage.database-url')
     }
-    state = conf.get('system.app').execute_session(
+    state = APIApp.execute_session(
+        get_arg_spec(),
         settings,
+        app_initializer=setup_app_constraints,
         retrieve_configs=['system.training-start-time']
     )
     conf.register(

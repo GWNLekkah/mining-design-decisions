@@ -94,14 +94,14 @@ def _call_endpoint(endpoint, payload, verb):
         case 'GET':
             response = requests.get(url,
                                     json=payload,
-                                    verify=conf.get('system.security.local-certificate-authority'))
+                                    verify=conf.get('system.security.certificate-authority'))
             response_payload = response.json()
             log.debug(f'Response payload: {response_payload}')
             return response_payload
         case 'POST':
             response = requests.post(url,
                                      json=payload,
-                                     verify=conf.get('system.security.local-certificate-authority'),
+                                     verify=conf.get('system.security.certificate-authority'),
                                      headers={
                                          'Authorization': 'Bearer ' + conf.get('system.security.db-token')
                                      })
@@ -120,7 +120,7 @@ def get_token(username, password):
             'username': (None, username),
             'password': (None, password)
         },
-        verify=conf.get('system.security.local-certificate-authority')
+        verify=conf.get('system.security.certificate-authority')
     )
     return response.json()['token']
 
@@ -184,7 +184,7 @@ def store_model(model_id: str, time: str, filename: str) -> str:
             'time': (None, time),
             'file': (filename, open(filename, 'rb'))
         },
-        verify=conf.get('system.security.local-certificate-authority'),
+        verify=conf.get('system.security.certificate-authority'),
         headers={
             'Authorization': 'Bearer ' + conf.get('system.security.db-token')
         }
@@ -201,7 +201,7 @@ def retrieve_model(model_id: str, version_id: str) -> bytes:
     endpoint = f'models/{model_id}/versions/{version_id}'
     url = f'{conf.get("system.storage.database-url")}/{endpoint}'
     log.info(f'Calling endpoint {endpoint}')
-    response = requests.get(url, verify=conf.get('system.security.local-certificate-authority'))
+    response = requests.get(url, verify=conf.get('system.security.certificate-authority'))
     return response.content
 
 
@@ -225,7 +225,7 @@ class DatabaseAPI:
         return get_token(username, password)
 
     def get_model_config(self, config_id: str):
-        get_model_config(config_id)
+        return get_model_config(config_id)
 
     def store_model(self, model_id: str, filename: str) -> str:
         return store_model(model_id, conf.get('system.training-start-time'), filename)
