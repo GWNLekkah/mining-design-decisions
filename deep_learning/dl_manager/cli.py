@@ -329,7 +329,7 @@ def run_api():
             #web_app: APIApp = build_app(api=True)
             cfg = {
                 'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
-                'system.security.cert-keyfile': (str, conf.get('system.security.ssl-certfile')),
+                'system.security.ssl-certfile': (str, conf.get('system.security.ssl-certfile')),
                 'system.security.db-token': (object, conf.get('system.security.db-token'))
             }
             try:
@@ -377,7 +377,7 @@ def run_training_session():
     }
     cfg = {
         'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
-        'system.security.cert-keyfile': (str, conf.get('system.security.ssl-certfile')),
+        'system.security.ssl-certfile': (str, conf.get('system.security.ssl-certfile')),
         'system.security.db-token': (object, conf.get('system.security.db-token'))
     }
     state = APIApp.execute_session(
@@ -385,7 +385,7 @@ def run_training_session():
         settings,
         app_initializer=setup_app_constraints,
         retrieve_configs=['system.training-start-time'],
-        with_config=cfg 
+        with_config=cfg
     )
     conf.register(
         'system.training-start-time',
