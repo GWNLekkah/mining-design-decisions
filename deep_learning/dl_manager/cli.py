@@ -265,16 +265,23 @@ def setup_security():
         if not conf.get('system.security.allow-self-signed'):
             raise ValueError('Cannot use self-signed certificates')
 
-    if not conf.get('system.is-cli'):
-        if conf.is_active('train.keyfile'):
-            conf.clone('train.keyfile', 'system.security.ssl-keyfile')
-        if conf.is_active('train.certfile'):
-            conf.clone('train.certfile', 'system.security.ssl-certfile')
-        db: DatabaseAPI = conf.get('system.storage.database-api')
-        conf.register('system.security.db-token',
-                      object,
-                      db.get_token(os.environ['DL_MANAGER_USERNAME'], os.environ['DL_MANAGER_PASSWORD']))
-    else:
+    # if not conf.get('system.is-cli'):
+    #     if conf.is_active('train.keyfile'):
+    #         conf.clone('train.keyfile', 'system.security.ssl-keyfile')
+    #     if conf.is_active('train.certfile'):
+    #         conf.clone('train.certfile', 'system.security.ssl-certfile')
+    #     db: DatabaseAPI = conf.get('system.storage.database-api')
+    #     conf.register('system.security.db-token',
+    #                   object,
+    #                   db.get_token(os.environ['DL_MANAGER_USERNAME'], os.environ['DL_MANAGER_PASSWORD']))
+    # else:
+    #     conf.register('system.security.db-token', object, None)
+    log.info(f'Running active command: {conf.get("system.active-command")}')
+    if conf.get('system.active-command') == 'serve':
+        conf.clone('serve.keyfile', 'system.security.ssl-keyfile')
+        conf.clone('serve.certfile', 'system.security.ssl-certfile')
+        log.info(f'Key file: {conf.get("system.security.ssl-keyfile")}')
+    if not conf.is_registered('system.security.db-token'):
         conf.register('system.security.db-token', object, None)
 
 
@@ -288,7 +295,6 @@ def issue_warnings():
 
 def run_api():
     port = conf.get('serve.port')
-    conf.reset()
 
     import uvicorn
     import fastapi
@@ -307,11 +313,28 @@ def run_api():
         try:
             params = payload['config']
             log.info('Running pipeline with params', params)
-            result = invoke_pipeline_with_config(params)
+            #result = invoke_pipeline_with_config(params)
+            web_app: APIApp = conf.get('system.app')
+            cfg = {
+                'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
+                'system.security.cert-keyfile': (str, conf.get('system.security.ssl-certfile')),
+                'system.security.db-token': (object, conf.get('system.security.db-token'))
+            }
+            try:
+                copied = web_app.execute_session(
+                    params,
+                    with_config=cfg,
+                    retrieve_configs=['system.training-start-time']
+                )
+            except Exception as e:
+                copied = None   # Shut up, PyCharm
+                result = e
+            else:
+                result = None
             conf.set('system.security.db-token', None)
             if result is None:
                 if conf.get('system.active-command') in {'run', 'train'}:
-                    return {'run-id': conf.get('system.training-start-time')}
+                    return {'run-id': copied['system.training-start-time']}
                 return {}
             return {'error': str(result)}
         finally:

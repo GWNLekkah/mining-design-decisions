@@ -202,10 +202,14 @@ class _App(abc.ABC):
             callback()
         self.__callbacks[active_qualname]()
 
-    def execute_session(self, raw_args, *, retrieve_configs=None):
+    def execute_session(self, raw_args, *, retrieve_configs=None, with_config=None):
         if retrieve_configs is None:
             retrieve_configs = []
+        if with_config is None:
+            with_config = {}
         with conf.session():
+            for key, (tp, value) in with_config.items():
+                conf.register(key, tp, value)
             self.parse_and_dispatch(raw_args)
             state = {key: conf.get(key) for key in retrieve_configs}
         return state

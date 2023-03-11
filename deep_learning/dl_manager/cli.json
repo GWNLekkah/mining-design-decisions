@@ -396,7 +396,7 @@
           "alias": "v",
           "required": true,
           "style": "named",
-          "type": "named",
+          "type": "str",
           "default": "most-recent"
         },
         {
