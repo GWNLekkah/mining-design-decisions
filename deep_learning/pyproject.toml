@@ -7,7 +7,7 @@
     include = ["dl_manager*"]
 
 [project]
-    name = "mining_design_decisions"
+    name = "dl_manager"
     version = "0.3.0"
     authors = [
         {name = "Jesse Maarleveld"},
