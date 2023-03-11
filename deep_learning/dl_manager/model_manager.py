@@ -137,9 +137,9 @@ def _convert_value(x):
 def _upload_zip_data(path):
     # with open(os.path.join(path, 'model.zip'), 'rb') as file:
     #     return file.read()
-    shutil.make_archive('model.zip', 'zip', path)
+    filename = shutil.make_archive('model', 'zip', path)
     db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.store_model(conf.get('run.model-id'), os.path.join(path, 'model.zip'))
+    db.store_model(conf.get('run.model-id'), filename)
 
 
 ##############################################################################
