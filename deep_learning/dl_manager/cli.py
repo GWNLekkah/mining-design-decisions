@@ -342,6 +342,7 @@ def run_api():
 
     uvicorn.run(
         app,
+        host='0.0.0.0',
         port=port,
         ssl_keyfile=conf.get('system.security.ssl-keyfile'),
         ssl_certfile=conf.get('system.security.ssl-certfile')
