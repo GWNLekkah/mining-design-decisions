@@ -372,7 +372,8 @@ def run_training_session():
     settings |= {
         'subcommand_name_0': 'run',
         'num-threads': conf.get('system.resources.threads'),
-        'database-url': conf.get('system.storage.database-url')
+        'database-url': conf.get('system.storage.database-url'),
+        'model-id': conf.get('train.model-id')
     }
     state = APIApp.execute_session(
         get_arg_spec(),
