@@ -1,0 +1,8 @@
+version: '3.1'
+services:
+  dl-manager:
+    container_name: dl-manager
+    build: ./
+    image: dl-manager
+    ports:
+      - 9011:9011
