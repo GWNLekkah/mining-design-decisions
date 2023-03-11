@@ -314,7 +314,7 @@ def run_api():
             params = payload['config']
             log.info('Running pipeline with params', params)
             #result = invoke_pipeline_with_config(params)
-            web_app: APIApp = conf.get('system.app')
+            web_app: APIApp = build_app(api=True)
             cfg = {
                 'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
                 'system.security.cert-keyfile': (str, conf.get('system.security.ssl-certfile')),
