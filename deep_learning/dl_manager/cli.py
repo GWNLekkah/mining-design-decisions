@@ -349,7 +349,7 @@ def run_api():
                 result = None
             conf.set('system.security.db-token', None)
             if result is None:
-                if conf.get('system.active-command') in {'run', 'train'}:
+                if params['subcommand_name_0'] in {'run', 'train'}:
                     return {'run-id': copied['system.training-start-time']}
                 return {}
             return {'error': str(result)}
@@ -797,7 +797,7 @@ def run_prediction_command():
     if model_version == 'most-recent':
         model_version = db.get_most_recent_model(model_id)
     model_manager.load_model_from_zip(db.retrieve_model(model_id, model_version))
-    model = model_manager.MODEL_DIR
+    model = pathlib.Path(model_manager.MODEL_DIR)
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
     output_mode = OutputMode.from_string(

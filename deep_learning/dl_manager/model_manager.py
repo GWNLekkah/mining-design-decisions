@@ -8,6 +8,7 @@ import os
 import pathlib
 import shutil
 import zipfile
+import io
 
 from .config import conf
 from .database import DatabaseAPI
@@ -21,12 +22,9 @@ MODEL_DIR = 'model'
 
 
 def _prepare_directory(path: str):
-    if not os.path.exists(path):
-        os.makedirs(path, exist_ok=True)
-    if len(os.listdir(path)) != 0:
-        raise RuntimeError(
-            f'Cannot store model in {path}: directory is not empty.'
-        )
+    if os.path.exists(path):
+        shutil.rmtree(path)
+    os.makedirs(path, exist_ok=True)
 
 
 def _get_and_copy_feature_generators(directory: str):
@@ -149,7 +147,7 @@ def _upload_zip_data(path):
 
 
 def load_model_from_zip(data: bytes):
-    zip_file = zipfile.ZipFile(data, 'r')
+    zip_file = zipfile.ZipFile(io.BytesIO(data), 'r')
     zip_file.extractall(MODEL_DIR)
     zip_file.close()
 

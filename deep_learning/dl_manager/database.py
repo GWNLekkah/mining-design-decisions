@@ -189,12 +189,12 @@ def store_model(model_id: str, time: str, filename: str) -> str:
             'Authorization': 'Bearer ' + conf.get('system.security.db-token')
         }
     )
-    return response.json()['file-id']
+    return response.json()['version-id']
 
 
 def get_most_recent_model(model_id: str) -> str:
     versions = _call_endpoint(f'models/{model_id}/versions', {}, 'GET')['versions']
-    return max(versions, key=lambda x: datetime.datetime.fromisoformat(x['time']).timestamp())
+    return max(versions, key=lambda x: datetime.datetime.fromisoformat(x['time']).timestamp())['id']
 
 
 def retrieve_model(model_id: str, version_id: str) -> bytes:
@@ -206,8 +206,9 @@ def retrieve_model(model_id: str, version_id: str) -> bytes:
 
 
 def save_model_results(model_id: str, version_id: str, results):
-    endpoint = f'models/{model_id}/performances/{version_id}'
-    _call_endpoint(endpoint, results, 'POST')
+    endpoint = f'models/{model_id}/performances'
+    payload = {'time': version_id, 'performance': results}
+    _call_endpoint(endpoint, payload, 'POST')
 
 
 ##############################################################################

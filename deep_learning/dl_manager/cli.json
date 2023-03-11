@@ -386,10 +386,7 @@
           "alias": "m",
           "required": true,
           "style": "named",
-          "type": "str",
-          "options": [
-            "pathlib.Path"
-          ]
+          "type": "str"
         },
         {
           "name": "version",
