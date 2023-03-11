@@ -71,14 +71,18 @@ def invoke_pipeline_with_config(args: dict) -> None | Exception:
         return e
 
 
+def get_arg_spec():
+    location = os.path.split(__file__)[0]
+    return os.path.join(location, 'cli.json')
+
 
 def build_app(*, api=False):
-    location = os.path.split(__file__)[0]
+    location = get_arg_spec()
     log.debug(f'Building CLI app from file {location}')
     if not api:
-        app = CLIApp(os.path.join(location, 'cli.json'))
+        app = CLIApp(location)
     else:
-        app = APIApp(os.path.join(location, 'cli.json'))
+        app = APIApp(location)
 
     def add_eq_len_constraint(p, q):
         app.add_constraint(lambda x, y: len(x) == len(y),
@@ -314,14 +318,15 @@ def run_api():
             params = payload['config']
             log.info('Running pipeline with params', params)
             #result = invoke_pipeline_with_config(params)
-            web_app: APIApp = build_app(api=True)
+            #web_app: APIApp = build_app(api=True)
             cfg = {
                 'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
                 'system.security.cert-keyfile': (str, conf.get('system.security.ssl-certfile')),
                 'system.security.db-token': (object, conf.get('system.security.db-token'))
             }
             try:
-                copied = web_app.execute_session(
+                copied = APIApp.execute_session(
+                    get_arg_spec(),
                     params,
                     with_config=cfg,
                     retrieve_configs=['system.training-start-time']
