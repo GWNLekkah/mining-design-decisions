@@ -333,12 +333,16 @@ def run_api():
                 'system.security.db-token': (object, conf.get('system.security.db-token'))
             }
             try:
+                is_training = params['subcommand_name_0'] in {'train', 'run'}
+            except KeyError:
+                raise ValueError('parameter `subcommand_name_0` not given')
+            try:
                 copied = APIApp.execute_session(
                     get_arg_spec(),
                     params,
                     app_initializer=setup_app_constraints,
                     with_config=cfg,
-                    retrieve_configs=['system.training-start-time']
+                    retrieve_configs=['system.training-start-time'] if is_training else []
                 )
             except Exception as e:
                 log.warning(f'An exception occurred during user command: {e}')
@@ -349,7 +353,7 @@ def run_api():
                 result = None
             conf.set('system.security.db-token', None)
             if result is None:
-                if params['subcommand_name_0'] in {'run', 'train'}:
+                if is_training:
                     return {'run-id': copied['system.training-start-time']}
                 return {}
             return {'error': str(result)}
