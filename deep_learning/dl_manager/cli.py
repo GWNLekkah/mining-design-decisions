@@ -375,11 +375,17 @@ def run_training_session():
         'database-url': conf.get('system.storage.database-url'),
         'model-id': conf.get('train.model-id')
     }
+    cfg = {
+        'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
+        'system.security.cert-keyfile': (str, conf.get('system.security.ssl-certfile')),
+        'system.security.db-token': (object, conf.get('system.security.db-token'))
+    }
     state = APIApp.execute_session(
         get_arg_spec(),
         settings,
         app_initializer=setup_app_constraints,
-        retrieve_configs=['system.training-start-time']
+        retrieve_configs=['system.training-start-time'],
+        with_config=cfg 
     )
     conf.register(
         'system.training-start-time',
