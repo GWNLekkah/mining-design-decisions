@@ -9,3 +9,11 @@ services:
     environment:
       - DL_MANAGER_LOCAL_PUBLIC_KEY=server.crt
       - DL_MANAGER_ALLOW_SELF_SIGNED_CERTIFICATE=TRUE
+
+    deploy:
+      resources:
+        reservations:
+          devices:
+            - driver: "nvidia"
+              capabilities:
+                - "gpu"
