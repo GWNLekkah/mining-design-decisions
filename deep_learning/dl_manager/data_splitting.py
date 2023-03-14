@@ -133,6 +133,7 @@ class DeepLearningData:
         return DeepLearningData(
             self.labels[indices],
             self.issue_keys[indices],
+            self.generators,
             *(
                 self.sample_from(f, indices, g)
                 for f, g in zip(self.features, self.generators, strict=True)
