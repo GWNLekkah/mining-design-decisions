@@ -20,7 +20,7 @@ from .config import conf
 ##############################################################################
 
 
-class DeepLearningData(abc.ABC):
+class DeepLearningData:
 
     _NAIVE_SPLITTABLE = {
         'BOWFrequency',
@@ -50,14 +50,9 @@ class DeepLearningData(abc.ABC):
             raise NotImplementedError
         raise ValueError(f'Cannot prepare features from generator {g}')
 
-    @abc.abstractmethod
-    def initialize_features(self, *features):
-        self.features = features
-
     def to_dataset_and_keys(self):
         return self.to_dataset(), self.issue_keys
 
-    @abc.abstractmethod
     def to_dataset(self):
         """Get a dataset which can be readily passed to a TensorFlow model.
         """
