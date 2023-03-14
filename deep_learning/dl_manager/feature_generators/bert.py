@@ -1,5 +1,6 @@
 from ..classifiers import InputEncoding
 from .word2vec import AbstractFeatureGenerator, ParameterSpec
+from transformers import AutoTokenizer
 
 
 class Bert(AbstractFeatureGenerator):
@@ -11,15 +12,17 @@ class Bert(AbstractFeatureGenerator):
                          tokenized_issues: list[list[str]],
                          metadata,
                          args: dict[str, str]):
-        features = []
-        for tokenized_issue in tokenized_issues:
-            features.append(tokenized_issue[0])
-
-        if self.pretrained is None:
-            self.save_pretrained({})
+        tokenizer = AutoTokenizer.from_pretrained('bert-base-uncased')
+        tokens = tokenizer(
+            [' '.join(issue) for issue in tokenized_issues],
+            padding=True,
+            max_length=512,
+            truncation=True,
+            return_tensors='np'
+        ).data
 
         return {
-            'features': features,
+            'features': tokens,
             'feature_shape': None
         }
 

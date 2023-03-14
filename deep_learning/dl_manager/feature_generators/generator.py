@@ -11,7 +11,6 @@ import enum
 import hashlib
 import itertools
 import json
-import pathlib
 import random
 import typing
 import warnings
@@ -28,6 +27,7 @@ from .util import ontology
 from ..config import conf
 from ..logger import get_logger, timer
 from ..database import DatabaseAPI
+from ..data_manager import Dataset
 
 
 log = get_logger('Base Feature Generator')
@@ -431,7 +431,7 @@ class AbstractFeatureGenerator(abc.ABC):
 
     def generate_features(self,
                           query,
-                          target_filename: pathlib.Path):
+                          output_mode: str):
         """Generate features from the data in the given source file,
         and store the results in the given target file.
         """
@@ -481,9 +481,17 @@ class AbstractFeatureGenerator(abc.ABC):
         elif 'original' in output:
             del output['original']
 
-        log.info('Saving features')
-        with open(target_filename, 'w') as file:
-            json.dump(output, file)
+        return Dataset(
+            features=output['features'],
+            labels=output['labels'][output_mode.lower()],
+            shape=output['feature_shape'],
+            embedding_weights=output.get('weights', None),
+            vocab_size=output.get('vocab_size', None),
+            weight_vector_length=output.get('word_vector_length', None),
+            binary_labels=output['labels']['detection'],
+            issue_keys=output['labels']['issue_keys'],
+            ids=output['labels']['issue_ids']
+        )
 
     def preprocess(self, issues):
         log.info('Preprocessing Features')

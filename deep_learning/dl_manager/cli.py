@@ -21,7 +21,6 @@ import shlex
 import traceback
 
 import numpy
-import requests
 
 from . import classifiers, kw_analyzer, model_manager
 from .classifiers import HyperParameter
@@ -580,8 +579,8 @@ def generate_features_and_get_data(architectural_only: bool = False,
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
         training_query = conf.get('run.training-data-query')
-        maybe_generate_data(training_query, imode, mode_params, force_regenerate)
-        dataset = data_manager.get_features(training_query, imode, output_mode, **mode_params)
+        generator = feature_generators.generators[imode](**mode_params)
+        dataset = generator.generate_features(training_query, output_mode)
         if labels_train is not None:
             assert labels_train == dataset.labels
             assert binary_labels_train == dataset.binary_labels
@@ -591,8 +590,8 @@ def generate_features_and_get_data(architectural_only: bool = False,
         datasets_train.append(dataset)
         if not conf.get('run.test-with-training-data'):
             testing_query = conf.get('run.testing-data-query')
-            maybe_generate_data(testing_query, imode, mode_params, force_regenerate)
-            dataset = data_manager.get_features(training_query, imode, output_mode, **mode_params)
+            generator = feature_generators.generators[imode](**mode_params)
+            dataset = generator.generate_features(testing_query, output_mode)
             if labels_test is not None:
                 assert labels_test == dataset.labels
                 assert binary_labels_test == dataset.binary_labels
@@ -613,11 +612,6 @@ def generate_features_and_get_data(architectural_only: bool = False,
         (datasets_train, labels_train),
         (datasets_test, labels_test)
     )
-
-def maybe_generate_data(query, imode, mode_params, force_regenerate):
-    filename = data_manager.get_feature_file(query, imode, **mode_params)
-    if force_regenerate or not filename.exists():
-        data_manager.make_features(query, filename, imode, **mode_params)
 
 
 def select_architectural_only(datasets, labels, binary_labels):
@@ -826,8 +820,7 @@ def run_prediction_command():
         generator = generator_class(
             pretrained_generator_settings=generator_data['settings']
         )
-        generator.generate_features(data_query, feature_file)
-        data_stuff = data_manager.load_features(feature_file, output_mode.name)
+        data_stuff = generator.generate_features(data_query, output_mode.name)
         if ids is None:
             ids = data_stuff.ids
         datasets.append(data_stuff.features)
