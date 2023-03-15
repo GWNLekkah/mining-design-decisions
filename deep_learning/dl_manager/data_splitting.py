@@ -47,7 +47,7 @@ class DeepLearningData:
         if g in self._NAIVE_SPLITTABLE:
             return numpy.array(f)
         elif g == 'Bert':
-            raise NotImplementedError
+            return f
         raise ValueError(f'Cannot prepare features from generator {g}')
 
     def to_dataset_and_keys(self):
@@ -144,7 +144,11 @@ class DeepLearningData:
         if g in self._NAIVE_SPLITTABLE:
             return f[indices]
         elif g == 'Bert':
-            raise NotImplementedError
+            return {
+                'input_ids': f['input_ids'][indices],
+                'token_type_ids': f['token_type_ids'][indices],
+                'attention_mask': f['attention_mask'][indices]
+            }
         raise ValueError(f'Cannot split data from generator {g}')
 
 

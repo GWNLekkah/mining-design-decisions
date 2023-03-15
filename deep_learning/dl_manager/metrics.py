@@ -210,25 +210,29 @@ def compute_confusion_multi_label(y_true,
                                   label_mapping) -> (float, dict[str, MetricSet]):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     c = output_mode.output_size
-    confusion_per_class = {i: {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0} for i in c}
+    confusion_per_class = {i: {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0} for i in range(c)}
     correct = 0
     incorrect = 0
     for truth, pred in zip(y_true, y_pred):
         for i, (t_i, p_i) in enumerate(zip(truth, pred)):
             if t_i and p_i:
                 confusion_per_class[i]['tp'] += 1
+                correct += 1
             if t_i and not p_i:
                 confusion_per_class[i]['fn'] += 1
+                incorrect += 1
             if (not t_i) and p_i:
                 confusion_per_class[i]['fp'] += 1
+                incorrect += 1
             if (not t_i) and (not p_i):
                 confusion_per_class[i]['tn'] += 1
-    accuracy = correct / incorrect
+                correct += 1
+    accuracy = correct / (correct + incorrect)
     class_metrics = {
-        label_mapping[one_hot(c, cls)]: MetricSet(true_positives=confusion['tp'],
-                                                  true_negatives=confusion['tn'],
-                                                  false_positives=confusion['fp'],
-                                                  false_negatives=confusion['fn'])
+        label_mapping[tuple(one_hot(c, cls))]: MetricSet(true_positives=confusion['tp'],
+                                                         true_negatives=confusion['tn'],
+                                                         false_positives=confusion['fp'],
+                                                         false_negatives=confusion['fn'])
         for cls, confusion in confusion_per_class.items()
     }
     return accuracy, class_metrics
@@ -466,7 +470,7 @@ class MetricLogger(keras.callbacks.Callback):
 
     def get_model_results_for_all_epochs(self):
         basis = {
-            'classes': self.__label_mapping,
+            'classes': list(self.__label_mapping.items()),
             'truth': self.__test_y.tolist(),
             'early-stopping-settings': {
                 'stopped-early': not self.__stopped_on_last_epoch,
