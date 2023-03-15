@@ -183,19 +183,19 @@ def _store_predictions(predictions,
             case OutputMode.Classification3Simplified:
                 predictions_by_id[issue_id] = {
                     'existence': {
-                        'prediction': pred == 0,
+                        'prediction': pred == (1, 0, 0, 0),
                         'probability': float(probabilities[i][0]) if probabilities is not None else None
                     },
                     'executive': {
-                        'prediction': pred == 1,
+                        'prediction': pred == (0, 1, 0, 0),
                         'probability': float(probabilities[i][1]) if probabilities is not None else None
                     },
                     'property': {
-                        'prediction': pred == 2,
+                        'prediction': pred == (0, 0, 1, 0),
                         'probability': float(probabilities[i][2]) if probabilities is not None else None
                     },
                     'non-architectural': {
-                        'prediction': pred == 3,
+                        'prediction': pred == (0, 0, 0, 1),
                         'probability': float(probabilities[i][3]) if probabilities is not None else None
                     }
                 }
