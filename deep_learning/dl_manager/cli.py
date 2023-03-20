@@ -823,8 +823,10 @@ def run_prediction_command():
         data_stuff = generator.generate_features(data_query, output_mode.name)
         if ids is None:
             ids = data_stuff.ids
-        datasets.append(data_stuff.features)
-    datasets = [numpy.asarray(d) for d in datasets]
+        if type(data_stuff.features) is dict:
+            datasets.append(data_stuff.features)
+        else:
+            datasets.append(numpy.asarray(data_stuff.features))
 
     # Step 3: Load the model and get the predictions
     match model_metadata['model_type']:

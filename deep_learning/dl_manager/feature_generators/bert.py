@@ -21,6 +21,8 @@ class Bert(AbstractFeatureGenerator):
             return_tensors='np'
         ).data
 
+        self.save_pretrained({})
+
         return {
             'features': tokens,
             'feature_shape': None

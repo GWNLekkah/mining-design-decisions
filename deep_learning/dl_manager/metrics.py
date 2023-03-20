@@ -3,6 +3,7 @@
 # Imports
 ##############################################################################
 
+from copy import copy
 import collections
 import dataclasses
 
@@ -85,15 +86,17 @@ def get_metric_translation_table():
 
 
 def round_binary_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
-    predictions[predictions <= 0.5] = 0
-    predictions[predictions > 0.5] = 1
-    return predictions.flatten().astype(bool)
+    rounded_predictions = copy(predictions)
+    rounded_predictions[predictions <= 0.5] = 0
+    rounded_predictions[predictions > 0.5] = 1
+    return rounded_predictions.flatten().astype(bool)
 
 
 def round_binary_predictions_no_flatten(predictions: numpy.ndarray) -> numpy.ndarray:
-    predictions[predictions <= 0.5] = 0
-    predictions[predictions > 0.5] = 1
-    return predictions
+    rounded_predictions = copy(predictions)
+    rounded_predictions[predictions <= 0.5] = 0
+    rounded_predictions[predictions > 0.5] = 1
+    return rounded_predictions
 
 
 def round_onehot_predictions(predictions: numpy.ndarray) -> numpy.ndarray:

@@ -5,7 +5,10 @@
 
 import pathlib
 
+import tensorflow as tf
 from keras.models import load_model
+from transformers import TFAutoModelForSequenceClassification
+from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
 from .classifiers import OutputEncoding
 from .feature_generators import OutputMode
@@ -30,12 +33,22 @@ def predict_simple_model(path: pathlib.Path,
                          model_id,
                          model_version):
     _check_output_mode(output_mode)
-    model = load_model(path / model_metadata['model_path'])
+    if model_metadata['model_settings']['run.classifier'][0] == 'Bert':
+        model = TFAutoModelForSequenceClassification.from_pretrained(path / model_metadata['model_path'])
+        model.classifier.activation = tf.keras.activations.sigmoid
+    else:
+        model = load_model(path / model_metadata['model_path'])
     if len(features) == 1:
         features = features[0]
+
     predictions = model.predict(features)
-    if output_mode.output_encoding == OutputEncoding.Binary:
+    if type(predictions) is TFSequenceClassifierOutput:
+        predictions = predictions['logits']
+
+    if output_mode.output_encoding == OutputEncoding.Binary and output_mode.output_size == 1:
         canonical_predictions = metrics.round_binary_predictions(predictions)
+    elif output_mode.output_encoding == OutputEncoding.Binary:
+        canonical_predictions = metrics.round_binary_predictions_no_flatten(predictions)
     else:
         indices = metrics.onehot_indices(predictions)
         canonical_predictions = _predictions_to_canonical(output_mode, indices)

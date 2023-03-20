@@ -111,7 +111,10 @@ def save_voting_model(*models):
 
 def _store_model(directory, number, model):
     path = os.path.join(directory, str(number))
-    model.save(path)
+    if hasattr(model, 'save_pretrained') and callable(model.save_pretrained):
+        model.save_pretrained(path)
+    else:
+        model.save(path)
     os.makedirs(os.path.join(directory, 'arch'), exist_ok=True)
     with open(os.path.join(directory, 'arch', f'{number}.json'), 'w') as file:
         file.write(model.to_json(indent=4))
