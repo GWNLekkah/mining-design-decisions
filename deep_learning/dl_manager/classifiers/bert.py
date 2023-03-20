@@ -1,8 +1,7 @@
 import tensorflow as tf
 from transformers import TFAutoModelForSequenceClassification
 
-from .model import AbstractModel, HyperParameter, InputEncoding, _fix_hyper_params
-
+from .model import AbstractModel, HyperParameter, InputEncoding, _fix_hyper_params, OutputEncoding
 
 class Bert(AbstractModel):
     def get_model(self, *,
@@ -10,10 +9,14 @@ class Bert(AbstractModel):
                   embedding_size: int | None = None,
                   embedding_output_size: int | None = None,
                   **kwargs) -> tf.keras.Model:
-        model = TFAutoModelForSequenceClassification.from_pretrained('bert-base-uncased', num_labels=3)
+        model = TFAutoModelForSequenceClassification.from_pretrained(
+            'bert-base-uncased',
+            num_labels=self.number_of_outputs
+        )
         # We freeze the first 10 layers of Bert
         for idx in range(10):
             model.bert.encoder.layer[idx].trainable = False
+        model.classifier.activation = tf.keras.activations.sigmoid
         return model
 
     @staticmethod
@@ -29,4 +32,4 @@ class Bert(AbstractModel):
     @classmethod
     @_fix_hyper_params
     def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
-        return {} | super(Bert, Bert).get_hyper_parameters()
+        return {} | super().get_hyper_parameters()

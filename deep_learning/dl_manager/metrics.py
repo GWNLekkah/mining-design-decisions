@@ -11,6 +11,7 @@ import keras.callbacks
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as pyplot
 import texttable
+from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
 from .feature_generators import OutputMode
 from .classifiers import OutputEncoding
@@ -418,7 +419,12 @@ class MetricLogger(keras.callbacks.Callback):
         else:
             self.__log_multi_class_metrics(logs, epoch)
 
-        y_pred = numpy.asarray(self.model.predict(self.__test_x))
+        predictions = self.model.predict(self.__test_x)
+        if type(predictions) is TFSequenceClassifierOutput:
+            y_pred = predictions['logits']
+        else:
+            y_pred = numpy.asarray(predictions)
+
         if self.__output_mode.output_encoding == OutputEncoding.OneHot:
             y_true = onehot_indices(self.__test_y)
             y_pred_class = onehot_indices(y_pred)

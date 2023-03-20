@@ -132,7 +132,10 @@ class AbstractModel(abc.ABC):
                                         maximum=None),
             'loss': HyperParameter(default='crossentropy',
                                    minimum=None,
-                                   maximum=None)
+                                   maximum=None),
+            'learning-rate': HyperParameter(default=0.01,
+                                            minimum=None,
+                                            maximum=None)
         }
         if InputEncoding.Embedding in cls.supported_input_encodings():
             result |= {
@@ -248,9 +251,7 @@ class AbstractModel(abc.ABC):
             optimizer = kwargs.get('optimizer')
         except KeyError:
             optimizer = kwargs.get(self.__class__.__name__, None)
-        learning_rate = self.get_learning_rate_scheduler()
-        if learning_rate is None:
-            learning_rate = 0.01
+        learning_rate = float(kwargs.get('learning-rate'))
         if optimizer is None or optimizer == 'adam':
             return tf.keras.optimizers.Adam(learning_rate=learning_rate)
         elif optimizer.startswith('sgd'):
@@ -272,7 +273,7 @@ class AbstractModel(abc.ABC):
                                embedding_size=embedding_size,
                                embedding_output_size=embedding_output_size,
                                **kwargs)
-        model.compile(optimizer=self.get_optimizer(),
+        model.compile(optimizer=self.get_optimizer(**kwargs),
                       loss=self.__get_loss_function(),
                       metrics=self.get_metric_list())
         return model
