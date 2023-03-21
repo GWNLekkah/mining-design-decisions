@@ -1,7 +1,8 @@
 import tensorflow as tf
 from transformers import TFAutoModelForSequenceClassification
 
-from .model import AbstractModel, HyperParameter, InputEncoding, _fix_hyper_params, OutputEncoding
+from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..model_io import InputEncoding
 
 class Bert(AbstractModel):
     def get_model(self, *,

@@ -4,7 +4,7 @@ import typing
 
 import numpy
 
-from ..feature_generators import OutputMode
+from ..model_io import OutputMode
 from ..config import conf
 
 
@@ -22,6 +22,15 @@ class AbstractUpSampler(abc.ABC):
 
     def __init__(self, **hyper_params):
         self.hyper_params = hyper_params
+        self.__synthetic_key = 1
+
+    def synthetic_keys(self, n: int):
+        keys = [
+            f'$SYNTHETIC-{i}'
+            for i in range(self.__synthetic_key, self.__synthetic_key + n)
+        ]
+        self.__synthetic_key += n
+        return numpy.asarray(keys)
 
     def upsample_to_majority(self, labels: numpy.ndarray, keys, *features):
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))

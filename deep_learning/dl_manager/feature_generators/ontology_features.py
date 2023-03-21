@@ -3,7 +3,7 @@ import os
 
 from . import ParameterSpec
 from .generator import AbstractFeatureGenerator
-from ..classifiers import InputEncoding
+from ..model_io import InputEncoding
 
 from ..config import conf
 

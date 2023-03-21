@@ -14,7 +14,7 @@ class RandomUpSampler(base.AbstractUpSampler):
         return (
             labels[new],
             keys[new]
-            * (
+            *(
                 f[new] for f in features
             )
         )

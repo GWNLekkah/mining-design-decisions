@@ -10,8 +10,7 @@ from keras.models import load_model
 from transformers import TFAutoModelForSequenceClassification
 from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
-from .classifiers import OutputEncoding
-from .feature_generators import OutputMode
+from .model_io import OutputMode, OutputEncoding
 from . import stacking
 from . import voting_util
 from . import metrics

@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from .model import AbstractModel, HyperParameter, InputEncoding, _fix_hyper_params
+from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..model_io import InputEncoding
 
 
 class LinearRNNModel(AbstractModel):

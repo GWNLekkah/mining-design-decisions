@@ -24,7 +24,7 @@ import numpy as np
 from collections import Counter
 
 from .database import DatabaseAPI
-from .feature_generators.generator import OutputMode
+from .model_io import OutputMode
 
 from . config import conf
 from . import stacking

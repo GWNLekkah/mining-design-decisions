@@ -4,7 +4,8 @@ from .linear_rnn_model import LinearRNNModel
 from .model import AbstractModel
 from .bert import Bert
 
-from .model import OutputEncoding, InputEncoding, HyperParameter
+from .model import HyperParameter
+from ..model_io import InputEncoding, OutputEncoding
 
 from .combined_model import combine_models
 

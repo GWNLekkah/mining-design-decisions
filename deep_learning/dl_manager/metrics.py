@@ -14,8 +14,7 @@ import matplotlib.pyplot as pyplot
 import texttable
 from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
-from .feature_generators import OutputMode
-from .classifiers import OutputEncoding
+from .model_io import OutputMode, OutputEncoding
 from .config import conf
 
 

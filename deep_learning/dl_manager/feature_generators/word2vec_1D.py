@@ -1,6 +1,6 @@
 import warnings
 
-from ..classifiers import InputEncoding
+from ..model_io import InputEncoding
 from .word2vec import AbstractWord2Vec
 
 

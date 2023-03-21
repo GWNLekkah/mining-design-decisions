@@ -5,7 +5,8 @@ from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
 from ..config import conf
 
-from .generator import AbstractFeatureGenerator, InputEncoding, ParameterSpec
+from .generator import AbstractFeatureGenerator, ParameterSpec
+from ..model_io import InputEncoding
 
 
 class Doc2Vec(AbstractFeatureGenerator):

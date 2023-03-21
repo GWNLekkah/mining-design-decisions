@@ -11,8 +11,7 @@ import json
 from scipy.special import softmax, expit
 
 from .classifiers import models
-from .feature_generators import OutputMode
-from .classifiers import OutputEncoding
+from .model_io import OutputMode, OutputEncoding
 from .config import conf
 from . import data_manager_bootstrap
 

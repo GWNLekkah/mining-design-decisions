@@ -3,7 +3,7 @@ import math
 
 from . import ParameterSpec
 from .generator import AbstractFeatureGenerator
-from ..classifiers import InputEncoding
+from ..model_io import InputEncoding
 
 
 class TfidfGenerator(AbstractFeatureGenerator):

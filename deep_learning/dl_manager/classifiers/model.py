@@ -8,7 +8,6 @@ This module defines a base class for all future models.
 ##############################################################################
 
 import abc
-import enum
 import numbers
 import typing
 
@@ -16,23 +15,13 @@ import numpy
 import tensorflow as tf
 import tensorflow_addons as tfa
 
+from  ..model_io import InputEncoding, OutputEncoding
+
 
 ##############################################################################
 ##############################################################################
 # Auxiliary classes and functions
 ##############################################################################
-
-
-class InputEncoding(enum.Enum):
-    Vector = enum.auto()
-    Matrix = enum.auto()
-    Embedding = enum.auto()
-    Text = enum.auto()
-
-
-class OutputEncoding(enum.Enum):
-    OneHot = enum.auto()
-    Binary = enum.auto()
 
 
 class HyperParameter(typing.NamedTuple):

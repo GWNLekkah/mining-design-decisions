@@ -1,4 +1,5 @@
-from .generator import AbstractFeatureGenerator, InputEncoding, ParameterSpec
+from .generator import AbstractFeatureGenerator, ParameterSpec
+from ..model_io import InputEncoding
 
 
 class Metadata(AbstractFeatureGenerator):

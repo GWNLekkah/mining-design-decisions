@@ -6,7 +6,7 @@ import abc
 import keras.models
 from .generator import AbstractFeatureGenerator
 from .generator import ParameterSpec
-from ..classifiers import InputEncoding
+from ..model_io import InputEncoding
 from .bow_frequency import BOWFrequency
 from .bow_normalized import BOWNormalized
 from .tfidf import TfidfGenerator

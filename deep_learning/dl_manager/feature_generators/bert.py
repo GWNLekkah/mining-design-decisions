@@ -1,4 +1,4 @@
-from ..classifiers import InputEncoding
+from ..model_io import InputEncoding
 from .word2vec import AbstractFeatureGenerator, ParameterSpec
 from transformers import AutoTokenizer
 

@@ -1,5 +1,6 @@
 from .generator import AbstractFeatureGenerator
-from .generator import ParameterSpec, OutputMode
+from .generator import ParameterSpec
+from ..model_io import OutputMode
 from .word2vec_1D import Word2Vec1D
 from .doc2vec import Doc2Vec
 from .bow_frequency import BOWFrequency

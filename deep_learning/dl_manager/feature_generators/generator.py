@@ -21,7 +21,7 @@ import nltk
 
 from .util.text_cleaner import FormattingHandling, clean_issue_text
 from .. import accelerator
-from ..classifiers import InputEncoding, OutputEncoding
+from ..model_io import InputEncoding, classification8_lookup
 from ..custom_kfold import stratified_trim
 from .util import ontology
 from ..config import conf
@@ -35,17 +35,6 @@ log = get_logger('Base Feature Generator')
 from ..data_manager_bootstrap import get_raw_text_file_name
 
 csv.field_size_limit(100000000)
-
-classification8_lookup = {
-    (False, False, False): (1, 0, 0, 0, 0, 0, 0, 0),
-    (False, False, True): (0, 0, 0, 1, 0, 0, 0, 0),
-    (False, True, False): (0, 0, 1, 0, 0, 0, 0, 0),
-    (False, True, True): (0, 0, 0, 0, 0, 0, 1, 0),
-    (True, False, False): (0, 1, 0, 0, 0, 0, 0, 0),
-    (True, False, True): (0, 0, 0, 0, 0, 1, 0, 0),
-    (True, True, False): (0, 0, 0, 0, 1, 0, 0, 0),
-    (True, True, True): (0, 0, 0, 0, 0, 0, 0, 1)
-}
 
 POS_CONVERSION = {
     "JJ": "a",
@@ -80,7 +69,6 @@ ATTRIBUTE_CONSTANTS = {
     'len_summary': 'len_summary',
     'n_votes': 'n_votes',
     'n_watches': 'n_watches',
-    'components': 'components',
     'issuetype': 'issuetype',
     'labels': 'labels',
     'priority': 'priority',
@@ -88,10 +76,50 @@ ATTRIBUTE_CONSTANTS = {
     'status': 'status'
 }
 
+CATEGORICAL_ATTRIBUTES = {
+    'parent',
+    'labels',
+    'priority',
+    'resolution',
+    'status '
+}
+
 ##############################################################################
 ##############################################################################
 # Auxiliary Classes
 ##############################################################################
+
+
+class FeatureEncoding(enum.Enum):
+    Numerical = enum.auto()
+    Categorical = enum.auto()
+    Mixed = enum.auto()
+    Bert = enum.auto()
+
+    def as_string(self):
+        match self:
+            case self.Numerical:
+                return 'numerical'
+            case self.Categorical:
+                return 'categorical'
+            case self.Mixed:
+                return 'mixed'
+            case self.Bert:
+                return 'bert'
+
+
+    def from_string(self, x: str):
+        match x:
+            case 'numerical':
+                return self.Numerical
+            case 'categorical':
+                return self.Categorical
+            case 'mixed':
+                return self.Mixed
+            case 'bert':
+                return self.Bert
+            case _:
+                raise ValueError(f'Invalid feature encoding: {x}')
 
 
 def _escape(x):
@@ -111,121 +139,6 @@ class _NullDict(dict):
 class ParameterSpec(typing.NamedTuple):
     description: str
     type: str
-
-
-class OutputMode(enum.Enum):
-    Detection = enum.auto()
-    Classification3 = enum.auto()
-    Classification3Simplified = enum.auto()
-    Classification8 = enum.auto()
-
-    @classmethod
-    def from_string(cls, string: str) -> OutputMode:
-        match string:
-            case 'Detection':
-                return cls.Detection
-            case 'Classification3':
-                warnings.warn('Classification3 (Binary) is outdated. '
-                              'Using this option requires carefully re-implementing '
-                              'support for this mode in all places where we deal with '
-                              'labels. This can be done by following the code paths '
-                              'for all normal and ensemble models, both in training/evaluation mode, '
-                              'and in prediction mode. The involved code will raise exceptions '
-                              'when Classification3 is used as input mode.')
-                return cls.Classification3
-            case 'Classification3Simplified':
-                return cls.Classification3Simplified
-            case 'Classification8':
-                return cls.Classification8
-        raise ValueError(f'Invalid input: {string}')
-
-    @property
-    def output_encoding(self):
-        match self:
-            case self.Detection:
-                return OutputEncoding.Binary
-            case self.Classification3:
-                return OutputEncoding.Binary
-            case self.Classification3Simplified:
-                return OutputEncoding.OneHot
-            case self.Classification8:
-                return OutputEncoding.OneHot
-
-    @property
-    def output_size(self):
-        match self:
-            case self.Detection:
-                return 1
-            case self.Classification3:
-                return 3
-            case self.Classification3Simplified:
-                return 4
-            case self.Classification8:
-                return 8
-
-    @property
-    def true_category(self) -> str:
-        if self != self.Detection:
-            raise ValueError(f'No true category exists in mode {self}')
-        return 'Architectural'
-
-    @property
-    def index_label_encoding(self):
-        if self not in (self.Classification3Simplified, self.Classification8):
-            raise NotImplementedError
-        mapping: dict[tuple[int, ...], str] = self.label_encoding
-        return {key.index(1): value for key, value in mapping.items()}
-
-    @property
-    def label_encoding(self):
-        match self:
-            case self.Detection:
-                return {
-                    0: 'Non-Architectural',
-                    1: 'Architectural'
-                }
-            case self.Classification3:
-                # Existence, Executive, Property
-                return {
-                    (0, 0, 0): 'Non-Architectural',
-                    (0, 0, 1): 'Property',
-                    (0, 1, 0): 'Executive',
-                    (0, 1, 1): 'Executive/Property',
-                    (1, 0, 0): 'Existence',
-                    (1, 0, 1): 'Existence/Property',
-                    (1, 1, 0): 'Existence/Executive',
-                    (1, 1, 1): 'Existence/Executive/Property',
-                }
-            case self.Classification3Simplified:
-                return {
-                    (1, 0, 0, 0): 'Existence',
-                    (0, 1, 0, 0): 'Executive',
-                    (0, 0, 1, 0): 'Property',
-                    (0, 0, 0, 1): 'Non-Architectural'
-                }
-            case self.Classification8:
-                return {
-                    classification8_lookup[(False, False, False)]: 'Non-Architectural',
-                    classification8_lookup[(False, False, True)]: 'Property',
-                    classification8_lookup[(False, True, False)]: 'Executive',
-                    classification8_lookup[(False, True, True)]: 'Executive/Property',
-                    classification8_lookup[(True, False, False)]: 'Existence',
-                    classification8_lookup[(True, False, True)]: 'Existence/Property',
-                    classification8_lookup[(True, True, False)]: 'Existence/Executive',
-                    classification8_lookup[(True, True, True)]: 'Existence/Executive/Property',
-                }
-
-    @property
-    def number_of_classes(self) -> int:
-        match self:
-            case self.Detection:
-                return 2
-            case self.Classification3:
-                return 8
-            case self.Classification3Simplified:
-                return 4
-            case self.Classification8:
-                return 8
 
 
 ##############################################################################

@@ -1,7 +1,5 @@
 import tensorflow as tf
 
-from .model import AbstractModel, HyperParameter
-from .model import InputEncoding, OutputEncoding
 
 from ..config import conf
 

@@ -22,11 +22,13 @@ import traceback
 
 import numpy
 
+import deep_learning.dl_manager.model_io
 from . import classifiers, kw_analyzer, model_manager
 from .classifiers import HyperParameter
 
 from . import feature_generators
-from .feature_generators import ParameterSpec, OutputMode
+from .feature_generators import ParameterSpec
+from .model_io import OutputMode
 from . import data_manager
 from . import embeddings
 
@@ -435,7 +437,7 @@ def run_list_command():
         case 'inputs':
             _show_input_mode_list()
         case 'outputs':
-            _show_enum_list('Output Mode', feature_generators.OutputMode)
+            _show_enum_list('Output Mode', deep_learning.dl_manager.model_io.OutputMode)
 
 
 def _show_classifier_list():

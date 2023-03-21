@@ -1,7 +1,6 @@
 import collections
 import numpy
-from .classifiers import OutputEncoding
-from .feature_generators import OutputMode
+from .model_io import OutputMode, OutputEncoding
 
 
 def get_voting_predictions(output_mode: OutputMode, predictions):
