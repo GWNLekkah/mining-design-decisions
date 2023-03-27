@@ -2,18 +2,61 @@
 
 ---
 
-This document gives an overview how to use the deep learning (`dl_manager`).
+This document gives an overview how to use the deep learning (`dl_manager`) tool.
 
 ---
 
-## Preparing to run 
+## Installation
 
-before the manager can be run, all its dependencies must be installed.
-This can be done using 
+There are a number of ways to install and run the `dl_manager`.
+The `dl_mananger` can either be run directly, or through Docker.
+
+### Running Directly 
+In order to run the `dl_manager` directly, a Rust compiler must be installed 
+in order to compile the acceleration modules.
+
+Installation instructions for Rust can be found here:
+https://www.rust-lang.org/tools/install
+
+Next, optionally, CUDA can be installed in order to make training faster.
+Note that this can only be done on machines with NVIDIA GPUs installed. 
+Instructions can be found at https://www.tensorflow.org/install/pip .
+The current version of the pipeline requires CUDA 11.2.0 and CuDNN 8.6.0.
+
+Next, modules necessary for installation must be installed. This can be done 
+using 
 
 ```shell 
-python -m pip install -r requirements.txt
+python -m pip install setuptools_rust nltk 
 ```
+
+Next, install the dependencies of the `dl_manager` by running 
+
+```shell 
+python setup.py sdist 
+python -m pip install -r dl_manager.egg-info/requires.txt
+```
+
+Finally, the acceleration module can now be build, using 
+
+```shell 
+python setup.py build_ext --inplace 
+```
+
+When using the pipeline in webserver mode, (self-signed) SSL certificates 
+will be required. This can be done using 
+
+```shell 
+openssl req -new -x509 -nodes -sha256 -out server.crt -keyout server.key
+```
+
+Finally, the pipeline can be started in webserver mode using 
+
+```shell 
+python3 -m dl_manager serve --keyfile server.key --certfile server.crt
+```
+
+### Running through Docker
 
 ---
 
