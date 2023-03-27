@@ -1,0 +1,13 @@
+version: '3.1'
+services:
+  dl-manager:
+    container_name: dl-manager
+    build:
+      context: ./
+      dockerfile: docker-compose-no-gpu.yml
+    image: dl-manager
+    ports:
+      - '9011:9011'
+    environment:
+      - DL_MANAGER_LOCAL_PUBLIC_KEY=server.crt
+      - DL_MANAGER_ALLOW_SELF_SIGNED_CERTIFICATE=TRUE
