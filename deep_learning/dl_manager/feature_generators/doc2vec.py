@@ -5,7 +5,7 @@ from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
 from ..config import conf
 
-from .generator import AbstractFeatureGenerator, ParameterSpec
+from .generator import AbstractFeatureGenerator, ParameterSpec, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -49,13 +49,22 @@ class Doc2Vec(AbstractFeatureGenerator):
             model = GensimDoc2Vec.load(filename)
             shape = self.pretrained['vector-length']
 
-        return {'features': [
+        return {
+            'features': [
                     model.infer_vector(
                         issue
                     ).tolist()
                     for issue in tokenized_issues],
-                'feature_shape': shape
+            'feature_shape': shape,
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': []
+            }
         }
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

@@ -2,7 +2,7 @@ import collections
 import math
 
 from . import ParameterSpec
-from .generator import AbstractFeatureGenerator
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -55,8 +55,16 @@ class TfidfGenerator(AbstractFeatureGenerator):
         print(set(len(x) for x in feature_vectors))
         return {
             'features': feature_vectors,
-            'feature_shape': len(layout)
+            'feature_shape': len(layout),
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': []
+            }
         }
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

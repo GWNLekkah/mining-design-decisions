@@ -76,14 +76,6 @@ ATTRIBUTE_CONSTANTS = {
     'status': 'status'
 }
 
-CATEGORICAL_ATTRIBUTES = {
-    'parent',
-    'labels',
-    'priority',
-    'resolution',
-    'status '
-}
-
 ##############################################################################
 ##############################################################################
 # Auxiliary Classes
@@ -91,10 +83,10 @@ CATEGORICAL_ATTRIBUTES = {
 
 
 class FeatureEncoding(enum.Enum):
-    Numerical = enum.auto()
-    Categorical = enum.auto()
-    Mixed = enum.auto()
-    Bert = enum.auto()
+    Numerical = enum.auto()         # No metadata
+    Categorical = enum.auto()       # No metadata
+    Mixed = enum.auto()             # Metadata = Indices of categorical features
+    Bert = enum.auto()              # No metadata 
 
     def as_string(self):
         match self:
@@ -230,6 +222,11 @@ class AbstractFeatureGenerator(abc.ABC):
         # TODO: implement this method
         # TODO: this method should take in data, and generate
         # TODO: the corresponding feature vectors
+        pass
+
+    @staticmethod
+    @abc.abstractmethod
+    def feature_encoding() -> FeatureEncoding:
         pass
 
     @staticmethod
@@ -376,15 +373,17 @@ class AbstractFeatureGenerator(abc.ABC):
         if self.input_encoding_type() == InputEncoding.Text:
             tokenized_issues = [['. '.join(text)] for text in texts]
         else:
-            with cProfile.Profile() as p:
-                tokenized_issues = self.preprocess(texts)
-            p.dump_stats('profile.txt')
+            #with cProfile.Profile() as p:
+            #    tokenized_issues = self.preprocess(texts)
+            #p.dump_stats('profile.txt')
+            tokenized_issues = self.preprocess(texts)
 
         log.info('Generating feature vectors')
         with timer('Feature Generation'):
             output = self.generate_vectors(tokenized_issues, metadata, self.__params)
         output['labels'] = labels   # labels is empty when pretrained
 
+        output['original'] = tokenized_issues
         if 'original' in output and not self.pretrained:    # Only dump original text when not pre-trained.
             with open(get_raw_text_file_name(), 'w') as file:
                 mapping = {key: text

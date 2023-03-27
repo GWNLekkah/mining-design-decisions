@@ -3,7 +3,7 @@ import collections
 
 from ..logger import timer
 
-from .generator import AbstractFeatureGenerator, ParameterSpec
+from .generator import AbstractFeatureGenerator, ParameterSpec, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -51,13 +51,21 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
 
         return {
             'features': bags,
-            'feature_shape': idx
+            'feature_shape': idx,
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': []
+            }
         }
 
     @staticmethod
     @abc.abstractmethod
     def get_word_value(divider):
         pass
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

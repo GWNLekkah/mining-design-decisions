@@ -2,7 +2,7 @@ import collections
 import os
 
 from . import ParameterSpec
-from .generator import AbstractFeatureGenerator
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 from ..config import conf
@@ -68,7 +68,11 @@ class OntologyFeatures(AbstractFeatureGenerator):
 
         return {
             'features': features,
-            'feature_shape': len(order)
+            'feature_shape': len(order),
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': []
+            }
         }
 
     def _make_feature(self,
@@ -85,6 +89,10 @@ class OntologyFeatures(AbstractFeatureGenerator):
                     counts[cls] += 1
         return [counts[x] for x in order]
         #return [len(issue)] + [counts[x] for x in order]
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

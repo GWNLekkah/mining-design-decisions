@@ -4,7 +4,7 @@ import shutil
 import abc
 
 import keras.models
-from .generator import AbstractFeatureGenerator
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from .generator import ParameterSpec
 from ..model_io import InputEncoding
 from .bow_frequency import BOWFrequency
@@ -18,6 +18,7 @@ log = get_logger('Abstract Auto Encoder')
 
 
 class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
+
     @staticmethod
     def input_encoding_type() -> InputEncoding:
         return InputEncoding.Vector
@@ -98,7 +99,11 @@ class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
             feature_size = self.pretrained['feature-size']
         return {
             'features': as_2d.tolist(),
-            'feature_shape': feature_size
+            'feature_shape': feature_size,
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': []
+            }
         }
 
     def prepare_features(self, keys=None, issues=None, settings=None, generator_name=None):
@@ -148,6 +153,9 @@ class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
             [[] for _ in range(len(issues))],
             generator.params
         )
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @classmethod
     def get_parameters(cls) -> dict[str, ParameterSpec]:

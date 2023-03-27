@@ -1,3 +1,4 @@
+from .generator import FeatureEncoding
 from ..model_io import InputEncoding
 from .word2vec import AbstractFeatureGenerator, ParameterSpec
 from transformers import AutoTokenizer
@@ -21,12 +22,21 @@ class Bert(AbstractFeatureGenerator):
             return_tensors='np'
         ).data
 
-        self.save_pretrained({})
+        if self.pretrained is None:
+            self.save_pretrained({})
 
         return {
             'features': tokens,
-            'feature_shape': None
+            'feature_shape': None,
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': []
+            }
         }
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Bert
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

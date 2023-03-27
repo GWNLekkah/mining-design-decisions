@@ -2,6 +2,15 @@ from .generator import AbstractFeatureGenerator, ParameterSpec
 from ..model_io import InputEncoding
 
 
+CATEGORICAL_ATTRIBUTES = {
+    'parent',
+    'labels',
+    'priority',
+    'resolution',
+    'status '
+}
+
+
 class Metadata(AbstractFeatureGenerator):
 
     @staticmethod
@@ -18,8 +27,18 @@ class Metadata(AbstractFeatureGenerator):
         if self.pretrained is None:
             self.save_pretrained({})
 
-        return {'features': metadata,
-                'feature_shape': len(metadata[0])}
+        attrs = self.params.get('metadata-attributes', '').split(',')
+
+        return {
+            'features': metadata,
+            'feature_shape': len(metadata[0]),
+            'feature_encoding': {
+                'encoding': self.feature_encoding(),
+                'metadata': [
+                    attrs.index(a) for a in CATEGORICAL_ATTRIBUTES if a in attrs
+                ]
+            }
+        }
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

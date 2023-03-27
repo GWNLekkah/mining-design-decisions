@@ -4,6 +4,7 @@ import datetime
 from gensim.models import Word2Vec as GensimWord2Vec
 from gensim import models
 
+from .generator import FeatureEncoding
 from ..config import conf
 
 from ..feature_generators import AbstractFeatureGenerator, ParameterSpec
@@ -44,6 +45,10 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
     @abc.abstractmethod
     def finalize_vectors(tokenized_issues, wv, args):
         pass
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @staticmethod
     def get_parameters() -> dict[str, ParameterSpec]:

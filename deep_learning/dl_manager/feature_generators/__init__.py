@@ -11,6 +11,7 @@ from .metadata import Metadata
 from .ontology_features import OntologyFeatures
 from .auto_encoder import AutoEncoder
 from .kate_auto_encoder import KateAutoEncoder
+from .generator import FeatureEncoding
 
 _generators = (
     Word2Vec1D,

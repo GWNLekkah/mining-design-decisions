@@ -24,7 +24,6 @@ class Word2Vec1D(AbstractWord2Vec):
             feature_shape = self.pretrained['feature-shape']
             word_vector_length = self.pretrained['word-vector-length']
         features = []
-        original_text = []
         for tokenized_issue in tokenized_issues:
             feature = []
             current_issue_original_text = []
@@ -41,7 +40,6 @@ class Word2Vec1D(AbstractWord2Vec):
                         embedding_weights.append(wv[token].tolist())
                         feature.append([idx])
                         idx += 1
-            original_text.append(current_issue_original_text)
             feature.extend([[0]] * (int(args['max-len']) - len(feature)))
             features.append(feature)
 
@@ -66,5 +64,8 @@ class Word2Vec1D(AbstractWord2Vec):
                 'feature_shape': feature_shape,
                 'vocab_size': idx,
                 'word_vector_length': word_vector_length,
-                'original': original_text
+                'feature_encoding': {
+                    'encoding': self.feature_encoding(),
+                    'metadata': []
                 }
+        }
