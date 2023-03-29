@@ -8,7 +8,7 @@ from .classifiers import AbstractModel
 from .classifiers import models as _models
 from .feature_generators import AbstractFeatureGenerator
 from .feature_generators import generators as _generators
-from . import OutputMode
+from .model_io import OutputMode
 
 
 def run_cli_app():

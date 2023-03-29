@@ -22,8 +22,7 @@ import traceback
 
 import numpy
 
-import deep_learning.dl_manager.model_io
-from . import classifiers, kw_analyzer, model_manager
+from . import classifiers, kw_analyzer, model_manager, model_io
 from .classifiers import HyperParameter
 
 from . import feature_generators

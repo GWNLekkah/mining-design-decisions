@@ -3,8 +3,7 @@ import warnings
 
 import numpy
 
-import deep_learning.dl_manager.model_io
-from . import classifiers
+from . import classifiers, model_io
 from . import feature_generators as generators
 from .model_io import OutputMode, InputEncoding
 
