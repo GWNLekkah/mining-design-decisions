@@ -86,7 +86,7 @@ class DeepLearningData:
 
     def split_k_cross(self, k: int):
         splitter = kfold.StratifiedKFold(k)
-        stream = splitter.split(self.features[0], self.extended_labels)
+        stream = splitter.split(self.extended_labels, self.extended_labels)
         for indices_left, indices_right in stream:
             left = self.sample_indices(indices_left)
             right = self.sample_indices(indices_right)
