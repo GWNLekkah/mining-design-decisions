@@ -127,8 +127,6 @@ def run_cross(model_factory,
     if conf.get('run.quick-cross'):
         splitter = splitting.QuickCrossFoldSplitter(
             k=conf.get('run.k-cross'),
-            test_study=_coerce_none(conf.get('run.test-study')),
-            test_project=_coerce_none(conf.get('run.test-project')),
             max_train=conf.get('run.max-train'),
         )
     elif conf.get('run.cross-project'):

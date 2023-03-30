@@ -118,19 +118,9 @@ def setup_app_constraints(app, *, api=False):
     app.add_constraint(lambda store, k: not (store and k > 0),
                        'Cannot store model when using k-fold cross validation',
                        'run.store-model', 'run.k-cross')
-    app.add_constraint(lambda project, study: project == 'None' or study == 'None',
-                       'Cannot use test-project and test-study at the same time.',
-                       'run.test-project', 'run.test-study')
     app.add_constraint(lambda cross_project, k: k == 0 or not cross_project,
                        'Cannot use --k-cross and --cross-project at the same time.',
                        'run.cross-project', 'run.k-cross')
-    app.add_constraint(
-        lambda k, quick_cross, test_study, test_project: not (
-                (k > 0 and not quick_cross) and (test_study != 'None' or test_project != 'None')
-        ),
-        'Cannot use --test-study or --test-project without --quick-cross when k > 0',
-        'run.k-cross', 'run.quick-cross', 'run.test-study', 'run.test-project'
-    )
     app.add_constraint(
         lambda k, quick_cross: not quick_cross or k > 0,
         'Must specify k when running with --quick-cross',
