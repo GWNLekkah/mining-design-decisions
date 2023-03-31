@@ -7,7 +7,7 @@ It provides an easy to configure way to set up
 an elaborate, automatically handled command
 line interface
 """
-
+import abc
 ##############################################################################
 ##############################################################################
 # Imports
@@ -15,6 +15,7 @@ line interface
 
 import argparse
 import collections
+import contextlib
 import importlib
 import json
 
@@ -45,6 +46,15 @@ class NoDefault(Exception):
 ##############################################################################
 
 
+def _align(x, y):
+    if len(x) > len(y):
+        return False
+    for dx, dy in zip(x, y, strict=False):
+        if dx != dy:
+            return False
+    return True
+
+
 class Config:
 
     _self = None
@@ -52,10 +62,16 @@ class Config:
 
     def __new__(cls):
         if cls._self is None:
-            cls._self = self = super().__new__(cls)
-            self._namespace = {}
-            self._types = {}
+            cls._self = super().__new__(cls)
         return cls._self
+
+    def __init__(self):
+        self._namespace = {}
+        self._types = {}
+
+    def reset(self):
+        self._namespace = {}
+        self._types = {}
 
     def set(self, name, value):
         name = name.replace('-', '_')
@@ -76,7 +92,18 @@ class Config:
             raise NoDefault(name)
         return value
 
+    def get_all(self, name):
+        name = name.replace('-', '_')
+        parts = name.split('.')
+        return {
+            key: value
+            for key, value in self._namespace.items()
+            if _align(parts, key.split('.')) and value is not self._NOT_SET
+        }
+
     def clone(self, source, target):
+        source = source.replace('-', '_')
+        target = target.replace('-', '_')
         self.register(target, self._types[source])
         self.set(target, self.get(source))
 
@@ -84,6 +111,27 @@ class Config:
         name = name.replace('-', '_')
         self._namespace[name] = default
         self._types[name] = type_or_validator
+
+    def is_registered(self, name: str) -> bool:
+        name = name.replace('-', '_')
+        return name in self._namespace
+
+    def is_active(self, name: str) -> bool:
+        prefix = name.split('.')[0]
+        return (
+                self.is_registered(name)
+                and self.get('system.active-command') == prefix
+        )
+
+    @contextlib.contextmanager
+    def session(self):
+        old_state = (self._namespace.copy(), self._types.copy())
+        self.reset()
+        try:
+            yield
+        finally:
+            self.reset()
+            self._namespace, self._types = old_state
 
 
 conf = Config()
@@ -95,7 +143,7 @@ conf = Config()
 ##############################################################################
 
 
-class CLIApp:
+class _App(abc.ABC):
 
     def __init__(self, filename: str):
         with open(filename) as file:
@@ -107,6 +155,9 @@ class CLIApp:
         self.__callbacks = {}
         self.__constraints = []
         self.__setup_callbacks = []
+
+    def get_parser(self):
+        return self.__parser
 
     def callback(self, event):
         def wrapper(func):
@@ -123,12 +174,17 @@ class CLIApp:
     def add_constraint(self, predicate, message, *keys):
         self.__constraints.append((keys, predicate, message))
 
-    def parse_and_dispatch(self):
-        args = self.__parser.parse_args()
+    @abc.abstractmethod
+    def prepare_args(self, raw_args):
+        pass
+
+    def parse_and_dispatch(self, raw_args=None):
+        args = self.prepare_args(raw_args)
         self.__expand_dictionaries(args)
         active_name, active_qualname = self.__get_active_command(args)
+        conf.register('system.active-command', str, active_qualname)
         self.__resolve_borrows(args, active_name)
-        for name, value in vars(args).items():
+        for name, value in args.items():
             if name.startswith('subcommand_name_'):
                 continue
             full_name = f'{active_qualname}.{name}'
@@ -146,13 +202,35 @@ class CLIApp:
             callback()
         self.__callbacks[active_qualname]()
 
+    @classmethod
+    def execute_session(cls,
+                        spec_file,
+                        raw_args,
+                        *,
+                        retrieve_configs=None,
+                        with_config=None,
+                        app_initializer=None):
+        if retrieve_configs is None:
+            retrieve_configs = []
+        if with_config is None:
+            with_config = {}
+        with conf.session():
+            self = cls(spec_file)
+            if app_initializer is not None:
+                app_initializer(self)
+            for key, (tp, value) in with_config.items():
+                conf.register(key, tp, value)
+            self.parse_and_dispatch(raw_args)
+            state = {key: conf.get(key) for key in retrieve_configs}
+        return state
+
     @staticmethod
     def __get_active_command(args):
         i = 0
         while f'subcommand_name_{i+1}' in args:
             i += 1
         pieces = [
-            getattr(args, f'subcommand_name_{j}')
+            args[f'subcommand_name_{j}']
             for j in range(i + 1)
         ]
         return pieces[-1], '.'.join(pieces)
@@ -160,23 +238,42 @@ class CLIApp:
     def __expand_dictionaries(self, args):
         for name in self.__dict_values:
             name = name.replace('-', '_')
-            if name not in vars(args):
+            if name not in args:
                 continue
-            value = getattr(args, name)
+            value = args.get(name, None)
             if value is None:
-                setattr(args, name, {})
+                #setattr(args, name, {})
+                args[name] = {}
             else:
-                setattr(args, name, _dict_converter(value))
+                #setattr(args, name, _dict_converter(value))
+                args[name] = _dict_converter(value)
 
     def __resolve_borrows(self, args, owner):
         borrowed_from = set()
         for original, name in self.__borrowed[owner]:
             full_name = f'{original}.{name}'
             full_name = self.__qualnames[full_name]
-            conf.set(full_name, getattr(args, name.replace('-', '_')))
+            #conf.set(full_name, getattr(args, name.replace('-', '_')))
+            conf.set(full_name, args[name.replace('-', '_')])
             borrowed_from.add(original)
         for parent in borrowed_from:
             self.__resolve_borrows(args, parent)
+
+
+class CLIApp(_App):
+
+    def prepare_args(self, raw_args):
+        if raw_args is None:
+            return vars(self.get_parser().parse_args())
+        else:
+            return vars(self.get_parser().parse_args(raw_args))
+
+
+class APIApp(_App):
+
+    def prepare_args(self, raw_args):
+        return raw_args
+
 
 
 def _dict_converter(items):

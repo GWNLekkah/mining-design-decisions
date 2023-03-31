@@ -52,8 +52,8 @@
       ]
     },
     {
-      "name": "make-features",
-      "help": "Generate a collection of features",
+      "name": "run",
+      "help": "Train a classifier and store the results",
       "args": [
         {
           "name": "input-mode",
@@ -72,18 +72,6 @@
           "nargs": "1",
           "type": "str",
           "required": true
-        },
-        {
-          "name": "file",
-          "alias": "f",
-          "help": "Data input file.",
-          "style": "named",
-          "nargs": "1",
-          "type": "class",
-          "required": true,
-          "options": [
-            "pathlib.Path"
-          ]
         },
         {
           "name": "params",
@@ -105,16 +93,7 @@
           "name": "apply-ontology-classes",
           "help": "Enable application of ontology classes",
           "style": "flag"
-        }
-      ]
-    },
-    {
-      "name": "run",
-      "help": "Train a classifier and store the results",
-      "import_args": [
-        "make-features/*"
-      ],
-      "args": [
+        },
         {
           "name": "classifier",
           "help": "Classifier to use. Use `list` for options",
@@ -164,14 +143,13 @@
           "style": "flag"
         },
         {
-          "name": "cross-is-cross-project",
-          "help": "k-cross should be cross-project validation.",
+          "name": "cross-project",
+          "help": "Run cross project validation.",
           "style": "flag"
         },
         {
-          "name": "force-regenerate-data",
-          "alias": "fr",
-          "help": "Force regeneration of data.",
+          "name": "cache-features",
+          "help": "Force caching of features. NOTE: the pipeline does not handle cache invalidation!",
           "style": "flag"
         },
         {
@@ -187,22 +165,6 @@
           "nargs": "+",
           "type": "dict",
           "style": "named"
-        },
-        {
-          "name": "test-project",
-          "help": "Name of project to be used as the test set",
-          "style": "named",
-          "nargs": "1",
-          "type": "str",
-          "default": "None"
-        },
-        {
-          "name": "test-study",
-          "help": "Name of the study to be used as the test set",
-          "style": "named",
-          "nargs": "1",
-          "type": "str",
-          "default": "None"
         },
         {
           "name": "class-balancer",
@@ -324,22 +286,280 @@
           "name": "test-separately",
           "help": "If given, disable combining multiple classifiers. In stead, test them separately on the same data.",
           "style": "flag"
+        },
+        {
+          "name": "store-model",
+          "alias": "sm",
+          "help": "If given, store the trained model. Can only be used when training a single model.",
+          "style": "flag"
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
+          "style": "named",
+          "type": "str",
+          "default": ""
+        },
+        {
+          "name": "analyze-keywords",
+          "help": "Compute a list of important keywords (convolutional mode only)",
+          "style": "flag"
+        },
+        {
+          "name": "include-detection-performance",
+          "help": "Include a separate evaluation of a classification model, as if it were used for detection",
+          "style": "flag"
+        },
+        {
+          "name": "training-data-query",
+          "help": "Query to obtain data from the database for training",
+          "type": "str",
+          "required": true,
+           "style": "named"
+        },
+        {
+          "name": "test-data-query",
+          "help": "Query to obtain data from the database for performance evaluation",
+          "type": "str",
+          "style": "named"
+        },
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "test-with-training-data",
+          "help": "Draw testing data from training data using train/test split",
+          "style": "flag",
+          "default": false
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
         }
      ]
     },
     {
-      "name": "visualize",
-      "help": "Visualize a classifier",
-      "import_args": [
-        "run/classifier",
-        "make-features/*",
-        "run/output-mode",
-        "run/hyper-params"
+      "name": "train",
+      "help": "Variant of the `run` command which loads a config from the database.",
+      "args": [
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
+          "style": "named",
+          "type": "str",
+          "default": "",
+          "required": true
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
+        }
       ]
+    },
+    {
+      "name": "predict",
+      "help": "Use an existing classifier to make predictions on new data.",
+      "args": [
+        {
+          "name": "model",
+          "alias": "m",
+          "required": true,
+          "style": "named",
+          "type": "str"
+        },
+        {
+          "name": "version",
+          "alias": "v",
+          "required": true,
+          "style": "named",
+          "type": "str",
+          "default": "most-recent"
+        },
+        {
+          "name": "data-query",
+          "alias": "d",
+          "required": true,
+          "style": "named",
+          "type": "str"
+        },
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "with-tag",
+          "alias": "t",
+          "help": "Optional tag to add to all predicted issues",
+          "style": "named",
+          "type": "str",
+          "nargs": "1",
+          "default": ""
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
+        }
+      ]
+    },
+    {
+      "name": "generate-embedding",
+      "description": "Generate a word or document embedding for use in a feature generator",
+      "args": [
+        {
+          "name": "generator",
+          "help": "Generator to use",
+          "style": "positional",
+          "nargs": "1",
+          "type": "enum",
+          "options": [
+            "Word2VecGenerator", "Doc2VecGenerator"
+          ]
+        },
+        {
+          "name": "target-file",
+          "alias": "f",
+          "help": "Target file to save the embedding to",
+          "required": true,
+          "style": "named",
+          "nargs": "1",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ]
+        },
+        {
+          "name": "params",
+          "alias": "p",
+          "help": "Parameters to pass to the embedding generator",
+          "required": "true",
+          "style": "named",
+          "type": "dict",
+          "nargs": "+"
+        },
+        {
+          "name": "database-url",
+          "alias": "db",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "style": "named"
+        },
+        {
+          "name": "training-data-query",
+          "help": "query to retrieve data to train the embedding",
+          "alias": "d",
+          "required": true,
+          "style": "named",
+          "type": "str"
+        },
+        {
+          "name": "formatting-handling",
+          "alias": "fh",
+          "help": "How to handling formatting",
+          "required": true,
+          "style": "named",
+          "type": "enum",
+          "options": [
+            "keep", "remove", "markers"
+          ]
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "style": "named",
+          "required": true,
+          "type": "int",
+          "nargs": "1"
+        }
+      ]
+    },
+    {
+      "name": "embedding-parameters",
+      "help": "Show available parameters for an embedding generator",
+      "args": [
+        {
+          "name": "generator",
+          "help": "Generator to use",
+          "style": "positional",
+          "nargs": "1",
+          "type": "enum",
+          "options": [
+            "Word2VecGenerator", "Doc2VecGenerator"
+          ]
+        }
+      ]
+    },
+    {
+      "name": "embedding-generators",
+      "help": "Show available embedding generators"
     },
     {
       "name": "combination-strategies",
       "help": "Give a comprehensive overview of all available model combination strategies."
+    },
+    {
+      "name": "serve",
+      "help": "Run the pipeline as a web api",
+      "args": [
+        {
+          "name": "port",
+          "alias": "p",
+          "type": "int",
+          "default": "9011",
+          "nargs": "1",
+          "style": "named",
+          "help": "Port to bind to"
+        },
+        {
+          "name": "keyfile",
+          "help": "SLL Keyfile",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ],
+          "style": "named",
+          "required": true
+        },
+        {
+          "name": "certfile",
+          "help": "SSL cerfile",
+          "type": "class",
+          "options": [
+            "pathlib.Path"
+          ],
+          "style": "named",
+          "required": true
+        }
+      ]
     }
   ],
   "subparsers": [

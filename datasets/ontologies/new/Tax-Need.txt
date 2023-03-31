@@ -1,0 +1,10 @@
+ask
+demand
+desire
+hope
+like
+need
+plan
+require
+want
+wish

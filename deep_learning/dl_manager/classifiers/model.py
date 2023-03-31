@@ -8,13 +8,14 @@ This module defines a base class for all future models.
 ##############################################################################
 
 import abc
-import enum
 import numbers
 import typing
 
 import numpy
 import tensorflow as tf
 import tensorflow_addons as tfa
+
+from  ..model_io import InputEncoding, OutputEncoding
 
 
 ##############################################################################
@@ -23,23 +24,11 @@ import tensorflow_addons as tfa
 ##############################################################################
 
 
-class InputEncoding(enum.Enum):
-    Vector = enum.auto()
-    Matrix = enum.auto()
-    Embedding = enum.auto()
-    Text = enum.auto()
-
-
-class OutputEncoding(enum.Enum):
-    OneHot = enum.auto()
-    Binary = enum.auto()
-
-
 class HyperParameter(typing.NamedTuple):
-    minimum: numbers.Number | None
-    maximum: numbers.Number | None
-    default: numbers.Number
-
+    default: typing.Any
+    minimum: numbers.Number | None = None
+    maximum: numbers.Number | None = None
+    options: list[str] | None = None
 
 def _fix_hyper_params(function):
     def wrapper(*args):
@@ -126,13 +115,24 @@ class AbstractModel(abc.ABC):
 
         Remember to call super() when implementing
         """
+        result = {
+            'optimizer': HyperParameter(default='adam',
+                                        minimum=None,
+                                        maximum=None),
+            'loss': HyperParameter(default='crossentropy',
+                                   minimum=None,
+                                   maximum=None),
+            'learning-rate': HyperParameter(default=0.01,
+                                            minimum=None,
+                                            maximum=None)
+        }
         if InputEncoding.Embedding in cls.supported_input_encodings():
-            return {
+            result |= {
                 'use_trainable_embedding': HyperParameter(default=False,
                                                           minimum=False,
                                                           maximum=True)
             }
-        return {}
+        return result
 
     @staticmethod
     @abc.abstractmethod
@@ -147,6 +147,31 @@ class AbstractModel(abc.ABC):
 
     # ================================================================
     # Auxiliary Methods for Model Creation
+
+    def get_activation(self, act: str):
+        match act:
+            case 'relu':
+                return tf.keras.layers.Activation(tf.keras.activations.relu)
+            case 'elu':
+                return tf.keras.layers.Activation(tf.keras.activations.elu)
+            case 'leakrelu':
+                return tf.keras.layers.advanced_activations.LeakyReLU()
+            case 'sigmoid':
+                return tf.keras.layers.Activation(tf.keras.activations.sigmoid)
+            case 'tanh':
+                return tf.keras.layers.Activation(tf.keras.activations.tanh)
+            case 'softmax':
+                return tf.keras.layers.Activation(tf.keras.activations.softmax)
+            case 'softsign':
+                return tf.keras.layers.Activation(tf.keras.activations.softsign)
+            case 'selu':
+                return tf.keras.layers.Activation(tf.keras.activations.selu)
+            case 'exp':
+                return tf.keras.layers.Activation(tf.keras.activations.exp)
+            case 'prelu':
+                return tf.keras.layers.advanced_activations.PReLU()
+            case _ as x:
+                raise ValueError(f'Invalid activation {x}')
 
     def get_input_layer(self, *,
                         embedding=None,
@@ -215,9 +240,7 @@ class AbstractModel(abc.ABC):
             optimizer = kwargs.get('optimizer')
         except KeyError:
             optimizer = kwargs.get(self.__class__.__name__, None)
-        learning_rate = self.get_learning_rate_scheduler()
-        if learning_rate is None:
-            learning_rate = 0.01
+        learning_rate = float(kwargs.get('learning-rate'))
         if optimizer is None or optimizer == 'adam':
             return tf.keras.optimizers.Adam(learning_rate=learning_rate)
         elif optimizer.startswith('sgd'):
@@ -239,7 +262,7 @@ class AbstractModel(abc.ABC):
                                embedding_size=embedding_size,
                                embedding_output_size=embedding_output_size,
                                **kwargs)
-        model.compile(optimizer=self.get_optimizer(),
+        model.compile(optimizer=self.get_optimizer(**kwargs),
                       loss=self.__get_loss_function(),
                       metrics=self.get_metric_list())
         return model

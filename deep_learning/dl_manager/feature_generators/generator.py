@@ -8,33 +8,33 @@ from __future__ import annotations
 import abc
 import csv
 import enum
+import hashlib
+import itertools
 import json
-import pathlib
 import random
 import typing
+import warnings
+import cProfile
+import string
 
-import gensim
 import nltk
 
-from ..classifiers import InputEncoding, OutputEncoding
+from .util.text_cleaner import FormattingHandling, clean_issue_text
+from .. import accelerator
+from ..model_io import InputEncoding, classification8_lookup
 from ..custom_kfold import stratified_trim
 from .util import ontology
 from ..config import conf
+from ..logger import get_logger, timer
+from ..database import DatabaseAPI
+from ..data_manager import Dataset
+
+
+log = get_logger('Base Feature Generator')
 
 from ..data_manager_bootstrap import get_raw_text_file_name
 
 csv.field_size_limit(100000000)
-
-classification8_lookup = {
-    (False, False, False): (1, 0, 0, 0, 0, 0, 0, 0),
-    (False, False, True): (0, 0, 0, 1, 0, 0, 0, 0),
-    (False, True, False): (0, 0, 1, 0, 0, 0, 0, 0),
-    (False, True, True): (0, 0, 0, 0, 0, 0, 1, 0),
-    (True, False, False): (0, 1, 0, 0, 0, 0, 0, 0),
-    (True, False, True): (0, 0, 0, 0, 0, 1, 0, 0),
-    (True, True, False): (0, 0, 0, 0, 1, 0, 0, 0),
-    (True, True, True): (0, 0, 0, 0, 0, 0, 0, 1)
-}
 
 POS_CONVERSION = {
     "JJ": "a",
@@ -69,7 +69,6 @@ ATTRIBUTE_CONSTANTS = {
     'len_summary': 'len_summary',
     'n_votes': 'n_votes',
     'n_watches': 'n_watches',
-    'components': 'components',
     'issuetype': 'issuetype',
     'labels': 'labels',
     'priority': 'priority',
@@ -83,6 +82,47 @@ ATTRIBUTE_CONSTANTS = {
 ##############################################################################
 
 
+class FeatureEncoding(enum.Enum):
+    Numerical = enum.auto()         # No metadata
+    Categorical = enum.auto()       # No metadata
+    Mixed = enum.auto()             # Metadata = Indices of categorical features
+    Bert = enum.auto()              # No metadata 
+
+    def as_string(self):
+        match self:
+            case self.Numerical:
+                return 'numerical'
+            case self.Categorical:
+                return 'categorical'
+            case self.Mixed:
+                return 'mixed'
+            case self.Bert:
+                return 'bert'
+
+
+    def from_string(self, x: str):
+        match x:
+            case 'numerical':
+                return self.Numerical
+            case 'categorical':
+                return self.Categorical
+            case 'mixed':
+                return self.Mixed
+            case 'bert':
+                return self.Bert
+            case _:
+                raise ValueError(f'Invalid feature encoding: {x}')
+
+
+def _escape(x):
+    for ws in string.whitespace:
+        x = x.replace(ws, '_')
+    x = x.replace('.', 'dot')
+    for illegal in '/<>:"/\\|?*\'':
+        x = x.replace(illegal, '')
+    return x
+
+
 class _NullDict(dict):
     def __missing__(self, key):
         return key
@@ -90,115 +130,7 @@ class _NullDict(dict):
 
 class ParameterSpec(typing.NamedTuple):
     description: str
-
-
-class OutputMode(enum.Enum):
-    Detection = enum.auto()
-    Classification3 = enum.auto()
-    Classification3Simplified = enum.auto()
-    Classification8 = enum.auto()
-
-    @classmethod
-    def from_string(cls, string: str) -> OutputMode:
-        match string:
-            case 'Detection':
-                return cls.Detection
-            case 'Classification3':
-                return cls.Classification3
-            case 'Classification3Simplified':
-                return cls.Classification3Simplified
-            case 'Classification8':
-                return cls.Classification8
-        raise ValueError(f'Invalid input: {string}')
-
-    @property
-    def output_encoding(self):
-        match self:
-            case self.Detection:
-                return OutputEncoding.Binary
-            case self.Classification3:
-                return OutputEncoding.Binary
-            case self.Classification3Simplified:
-                return OutputEncoding.OneHot
-            case self.Classification8:
-                return OutputEncoding.OneHot
-
-    @property
-    def output_size(self):
-        match self:
-            case self.Detection:
-                return 1
-            case self.Classification3:
-                return 3
-            case self.Classification3Simplified:
-                return 4
-            case self.Classification8:
-                return 8
-
-    @property
-    def true_category(self) -> str:
-        if self != self.Detection:
-            raise ValueError(f'No true category exists in mode {self}')
-        return 'Architectural'
-
-    @property
-    def index_label_encoding(self):
-        if self not in (self.Classification3Simplified, self.Classification8):
-            raise NotImplementedError
-        mapping: dict[tuple[int, ...], str] = self.label_encoding
-        return {key.index(1): value for key, value in mapping.items()}
-
-    @property
-    def label_encoding(self):
-        match self:
-            case self.Detection:
-                return {
-                    0: 'Non-Architectural',
-                    1: 'Architectural'
-                }
-            case self.Classification3:
-                # Existence, Executive, Property
-                return {
-                    (0, 0, 0): 'Non-Architectural',
-                    (0, 0, 1): 'Property',
-                    (0, 1, 0): 'Executive',
-                    (0, 1, 1): 'Executive/Property',
-                    (1, 0, 0): 'Existence',
-                    (1, 0, 1): 'Existence/Property',
-                    (1, 1, 0): 'Existence/Executive',
-                    (1, 1, 1): 'Existence/Executive/Property',
-                }
-            case self.Classification3Simplified:
-                return {
-                    (1, 0, 0, 0): 'Existence',
-                    (0, 1, 0, 0): 'Executive',
-                    (0, 0, 1, 0): 'Property',
-                    (0, 0, 0, 1): 'Non-Architectural'
-                }
-            case self.Classification8:
-                return {
-                    classification8_lookup[(0, 0, 0)]: 'Non-Architectural',
-                    classification8_lookup[(0, 0, 1)]: 'Property',
-                    classification8_lookup[(0, 1, 0)]: 'Executive',
-                    classification8_lookup[(0, 1, 1)]: 'Executive/Property',
-                    classification8_lookup[(1, 0, 0)]: 'Existence',
-                    classification8_lookup[(1, 0, 1)]: 'Existence/Property',
-                    classification8_lookup[(1, 1, 0)]: 'Existence/Executive',
-                    classification8_lookup[(1, 1, 1)]: 'Existence/Executive/Property',
-                }
-
-    @property
-    def number_of_classes(self) -> int:
-        match self:
-            case self.Detection:
-                return 2
-            case self.Classification3:
-                return 8
-            case self.Classification3Simplified:
-                return 4
-            case self.Classification8:
-                return 8
-
+    type: str
 
 
 ##############################################################################
@@ -209,12 +141,72 @@ class OutputMode(enum.Enum):
 
 class AbstractFeatureGenerator(abc.ABC):
 
-    def __init__(self, **params):
+    def __init__(self, *,
+                 pretrained_generator_settings: dict | None = None,
+                 **params):
         self.__params = params
+        self.__pretrained = pretrained_generator_settings
+        self.__colors = None
+        self.__keys=  None
+        if self.__pretrained is not None:
+            if self.__params:
+                raise ValueError(
+                    'Feature generator does not take params when pretrained settings are given'
+                )
+            # Populate params for default pre-processing,
+            # which does not require any trained settings.
+            for name in AbstractFeatureGenerator.get_parameters():
+                if name in self.__pretrained:
+                    self.__params[name] = self.__pretrained[name]
+            if 'ontology-classes' in self.__pretrained:
+                aux = conf.get('system.storage.auxiliary_map')
+                conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
 
     @property
     def params(self) -> dict[str, str]:
         return self.__params
+
+    @property
+    def pretrained(self) -> dict | None:
+        return self.__pretrained
+
+    @property
+    def colors(self) -> list[int]:
+        if self.__colors is None:
+            raise RuntimeError('No colors yet')
+        return self.__colors
+
+    @property
+    def issue_keys(self) -> list[str]:
+        if self.__keys is None:
+            raise RuntimeError('No keys yet')
+        return self.__keys
+
+    def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str] = []):
+        log.info(f'Saving {self.__class__.__name__} feature encoding')
+        settings = '_'.join(
+            f'{key}-{value}' for key, value in self.__params.items()
+        )
+        filename = f'{self.__class__.__name__}__{settings}'
+        prefix = conf.get('system.storage.file-prefix')
+        filename = f'{prefix}_{hashlib.sha512(filename.encode()).hexdigest()}.json'
+        for name in AbstractFeatureGenerator.get_parameters():
+            if name in self.__params:
+                pretrained_settings[name] = self.__params[name]
+        ontologies = conf.get('run.ontology-classes')
+        if ontologies:
+            pretrained_settings['ontology-classes'] = ontologies
+            conf.get('system.storage.auxiliary').append(ontologies)
+        conf.get('system.storage.generators').append(filename)
+        conf.get('system.storage.auxiliary').extend(auxiliary_files)
+        with open(filename, 'w') as file:
+            json.dump(
+                {
+                    'settings': pretrained_settings,
+                    'generator': self.__class__.__name__,
+                },
+                file
+            )
 
     @staticmethod
     @abc.abstractmethod
@@ -226,7 +218,7 @@ class AbstractFeatureGenerator(abc.ABC):
     def generate_vectors(self,
                          tokenized_issues: list[list[str]],
                          metadata,
-                         args: ...):
+                         args: dict[str, str]):
         # TODO: implement this method
         # TODO: this method should take in data, and generate
         # TODO: the corresponding feature vectors
@@ -234,95 +226,138 @@ class AbstractFeatureGenerator(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
+    def feature_encoding() -> FeatureEncoding:
+        pass
+
+    @staticmethod
+    @abc.abstractmethod
     def get_parameters() -> dict[str, ParameterSpec]:
         return {
             'max-len': ParameterSpec(
-                description='words limit of the issue text'
+                description='words limit of the issue text',
+                type='int'
             ),
             'disable-lowercase': ParameterSpec(
-                description='transform words to lowercase'
+                description='transform words to lowercase',
+                type='bool'
             ),
             'disable-stopwords': ParameterSpec(
-                description='remove stopwords from text'
+                description='remove stopwords from text',
+                type='bool'
             ),
             'use-stemming': ParameterSpec(
-                description='stem the words in the text'
+                description='stem the words in the text',
+                type='bool'
             ),
             'use-lemmatization': ParameterSpec(
-                description='Use lemmatization on words in the text'
+                description='Use lemmatization on words in the text',
+                type='bool'
             ),
             'use-pos': ParameterSpec(
-                'Enhance words in the text with part of speech information'
+                'Enhance words in the text with part of speech information',
+                type='bool'
             ),
             'class-limit': ParameterSpec(
-                description='limit the amount of items per class'
+                description='limit the amount of items per class',
+                type='int'
             ),
         }
 
+    def load_data_from_db(self, query, metadata_attributes):
+        api: DatabaseAPI = conf.get('system.storage.database-api')
+        issue_ids = api.select_issues(query)
+        labels = {
+            'detection': [],
+            'classification3': [],
+            'classification3simplified': [],
+            'classification8': [],
+            'issue_keys': [],
+            'issue_ids': issue_ids
+        }
+        classification_indices = {
+            'Existence': [],
+            'Property': [],
+            'Executive': [],
+            'Non-Architectural': []
+        }
+        if self.pretrained is None:
+            raw_labels = api.get_labels(issue_ids)
+            for index, raw in enumerate(raw_labels):
+                self.update_labels(labels,
+                                   classification_indices,
+                                   index,
+                                   raw['existence'],
+                                   raw['executive'],
+                                   raw['property'])
+        attributes = ['summary', 'description', 'key'] + metadata_attributes
+        raw_data = api.get_issue_data(issue_ids, attributes, raise_on_partial_result=True)
+        warnings.warn('Replace code again once database wrapper has been fixed')
+        # texts = [
+        #     issue.pop('summary') + issue.pop('description') for issue in raw_data
+        # ]
+        texts = []
+        for issue in raw_data:
+            summary = x if (x := issue.pop('summary')) is not None else ''
+            description = x if (x := issue.pop('description')) is not None else ''
+            labels['issue_keys'].append(issue.pop('key'))
+            texts.append((summary, description))
+        metadata = raw_data     # summary and description have been popped
+        return texts, metadata, labels, classification_indices
+
+    def update_labels(self,
+                      labels,
+                      classification_indices,
+                      current_index,
+                      is_existence,
+                      is_executive,
+                      is_property):
+        if self.__colors is None:
+            self.__colors = []
+        if is_executive:  # Executive
+            labels['classification3simplified'].append((0, 1, 0, 0))
+            classification_indices['Executive'].append(current_index)
+            self.__colors.append(0)
+        elif is_property:  # Property
+            labels['classification3simplified'].append((0, 0, 1, 0))
+            classification_indices['Property'].append(current_index)
+            self.__colors.append(1)
+        elif is_existence:  # Existence
+            labels['classification3simplified'].append((1, 0, 0, 0))
+            classification_indices['Existence'].append(current_index)
+            self.__colors.append(2)
+        else:  # Non-architectural
+            labels['classification3simplified'].append((0, 0, 0, 1))
+            classification_indices['Non-Architectural'].append(current_index)
+            self.__colors.append(3)
+
+        if is_executive or is_property or is_existence:
+            labels['detection'].append(True)
+        else:
+            labels['detection'].append(False)
+
+        key = (is_existence, is_executive, is_property)
+        labels['classification8'].append(classification8_lookup[key])
+        labels['classification3'].append(key)
+
     def generate_features(self,
-                          source_filename: pathlib.Path,
-                          target_filename: pathlib.Path):
+                          query,
+                          output_mode: str):
         """Generate features from the data in the given source file,
         and store the results in the given target file.
         """
-        with open(source_filename) as file:
-            issues = json.load(file)
-            metadata_attributes = eval(self.__params.get('metadata-attributes', '[]'), ATTRIBUTE_CONSTANTS)
+        metadata_attributes = [
+            attr for attr in self.__params.get('metadata-attributes', '').split(',') if attr
+        ]
+        for attr in metadata_attributes:
+            if attr not in ATTRIBUTE_CONSTANTS:
+                raise ValueError(f'Unknown metadata attribute: {attr}')
 
-            texts = []
-            metadata = []
-            labels = {
-                'detection': [],
-                'classification3': [],
-                'classification3simplified': [],
-                'classification8': [],
-                'issue_keys': []
-            }
-            classification_indices = {
-                'Existence': [],
-                'Property': [],
-                'Executive': [],
-                'Non-Architectural': []
-            }
-            current_index = 0
-            for issue in issues:
-                is_cat1 = issue['is-cat1']['value'] == 'True'
-                is_cat2 = issue['is-cat2']['value'] == 'True'
-                is_cat3 = issue['is-cat3']['value'] == 'True'
-                key = (is_cat1, is_cat2, is_cat3)
-
-                if is_cat2:  # Executive
-                    labels['classification3simplified'].append((0, 1, 0, 0))
-                    classification_indices['Executive'].append(current_index)
-                elif is_cat3:  # Property
-                    labels['classification3simplified'].append((0, 0, 1, 0))
-                    classification_indices['Property'].append(current_index)
-                elif is_cat1:  # Existence
-                    labels['classification3simplified'].append((1, 0, 0, 0))
-                    classification_indices['Existence'].append(current_index)
-                else:  # Non-architectural
-                    labels['classification3simplified'].append((0, 0, 0, 1))
-                    classification_indices['Non-Architectural'].append(current_index)
-
-                texts.append(issue['summary'] + issue['description'])
-
-                new_metadata = []
-                for attribute in metadata_attributes:
-                    new_metadata.extend(issue['metadata'][attribute])
-                metadata.append(new_metadata)
-
-                if issue['is-design'] == 'True':
-                    labels['detection'].append(True)
-                else:
-                    labels['detection'].append(False)
-
-                labels['classification8'].append(classification8_lookup[key])
-                labels['classification3'].append(key)
-                labels['issue_keys'].append(issue['key'] + '-' + issue['study'])
-                current_index += 1
+        texts, metadata, labels, classification_indices = self.load_data_from_db(
+            query, metadata_attributes
+        )
 
         limit = int(self.params.get('class-limit', -1))
-        if limit != -1:
+        if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
             random.seed(42)
             stratified_indices = []
             for issue_type in classification_indices.keys():
@@ -338,79 +373,120 @@ class AbstractFeatureGenerator(abc.ABC):
         if self.input_encoding_type() == InputEncoding.Text:
             tokenized_issues = [['. '.join(text)] for text in texts]
         else:
+            #with cProfile.Profile() as p:
+            #    tokenized_issues = self.preprocess(texts)
+            #p.dump_stats('profile.txt')
             tokenized_issues = self.preprocess(texts)
 
-        output = self.generate_vectors(tokenized_issues, metadata, self.__params)
-        output['labels'] = labels
+        log.info('Generating feature vectors')
+        with timer('Feature Generation'):
+            output = self.generate_vectors(tokenized_issues, metadata, self.__params)
+        output['labels'] = labels   # labels is empty when pretrained
 
-        if 'original' in output:
+        output['original'] = tokenized_issues
+        if 'original' in output and not self.pretrained:    # Only dump original text when not pre-trained.
             with open(get_raw_text_file_name(), 'w') as file:
                 mapping = {key: text
                            for key, text in zip(labels['issue_keys'], output['original'])}
                 json.dump(mapping, file)
             del output['original']
+        elif 'original' in output:
+            del output['original']
 
-        with open(target_filename, 'w') as file:
-            json.dump(output, file)
+        return Dataset(
+            features=output['features'],
+            labels=output['labels'][output_mode.lower()],
+            shape=output['feature_shape'],
+            embedding_weights=output.get('weights', None),
+            vocab_size=output.get('vocab_size', None),
+            weight_vector_length=output.get('word_vector_length', None),
+            binary_labels=output['labels']['detection'],
+            issue_keys=output['labels']['issue_keys'],
+            ids=output['labels']['issue_ids']
+        )
 
     def preprocess(self, issues):
-        ontology_path = conf.get('make-features.ontology-classes')
-        if ontology_path != '':
-            ontology_table = ontology.load_ontology(ontology_path)
-        else:
-            ontology_table = None
+        log.info('Preprocessing Features')
+        with timer('Feature Preprocessing'):
+            ontology_path = conf.get('run.ontology-classes')
+            if ontology_path != '':
+                ontology_table = ontology.load_ontology(ontology_path)
+            else:
+                ontology_table = None
 
-        tokenized_issues = []
-        for issue in issues:
-            all_words = []
+            stopwords = nltk.corpus.stopwords.words('english')
+            use_stemming = self.__params.get('use-stemming', 'False') == 'True'
+            use_lemmatization = self.__params.get('use-lemmatization', 'False') == 'True'
+            use_pos = self.__params.get('use-pos', 'False') == 'True'
+            stemmer = nltk.stem.PorterStemmer()
+            lemmatizer = nltk.stem.WordNetLemmatizer()
+            use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
+            use_ontologies = conf.get('run.apply-ontology-classes')
+            handling_string = self.__params.get('formatting-handling', 'markers')
+            handling = FormattingHandling.from_string(handling_string)
+            weights, tagdict, classes = nltk.load(
+                'taggers/averaged_perceptron_tagger/averaged_perceptron_tagger.pickle'
+            )
+            tagger = accelerator.Tagger(weights, classes, tagdict)
 
-            # Tokenize
-            for sentence in issue:
-                words = nltk.word_tokenize(sentence)
+            summaries, descriptions = (list(x) for x in zip(*issues))
+            summaries = accelerator.bulk_clean_text_parallel(
+                summaries, handling.as_string(), conf.get('system.resources.threads')
+            )
+            summaries = [clean_issue_text(summary) for summary in summaries]
+            descriptions = accelerator.bulk_clean_text_parallel(
+                descriptions, handling.as_string(), conf.get('system.resources.threads')
+            )
+            descriptions = [clean_issue_text(description) for description in descriptions]
+            texts = [
+                [
+                    nltk.word_tokenize(sent.lower() if use_lowercase else sent)
+                    for sent in itertools.chain(summary, description)
+                ]
+                for summary, description in zip(summaries, descriptions)
+            ]
+            tagged = tagger.bulk_tag_parallel(
+                texts, conf.get('system.resources.threads')
+            )
+            tokenized_issues = []
+            for issue in tagged:
+                all_words = []
 
-                # Transform lowercase
-                if self.__params.get('disable-lowercase', 'False') != 'True':
-                    words = [word.lower() for word in words]
+                # Tokenize
+                for words in issue:
+                     # Apply ontology simplification. Must be done before stemming/lemmatization
+                    if use_ontologies:
+                        #assert ontology_table is not None, 'Missing --ontology-classes'
+                        words = ontology.apply_ontologies_to_sentence(words, ontology_table)
 
-                # Apply ontology simplification. Must be done before stemming/lemmatization
-                if conf.get('make-features.apply-ontology-classes'):
-                    assert ontology_table is not None, 'Missing --ontology-classes'
-                    words = ontology.apply_ontologies_to_sentence(words, ontology_table)
+                    # Remove stopwords
+                    if self.__params.get('disable-stopwords', 'False') != 'True':
+                        words = [(word, tag) for word, tag in words if word not in stopwords]
 
-                words = nltk.pos_tag(words)
+                    if use_stemming and use_lemmatization:
+                        raise ValueError('Cannot use both stemming and lemmatization')
 
-                # Remove stopwords
-                if self.__params.get('disable-stopwords', 'False') != 'True':
-                    stopwords = nltk.corpus.stopwords.words('english')
-                    #words = [word for word in words if word not in stopwords]
-                    words = [(word, tag) for word, tag in words if word not in stopwords]
+                    if use_stemming:
+                        words = [(stemmer.stem(word), tag) for word, tag in words]
 
-                use_stemming = self.__params.get('use-stemming', 'False') == 'True'
-                use_lemmatization = self.__params.get('use-lemmatization', 'False') == 'True'
-                use_pos = self.__params.get('use-pos', 'False') == 'True'
-                if use_stemming and use_lemmatization:
-                    raise ValueError('Cannot use both stemming and lemmatization')
+                    if use_lemmatization:
+                        words = [(lemmatizer.lemmatize(word, pos=POS_CONVERSION.get(tag, 'n')), tag)
+                                 for word, tag in words]
 
-                if use_stemming:
-                    stemmer = nltk.stem.PorterStemmer()
-                    words = [(stemmer.stem(word), tag) for word, tag in words]
-                if use_lemmatization:
-                    lemmatizer = nltk.stem.WordNetLemmatizer()
-                    words = [(lemmatizer.lemmatize(word, pos=POS_CONVERSION.get(tag, 'n')), tag)
-                             for word, tag in words]
-                if use_pos:
-                    words = [f'{word}_{POS_CONVERSION.get(tag, tag)}' for word, tag in words]
-                else:
-                    words = [word for word, _ in words]
+                    if use_pos:
+                        words = [f'{word}_{POS_CONVERSION.get(tag, tag)}' for word, tag in words]
+                    else:
+                        words = [word for word, _ in words]
 
-                # At this point, we forget about sentence order
-                all_words.extend(words)
+                    # At this point, we forget about sentence order
+                    all_words.extend(words)
 
-            # Limit issue length
-            if 'max-len' in self.__params:
-                if len(all_words) > int(self.__params['max-len']):
-                    all_words = all_words[0:int(self.__params['max-len'])]
+                # Limit issue length
+                if 'max-len' in self.__params:
+                    if len(all_words) > int(self.__params['max-len']):
+                        all_words = all_words[0:int(self.__params['max-len'])]
 
-            tokenized_issues.append(all_words)
+                tokenized_issues.append(all_words)
 
+        log.info('Finished preprocessing')
         return tokenized_issues

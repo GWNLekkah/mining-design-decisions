@@ -1,0 +1,4 @@
+acquire
+learn
+study
+teach

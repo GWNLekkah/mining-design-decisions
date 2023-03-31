@@ -1,0 +1,159 @@
+MVC
+MVP
+MVVM
+NIO
+REST
+RESTful
+SOA
+SaaS
+Software as a service
+active repository
+active-repository
+async
+asynchronous
+authenticate
+authentication
+authorise
+authorization
+authorize
+batch
+batch-processing
+blackboard
+blocking
+broadcast
+broker
+cache
+callback
+channel
+client
+client server
+client-server
+client/server
+coherence
+cohesion
+cold
+concurrency
+controller
+data-ingest
+dataingest
+dispatcher
+encapsulate
+encapsulation
+encrypt
+encryption
+endpoint
+event based
+event driven
+event-based
+event-driven
+event/based
+event/driven
+evictor
+facade
+fifo
+filter
+half async
+half sync
+half-async
+half-sync
+handler
+heartbeat
+hot
+interactive analytics
+interactive-analytics
+interceptor
+intermediary
+interpreter
+ipc
+layer
+load balance
+load balancing
+load-balance
+load-balancing
+lookup
+loosely coupled
+map
+master slave
+master-slave
+master/slave
+messaging
+microkernel
+modal view controller
+modalviewcontroller
+monitor
+monitoring
+multi tenant
+multi-tenant
+multicast
+multitenant
+named pipes
+named-pipes
+namedpipes
+non-blocking
+orchestrate
+orchestration
+p2p
+pattern
+peer to peer
+peer-to-peer
+peer2peer
+ping
+pipe
+pipes and filters
+poll
+polling
+proxy
+pub sub
+pub-sub
+pub/sub
+publish and subscribe
+publish subscribe
+publish-subscribe
+publish/subscribe
+publisher
+queue
+queuing
+reactor
+reduce
+redundancy
+reflection
+remote procedure
+remote-procedure
+remote/procedure
+replication
+repository
+resource pool
+router
+routing
+rpc
+sanity
+server
+service oriented
+service-oriented
+service/oriented
+shadow
+shared repository
+shared-repository
+store-and-forward queue
+stream
+stream-processing
+stream-storage
+streamprocessing
+streamstorage
+structured
+subscribe-publish
+subscribe/publish
+subscriber
+supernode
+sync
+synchronous
+tactic
+temperature
+timestamp
+transactional
+translate
+translator
+unstructured
+view
+voting
+warm

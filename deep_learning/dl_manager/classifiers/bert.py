@@ -1,9 +1,8 @@
 import tensorflow as tf
-import tensorflow_hub as hub
-import tensorflow_text as text
+from transformers import TFAutoModelForSequenceClassification
 
-from .model import AbstractModel, HyperParameter, InputEncoding, _fix_hyper_params
-
+from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..model_io import InputEncoding
 
 class Bert(AbstractModel):
     def get_model(self, *,
@@ -11,18 +10,15 @@ class Bert(AbstractModel):
                   embedding_size: int | None = None,
                   embedding_output_size: int | None = None,
                   **kwargs) -> tf.keras.Model:
-        inputs, next_layer = self.get_input_layer()
-        preprocessing_layer = hub.KerasLayer('https://tfhub.dev/tensorflow/bert_en_uncased_preprocess/3',
-                                             name='preprocessing')
-        encoder_inputs = preprocessing_layer(inputs)
-        encoder = hub.KerasLayer('https://tfhub.dev/tensorflow/small_bert/bert_en_uncased_L-4_H-256_A-4/2',
-                                 trainable=True, name='BERT_encoder')
-        outputs = encoder(encoder_inputs)
-        hidden = outputs['pooled_output']
-        hidden = tf.keras.layers.Dropout(0.1)(hidden)
-        hidden = tf.keras.layers.Dense(8)(hidden)
-        outputs = self.get_output_layer()(hidden)
-        return tf.keras.Model(inputs=[inputs], outputs=outputs)
+        model = TFAutoModelForSequenceClassification.from_pretrained(
+            'bert-base-uncased',
+            num_labels=self.number_of_outputs
+        )
+        # We freeze the first 10 layers of Bert
+        for idx in range(10):
+            model.bert.encoder.layer[idx].trainable = False
+        model.classifier.activation = tf.keras.activations.sigmoid
+        return model
 
     @staticmethod
     def supported_input_encodings() -> list[InputEncoding]:

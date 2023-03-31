@@ -3,18 +3,18 @@
 # Imports
 ##############################################################################
 
+from copy import copy
 import collections
 import dataclasses
-import statistics
 
 import numpy
 import keras.callbacks
 from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as pyplot
 import texttable
+from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
-from .feature_generators import OutputMode
-from .classifiers import OutputEncoding
+from .model_io import OutputMode, OutputEncoding
 from .config import conf
 
 
@@ -25,10 +25,11 @@ from .config import conf
 
 
 def _check_output_mode():
-    output_mode: OutputMode = conf.get('run.output-mode')
-    if output_mode == OutputMode.Classification3:
-        raise ValueError(
-            'Metric computation not supported for 3-Classification')
+    # output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+    # if output_mode == OutputMode.Classification3:
+    #     raise ValueError(
+    #         'Metric computation not supported for 3-Classification')
+    pass
 
 
 def get_binary_metrics():
@@ -47,12 +48,20 @@ def get_multi_class_metrics():
     }
 
 
+def get_multi_label_metrics():
+    return {
+        'accuracy', 'loss', 'f_score_tf_macro'
+    }
+
+
 def get_metrics():
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     if output_mode.output_encoding == OutputEncoding.OneHot:
         return get_multi_class_metrics()
     _check_output_mode()
-    return get_binary_metrics()
+    if output_mode.output_size == 1:
+        return get_binary_metrics()
+    return get_multi_label_metrics()
 
 
 def get_metric_translation_table():
@@ -76,9 +85,17 @@ def get_metric_translation_table():
 
 
 def round_binary_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
-    predictions[predictions <= 0.5] = 0
-    predictions[predictions > 0.5] = 1
-    return predictions.flatten().astype(numpy.bool)
+    rounded_predictions = copy(predictions)
+    rounded_predictions[predictions <= 0.5] = 0
+    rounded_predictions[predictions > 0.5] = 1
+    return rounded_predictions.flatten().astype(bool)
+
+
+def round_binary_predictions_no_flatten(predictions: numpy.ndarray) -> numpy.ndarray:
+    rounded_predictions = copy(predictions)
+    rounded_predictions[predictions <= 0.5] = 0
+    rounded_predictions[predictions > 0.5] = 1
+    return rounded_predictions
 
 
 def round_onehot_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
@@ -191,8 +208,47 @@ def compute_confusion_multi_class(y_true,
     return accuracy, class_metrics
 
 
+def compute_confusion_multi_label(y_true,
+                                  y_pred,
+                                  label_mapping) -> (float, dict[str, MetricSet]):
+    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+    c = output_mode.output_size
+    confusion_per_class = {i: {'tp': 0, 'tn': 0, 'fp': 0, 'fn': 0} for i in range(c)}
+    correct = 0
+    incorrect = 0
+    for truth, pred in zip(y_true, y_pred):
+        for i, (t_i, p_i) in enumerate(zip(truth, pred)):
+            if t_i and p_i:
+                confusion_per_class[i]['tp'] += 1
+                correct += 1
+            if t_i and not p_i:
+                confusion_per_class[i]['fn'] += 1
+                incorrect += 1
+            if (not t_i) and p_i:
+                confusion_per_class[i]['fp'] += 1
+                incorrect += 1
+            if (not t_i) and (not p_i):
+                confusion_per_class[i]['tn'] += 1
+                correct += 1
+    accuracy = correct / (correct + incorrect)
+    class_metrics = {
+        label_mapping[tuple(one_hot(c, cls))]: MetricSet(true_positives=confusion['tp'],
+                                                         true_negatives=confusion['tn'],
+                                                         false_positives=confusion['fp'],
+                                                         false_negatives=confusion['fn'])
+        for cls, confusion in confusion_per_class.items()
+    }
+    return accuracy, class_metrics
+
+
 def minor(matrix, i, j):
     return numpy.delete(numpy.delete(matrix, i, axis=0), j, axis=1)
+
+
+def one_hot(n, k):
+    v = [0] * n
+    v[k] = 1
+    return v
 
 
 ##############################################################################
@@ -210,7 +266,7 @@ class MetricCollection:
             'accuracy': [], 'precision': [], 'recall': [], 'f-score': [],
             'class-precision': collections.defaultdict(list),
             'class-recall': collections.defaultdict(list),
-            'class-f-score': collections.defaultdict(list)
+            'class-f-score': collections.defaultdict(list),
         }
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))
         self.__is_multi_class = output_mode.output_size > 1
@@ -274,6 +330,7 @@ class MetricLogger(keras.callbacks.Callback):
         self.__train_metrics = MetricCollection()
         self.__val_metrics = MetricCollection()
         self.__test_metrics = MetricCollection()
+        self.__test_metrics_for_classification_as_detection = MetricCollection()
         self.__predictions = []
         # End metrics
         self.__output_mode = output_mode
@@ -321,6 +378,14 @@ class MetricLogger(keras.callbacks.Callback):
                                      logs,
                                      epoch)
 
+    def __log_mult_label_metrics(self, logs, epoch):
+        results = self.__model.evaluate(x=self.__test_x,
+                                        y=self.__test_y,
+                                        return_dict=True)
+        self.__update_metrics_helper(results,
+                                     logs,
+                                     epoch)
+
     def __update_metrics_helper(self, results, logs, epoch):
         trans = get_metric_translation_table()
         metrics = get_metrics()
@@ -349,19 +414,29 @@ class MetricLogger(keras.callbacks.Callback):
         self.__check_for_early_stopping(epoch)
 
         # Evaluate the model.
-        if self.__task_is_binary:
+        if self.__task_is_binary and self.__output_mode.output_size == 1:
             self.__log_binary_metrics(logs, epoch)
+        elif self.__task_is_binary:
+            self.__log_mult_label_metrics(logs, epoch)
         else:
             self.__log_multi_class_metrics(logs, epoch)
 
-        y_pred = numpy.asarray(self.model.predict(self.__test_x))
+        predictions = self.model.predict(self.__test_x)
+        if type(predictions) is TFSequenceClassifierOutput:
+            y_pred = predictions['logits']
+        else:
+            y_pred = numpy.asarray(predictions)
+
         if self.__output_mode.output_encoding == OutputEncoding.OneHot:
             y_true = onehot_indices(self.__test_y)
             y_pred_class = onehot_indices(y_pred)
         else:
             _check_output_mode()
             y_true = numpy.asarray(self.__test_y)
-            y_pred_class = round_binary_predictions(y_pred)
+            if self.__output_mode.output_size == 1:
+                y_pred_class = round_binary_predictions(y_pred)
+            else:
+                y_pred_class = round_binary_predictions_no_flatten(y_pred)
 
         self.__predictions.append(y_pred_class.tolist())
 
@@ -374,13 +449,36 @@ class MetricLogger(keras.callbacks.Callback):
                                                          metrics_for_class)
         else:
             _check_output_mode()
-            # We do not actually have to compute the metrics here,
-            # because they have already been computed by Keras.
-            pass
+            if self.__output_mode.output_size > 1:
+                accuracy, class_metrics = compute_confusion_multi_label(y_true,
+                                                                        y_pred,
+                                                                        self.__label_mapping)
+                for cls, metrics_for_class in class_metrics.items():
+                    self.__test_metrics.update_class_metrics(cls,
+                                                             metrics_for_class)
+
+        if self.__output_mode != OutputMode.Detection and conf.get('run.include-detection-performance'):
+            match self.__output_mode:
+                case OutputMode.Classification3:
+                    y_true_bin = numpy.sum(y_true, axis=1, keepdims=True) > 0
+                    y_pred_bin = numpy.sum(y_pred_class, axis=1, keepdims=True) > 0
+                case OutputMode.Classification3Simplified:
+                    y_true_bin = y_true != 3    # index 3 is for non-architectural
+                    y_pred_bin = y_pred_class != 3
+                case OutputMode.Classification8:
+                    y_true_bin = y_true != 0    # index 0 is for non-architectural
+                    y_pred_bin = y_pred_class != 0
+                case _ as x:
+                    raise NotImplementedError(f'Unhandled output mode {x}')
+            accuracy, metrics = compute_confusion_binary(y_true_bin,
+                                                         y_pred_bin,
+                                                         OutputMode.Detection.label_encoding)
+            self.__test_metrics_for_classification_as_detection.update_metrics(**metrics)
+            self.__test_metrics_for_classification_as_detection.update_metrics(accuracy=accuracy)
 
     def get_model_results_for_all_epochs(self):
         basis = {
-            'classes': self.__label_mapping,
+            'classes': list(self.__label_mapping.items()),
             'truth': self.__test_y.tolist(),
             'early-stopping-settings': {
                 'stopped-early': not self.__stopped_on_last_epoch,
@@ -396,17 +494,37 @@ class MetricLogger(keras.callbacks.Callback):
         train = self.__train_metrics.as_dictionary('train')
         val = self.__val_metrics.as_dictionary('val')
         test = self.__test_metrics.as_dictionary()
-        return basis | train | val | test
+        detection = self.__test_metrics_for_classification_as_detection.as_dictionary(
+            'classification-as-detection'
+        )
+        return basis | train | val | test | detection
 
     def get_main_model_metrics_at_stopping_epoch(self):
         data = self.get_model_results_for_all_epochs()
-        if self.__stopped_on_last_epoch:
-            return {'accuracy': data['accuracy'][-1],
-                    'f-score': data['f-score'][-1]}
+        if self.__output_mode == OutputMode.Detection or not conf.get('run.include-detection-performance'):
+            if self.__stopped_on_last_epoch:
+                return {'accuracy': data['accuracy'][-1],
+                        'f-score': data['f-score'][-1]}
+            else:
+                offset = conf.get('run.early-stopping-patience') + 1
+                return {'accuracy': data['accuracy'][-offset],
+                        'f-score': data['f-score'][-offset]}
         else:
-            offset = conf.get('run.early-stopping-patience') + 1
-            return {'accuracy': data['accuracy'][-offset],
-                    'f-score': data['f-score'][-offset]}
+            if self.__stopped_on_last_epoch:
+                return {
+                    'accuracy': data['accuracy'][-1],
+                    'f-score': data['f-score'][-1],
+                    'detection-accuracy': data['classification-as-detection-accuracy'][-1],
+                    'detection-f-score': data['classification-as-detection-f-score'][-1]
+                }
+            else:
+                offset = conf.get('run.early-stopping-patience') + 1
+                return {
+                    'accuracy': data['accuracy'][-offset],
+                    'f-score': data['f-score'][-offset],
+                    'detection-accuracy': data['classification-as-detection-accuracy'][-offset],
+                    'detection-f-score': data['classification-as-detection-f-score'][-offset]
+                }
 
 
 ##############################################################################
