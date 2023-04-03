@@ -14,8 +14,8 @@ import matplotlib.pyplot as pyplot
 import texttable
 from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
-from .model_io import OutputMode, OutputEncoding
-from .config import conf
+from deep_learning.dl_manager.model_io import OutputMode, OutputEncoding
+from deep_learning.dl_manager.config import conf
 
 
 ##############################################################################
@@ -347,7 +347,7 @@ class MetricLogger(keras.callbacks.Callback):
     # Early Stopping Support
     # =================================================================
 
-    def __check_for_early_stopping(self, epoch):
+    def _check_for_early_stopping(self, epoch):
         if conf.get('run.use-early-stopping'):
             self.__stopped_on_last_epoch = epoch + 1 == conf.get('run.epochs')
         else:
