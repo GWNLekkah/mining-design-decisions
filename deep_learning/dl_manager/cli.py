@@ -569,7 +569,13 @@ def generate_features_and_get_data(architectural_only: bool = False,
         for param_name in mode_params:
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
-        training_query = conf.get('run.training-data-query')
+        training_query = {
+            '$and': [
+                {'tags': {'$eq': 'has-label'}},
+                {'tags': {'$ne': 'needs-review'}},
+                conf.get('run.training-data-query')
+            ]
+        }
         generator = feature_generators.generators[imode](**mode_params)
         dataset = generator.generate_features(training_query, output_mode)
         if labels_train is not None:
@@ -580,7 +586,13 @@ def generate_features_and_get_data(architectural_only: bool = False,
             binary_labels_train = dataset.binary_labels
         datasets_train.append(dataset)
         if not conf.get('run.test-with-training-data'):
-            testing_query = conf.get('run.test-data-query')
+            testing_query = {
+                '$and': [
+                    {'tags': {'$eq': 'has-label'}},
+                    {'tags': {'$ne': 'needs-review'}},
+                    conf.get('run.test-data-query')
+                ]
+            }
             generator = feature_generators.generators[imode](**mode_params)
             dataset = generator.generate_features(testing_query, output_mode)
             if labels_test is not None:
