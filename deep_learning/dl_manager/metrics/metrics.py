@@ -14,8 +14,8 @@ import matplotlib.pyplot as pyplot
 import texttable
 from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
-from deep_learning.dl_manager.model_io import OutputMode, OutputEncoding
-from deep_learning.dl_manager.config import conf
+from ..model_io import OutputMode, OutputEncoding
+from ..config import conf
 
 
 ##############################################################################

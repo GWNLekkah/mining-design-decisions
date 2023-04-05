@@ -6,6 +6,8 @@
 import collections
 
 import keras.callbacks
+import numpy
+
 
 ##############################################################################
 ##############################################################################
@@ -38,9 +40,9 @@ class PredictionLogger(keras.callbacks.Callback):
             'loss': collections.defaultdict(list),
             'predictions': collections.defaultdict(list),
             'truth': {
-                'training': self._train_y,
-                'validation': self._val_y,
-                'testing': self._test_y
+                'training': self._train_y.tolist(),
+                'validation': self._val_y.tolist(),
+                'testing': self._test_y.tolist()
             },
             'early_stopping_settings': {
                 'use_early_stopping': use_early_stopping,
@@ -53,6 +55,7 @@ class PredictionLogger(keras.callbacks.Callback):
         }
 
     def on_epoch_end(self, epoch, logs=None):
+        self._check_for_early_stopping(epoch)
         self._save_predictions(self._train_x,
                                self._train_y,
                                'training',
@@ -70,12 +73,13 @@ class PredictionLogger(keras.callbacks.Callback):
 
     def _save_predictions(self, x, y, label: str, logs, *, loss_key=None):
         z = self._model.predict(x)
-        self._result[label]['predictions'].append(z)
+        self._result['predictions'][label].append(z.tolist())
         if loss_key is not None:
             loss = logs[loss_key]
         else:
-            loss = self._model.compute_loss(x, y, z)
-        self._result[label]['loss'].append(loss)
+            loss = 0
+            #loss = self._model.compute_loss(x, numpy.asarray(y), z)
+        self._result['loss'][label].append(loss)
 
     def _check_for_early_stopping(self, epoch):
         settings = self._result['early_stopping_settings']
@@ -85,14 +89,14 @@ class PredictionLogger(keras.callbacks.Callback):
                 settings['early_stopping_epoch'] = -1
                 settings['stopped_early'] = False
            else:
-                settings['early_stopping_epoch'] = epoch
+                settings['early_stopping_epoch'] = epoch + 1
 
     def get_model_results_for_all_epochs(self):
         return self._result
 
     def get_main_model_metrics_at_stopping_epoch(self):
-        if self._result['early-stopping-settings']['use-early-stopping']:
-            offset = self._result['early-stopping-settings']['patience']
+        if self._result['early_stopping_settings']['use_early_stopping']:
+            offset = self._result['early_stopping_settings']['patience']
         else:
             offset = 0
         # TODO: perhaps some on-demand metric calculation here?

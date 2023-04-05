@@ -4,7 +4,7 @@ services:
     container_name: dl-manager
     build:
       context: ./
-      dockerfile: docker-compose-no-gpu.yml
+      dockerfile: Dockerfile-no-gpu
     image: dl-manager
     ports:
       - '9011:9011'

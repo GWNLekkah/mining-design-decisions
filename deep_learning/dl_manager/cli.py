@@ -34,7 +34,7 @@ from . import embeddings
 from . import learning
 from .config import conf, CLIApp, APIApp
 from .logger import get_logger
-from .database import DatabaseAPI
+from .database import DatabaseAPI, parse_query
 log = get_logger('CLI')
 
 from . import analysis
@@ -426,7 +426,7 @@ def run_list_command():
         case 'inputs':
             _show_input_mode_list()
         case 'outputs':
-            _show_enum_list('Output Mode', deep_learning.dl_manager.model_io.OutputMode)
+            _show_enum_list('Output Mode', OutputMode)
 
 
 def _show_classifier_list():
@@ -569,13 +569,15 @@ def generate_features_and_get_data(architectural_only: bool = False,
         for param_name in mode_params:
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
-        training_query = {
-            '$and': [
-                {'tags': {'$eq': 'has-label'}},
-                {'tags': {'$ne': 'needs-review'}},
-                conf.get('run.training-data-query')
-            ]
-        }
+        training_query = json.dumps(
+            {
+                '$and': [
+                    {'tags': {'$eq': 'has-label'}},
+                    {'tags': {'$ne': 'needs-review'}},
+                    parse_query(conf.get('run.training-data-query'))
+                ]
+            }
+        )
         generator = feature_generators.generators[imode](**mode_params)
         dataset = generator.generate_features(training_query, output_mode)
         if labels_train is not None:
@@ -586,13 +588,15 @@ def generate_features_and_get_data(architectural_only: bool = False,
             binary_labels_train = dataset.binary_labels
         datasets_train.append(dataset)
         if not conf.get('run.test-with-training-data'):
-            testing_query = {
-                '$and': [
-                    {'tags': {'$eq': 'has-label'}},
-                    {'tags': {'$ne': 'needs-review'}},
-                    conf.get('run.test-data-query')
-                ]
-            }
+            testing_query = json.dumps(
+                {
+                    '$and': [
+                        {'tags': {'$eq': 'has-label'}},
+                        {'tags': {'$ne': 'needs-review'}},
+                        parse_query(conf.get('run.test-data-query'))
+                    ]
+                }
+            )
             generator = feature_generators.generators[imode](**mode_params)
             dataset = generator.generate_features(testing_query, output_mode)
             if labels_test is not None:

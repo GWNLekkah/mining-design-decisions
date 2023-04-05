@@ -1,10 +1,10 @@
-version: '3.1'
+version: "3.1"
 services:
   dl-manager:
     container_name: dl-manager
     build:
       context: ./
-      dockerfile: docker-compose-gpu.yml
+      dockerfile: Dockerfile-gpu
     image: dl-manager
     ports:
       - '9011:9011'
@@ -19,3 +19,4 @@ services:
             - driver: "nvidia"
               capabilities:
                 - "gpu"
+
