@@ -69,7 +69,7 @@ def compute_confusion_multi_label(y_true,
         binary_y_true = (y_true == [0, 0, 0]).all(axis=0)
         binary_y_pred = (y_pred == [0, 0, 0]).all(axis=0)
         _, result = compute_confusion_binary(binary_y_true, binary_y_pred)
-        class_metrics[all_negative_class_name] = result 
+        class_metrics[all_negative_class_name] = result
     x, y = y_pred.shape
     total = x * y
     correct = sum(

@@ -306,11 +306,6 @@
           "style": "flag"
         },
         {
-          "name": "include-detection-performance",
-          "help": "Include a separate evaluation of a classification model, as if it were used for detection",
-          "style": "flag"
-        },
-        {
           "name": "training-data-query",
           "help": "Query to obtain data from the database for training",
           "type": "str",
