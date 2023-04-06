@@ -35,6 +35,7 @@ from . import learning
 from .config import conf, CLIApp, APIApp
 from .logger import get_logger
 from .database import DatabaseAPI, parse_query
+from . import metrics
 log = get_logger('CLI')
 
 from . import analysis
@@ -192,6 +193,7 @@ def setup_app_constraints(app, *, api=False):
     app.register_callback('generate-embedding', run_embedding_generation_command)
     app.register_callback('embedding-parameters', run_embedding_param_command)
     app.register_callback('embedding-generators', run_show_embeddings_command)
+    app.register_callback('metrics', run_metrics_calculation_command)
 
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
@@ -233,6 +235,8 @@ def setup_storage():
         conf.clone('predict.database-url', 'system.storage.database-url')
     if conf.is_active('generate-embedding.database-url'):
         conf.clone('generate-embedding.database-url', 'system.storage.database-url')
+    if conf.is_active('metrics.database-url'):
+        conf.clone('metrics.database-url', 'system.storage.database-url')
     if conf.is_registered('system.storage.database-url'):
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
         conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
@@ -345,6 +349,8 @@ def run_api():
             if result is None:
                 if is_training:
                     return {'run-id': copied['system.training-start-time']}
+                elif conf.is_registered('system.metrics.result'):
+                    return conf.get('system.metrics.result')
                 return {}
             return {'error': str(result)}
         finally:
@@ -863,3 +869,90 @@ def run_prediction_command():
                                             model_version)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')
+
+
+##############################################################################
+##############################################################################
+# Command Dispatch - Metric Calculation
+##############################################################################
+
+
+def run_metrics_calculation_command():
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    model_id = conf.get('metrics.model-id')
+    model_config = db.get_model_config(model_id)
+    version_id = conf.get('metrics.version-id')
+    metric_settings = json.load(conf.get('metrics.metrics'))
+    results = db.load_training_results(model_id, version_id)
+    match conf.get('metrics.epoch'):
+        case 'last':
+            epoch = -1
+        case 'stopping-point':
+            es_settings = metric_settings['early_stopping_settings']
+            if es_settings['use_early_stopping']:
+                if es_settings['stopped_early']:
+                    epoch = -1 - es_settings['patience']
+                else:
+                    epoch = -1
+            else:
+                epoch = -1
+        case 'all':
+            return conf.register(
+                'system.metrics.result',
+                object,
+                [
+                    _calculate_metrics(metric_settings, results, e, model_config)
+                    for e in range(len(results['predictions']['training']))
+                ]
+            )
+        case _ as x:
+            epoch = int(x)
+    return conf.register(
+        'system.metrics.result',
+        object,
+        [_calculate_metrics(metric_settings, results, epoch, model_config)]
+    )
+
+
+def _calculate_metrics(metric_settings, results, epoch, model_config):
+    training_manager = metrics.MetricCalculationManager(
+        y_true=results['truth']['training'],
+        y_pred=results['predictions']['training'][epoch],
+        output_mode=OutputMode.from_string(
+            model_config['output-mode']
+        ),
+        classification_as_detection=conf.get('metrics.classification-as-detection'),
+        include_non_arch=conf.get('metrics.include-non-arch')
+    )
+    validation_manager = metrics.MetricCalculationManager(
+        y_true=results['truth']['validation'],
+        y_pred=results['predictions']['validation'][epoch],
+        output_mode=OutputMode.from_string(
+            model_config['output-mode']
+        ),
+        classification_as_detection=conf.get('metrics.classification-as-detection'),
+        include_non_arch=conf.get('metrics.include-non-arch')
+    )
+    testing_manager = metrics.MetricCalculationManager(
+        y_true=results['truth']['testing'],
+        y_pred=results['predictions']['testing'][epoch],
+        output_mode=OutputMode.from_string(
+            model_config['output-mode']
+        ),
+        classification_as_detection=conf.get('metrics.classification-as-detection'),
+        include_non_arch=conf.get('metrics.include-non-arch')
+    )
+    managers = {
+        'training': training_manager,
+        'validation': validation_manager,
+        'testing': testing_manager
+    }
+    result = {'training': {}, 'validation': {}, 'testing': {}}
+    for metric in metric_settings:
+        mode = metric['dataset']
+        metric_name = metric['metric']
+        variant = metric['variant']
+        if mode not in result:
+            raise ValueError(f'Invalid mode: {mode}')
+        result[mode][metric_name] = managers[mode].calc_metric(metric_name, variant)
+    return result

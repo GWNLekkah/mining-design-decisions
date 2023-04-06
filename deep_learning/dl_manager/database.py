@@ -212,6 +212,11 @@ def save_model_results(model_id: str, version_id: str, results):
     _call_endpoint(endpoint, payload, 'POST')
 
 
+def get_mode_results(model_id: str, version_id: str):
+    endpoint = f'models/{model_id}/performances/{version_id}'
+    return _call_endpoint(endpoint, {}, 'GET')[version_id]
+
+
 ##############################################################################
 ##############################################################################
 # High level DB interface
@@ -244,6 +249,9 @@ class DatabaseAPI:
             conf.get('system.training-start-time'),
             results
         )
+
+    def load_training_results(self, model_id, version_id):
+        return get_mode_results(model_id, version_id)
 
     def select_issues(self, query):
         key = json.dumps(query)

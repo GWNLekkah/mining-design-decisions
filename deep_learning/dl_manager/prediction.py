@@ -3,8 +3,10 @@
 # Imports
 ##############################################################################
 
+from copy import copy
 import pathlib
 
+import numpy
 import tensorflow as tf
 from keras.models import load_model
 from transformers import TFAutoModelForSequenceClassification
@@ -13,9 +15,36 @@ from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 from .model_io import OutputMode, OutputEncoding
 from . import stacking
 from . import voting_util
-from . import metrics
 from .config import conf
 from .database import DatabaseAPI
+
+
+##############################################################################
+##############################################################################
+# Utility Functions
+##############################################################################
+
+
+def round_binary_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
+    rounded_predictions = copy(predictions)
+    rounded_predictions[predictions <= 0.5] = 0
+    rounded_predictions[predictions > 0.5] = 1
+    return rounded_predictions.flatten().astype(bool)
+
+
+def round_binary_predictions_no_flatten(predictions: numpy.ndarray) -> numpy.ndarray:
+    rounded_predictions = copy(predictions)
+    rounded_predictions[predictions <= 0.5] = 0
+    rounded_predictions[predictions > 0.5] = 1
+    return rounded_predictions
+
+
+def round_onehot_predictions(predictions: numpy.ndarray) -> numpy.ndarray:
+    return (predictions == predictions.max(axis=1)).astype(numpy.int64)
+
+
+def onehot_indices(predictions: numpy.ndarray) -> numpy.ndarray:
+    return predictions.argmax(axis=1)
 
 
 ##############################################################################
@@ -45,11 +74,11 @@ def predict_simple_model(path: pathlib.Path,
         predictions = predictions['logits']
 
     if output_mode.output_encoding == OutputEncoding.Binary and output_mode.output_size == 1:
-        canonical_predictions = metrics.round_binary_predictions(predictions)
+        canonical_predictions = round_binary_predictions(predictions)
     elif output_mode.output_encoding == OutputEncoding.Binary:
-        canonical_predictions = metrics.round_binary_predictions_no_flatten(predictions)
+        canonical_predictions = round_binary_predictions_no_flatten(predictions)
     else:
-        indices = metrics.onehot_indices(predictions)
+        indices = onehot_indices(predictions)
         canonical_predictions = _predictions_to_canonical(output_mode, indices)
     _store_predictions(canonical_predictions,
                        output_mode,
@@ -84,9 +113,9 @@ def predict_stacking_model(path: pathlib.Path,
     meta_model = load_model(path / model_metadata['meta_model'])
     final_predictions = meta_model.predict(new_features)
     if output_mode.output_encoding == OutputEncoding.Binary:
-        canonical_predictions = metrics.round_binary_predictions(final_predictions)
+        canonical_predictions = round_binary_predictions(final_predictions)
     else:
-        indices = metrics.onehot_indices(final_predictions)
+        indices = onehot_indices(final_predictions)
         canonical_predictions = _predictions_to_canonical(output_mode, indices)
     _store_predictions(canonical_predictions,
                        output_mode,
