@@ -203,76 +203,76 @@ def _store_predictions(predictions,
                 predictions_by_id[issue_id] = {
                     'architectural': {
                         'prediction': bool(pred),
-                        'probability': float(probabilities[i][0]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][0]) if probabilities is not None else None
                     }
                 }
             case OutputMode.Classification3:
                 predictions_by_id[issue_id] = {
                     'existence': {
                         'prediction': bool(pred[0]),
-                        'probability': float(probabilities[i][0]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][0]) if probabilities is not None else None
                     },
                     'executive': {
                         'prediction': bool(pred[1]),
-                        'probability': float(probabilities[i][1]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][1]) if probabilities is not None else None
                     },
                     'property': {
                         'prediction': bool(pred[2]),
-                        'probability': float(probabilities[i][2]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][2]) if probabilities is not None else None
                     }
                 }
             case OutputMode.Classification3Simplified:
                 predictions_by_id[issue_id] = {
                     'existence': {
                         'prediction': pred == (1, 0, 0, 0),
-                        'probability': float(probabilities[i][0]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][0]) if probabilities is not None else None
                     },
                     'executive': {
                         'prediction': pred == (0, 1, 0, 0),
-                        'probability': float(probabilities[i][1]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][1]) if probabilities is not None else None
                     },
                     'property': {
                         'prediction': pred == (0, 0, 1, 0),
-                        'probability': float(probabilities[i][2]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][2]) if probabilities is not None else None
                     },
                     'non-architectural': {
                         'prediction': pred == (0, 0, 0, 1),
-                        'probability': float(probabilities[i][3]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][3]) if probabilities is not None else None
                     }
                 }
             case OutputMode.Classification8:
                 predictions_by_id[issue_id] = {
                     'non-architectural': {
                         'prediction': pred == 0,
-                        'probability': float(probabilities[i][0]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][0]) if probabilities is not None else None
                     },
                     'property': {
                         'prediction': pred == 1,
-                        'probability': float(probabilities[i][1]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][1]) if probabilities is not None else None
                     },
                     'executive': {
                         'prediction': pred == 2,
-                        'probability': float(probabilities[i][2]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][2]) if probabilities is not None else None
                     },
                     'executive/property': {
                         'prediction': pred == 3,
-                        'probability': float(probabilities[i][3]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][3]) if probabilities is not None else None
                     },
                     'existence': {
                         'prediction': pred == 4,
-                        'probability': float(probabilities[i][4]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][4]) if probabilities is not None else None
                     },
                     'existence/property': {
                         'prediction': pred == 5,
-                        'probability': float(probabilities[i][5]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][5]) if probabilities is not None else None
                     },
                     'existence/executive': {
                         'prediction': pred == 6,
-                        'probability': float(probabilities[i][6]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][6]) if probabilities is not None else None
                     },
                     'existence/executive/property': {
                         'prediction': pred == 7,
-                        'probability': float(probabilities[i][7]) if probabilities is not None else None
+                        'confidence': float(probabilities[i][7]) if probabilities is not None else None
                     }
                 }
     db: DatabaseAPI = conf.get('system.storage.database-api')

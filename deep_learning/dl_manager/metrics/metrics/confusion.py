@@ -47,7 +47,7 @@ def compute_confusion_multi_class(y_true,
                                   y_pred,
                                   labels) -> tuple[float, dict[str, MetricSet]]:
     # Matrix format: truth in row, prediction in column
-    matrix = confusion_matrix(y_true, y_pred, labels=labels)
+    matrix = confusion_matrix(y_true, y_pred)
     # Compute class specific metrics
     class_metrics = {}
     for index, cls_name in enumerate(labels):
@@ -59,7 +59,7 @@ def compute_confusion_multi_class(y_true,
 def compute_confusion_multi_label(y_true,
                                   y_pred,
                                   labels) -> tuple[float, dict[str, MetricSet]]:
-    matrices = multilabel_confusion_matrix(y_true, y_pred, labels=labels)
+    matrices = multilabel_confusion_matrix(y_true, y_pred)
     class_metrics = {}
     for matrix, label in zip(matrices, labels):
         class_metrics[label] = extract_confusion(matrix, 0, len(y_true))

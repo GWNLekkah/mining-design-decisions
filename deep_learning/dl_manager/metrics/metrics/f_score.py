@@ -42,6 +42,10 @@ class FBetaScore(AbstractMetric):
 
 class F1Score(FBetaScore):
 
+    @staticmethod
+    def name() -> str:
+        return 'f_1_score'
+
     def set_params(self, **kwargs):
         super().set_params(**kwargs)
         super().set_params(beta='1.0')

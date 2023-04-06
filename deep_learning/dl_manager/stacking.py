@@ -19,13 +19,13 @@ class InputConversion(enum.Enum):
     def get_input_encoding(self):
         match self:
             case self.Concatenate:
-                return deep_learning.dl_manager.model_io.InputEncoding.Vector
+                return InputEncoding.Vector
             case self.OneHotAsInteger:
-                return deep_learning.dl_manager.model_io.InputEncoding.Vector
+                return InputEncoding.Vector
             case self.VectorAsBinary:
-                return deep_learning.dl_manager.model_io.InputEncoding.Vector
+                return InputEncoding.Vector
             case self.ComposeAsMatrix:
-                return deep_learning.dl_manager.model_io.InputEncoding.Matrix
+                return InputEncoding.Matrix
 
     def to_json(self):
         match self:
@@ -58,7 +58,7 @@ def build_stacking_classifier():
     must_concat = conf.get('run.stacking-use-concat')
     no_matrix = conf.get('run.stacking-no-matrix')
     model_factory = classifiers.models[model_name]
-    output_mode = deep_learning.dl_manager.model_io.OutputMode.from_string(conf.get('run.output_mode'))
+    output_mode = OutputMode.from_string(conf.get('run.output_mode'))
 
     # Determine the input encoding.
     # For detection, the input encoding is an integer.
@@ -74,7 +74,7 @@ def build_stacking_classifier():
     if must_concat:
         input_conversion = InputConversion.Concatenate
     else:
-        supports_matrix = deep_learning.dl_manager.model_io.InputEncoding.Matrix in model_factory.supported_input_encodings()
+        supports_matrix = InputEncoding.Matrix in model_factory.supported_input_encodings()
         conversion_methods = {
             # input encoding, matrix allowed
             (OutputMode.Detection, False): InputConversion.Concatenate,

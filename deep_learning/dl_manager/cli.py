@@ -14,6 +14,7 @@ import json
 import os.path
 import pathlib
 import getpass
+import statistics
 import typing
 import threading
 import warnings
@@ -330,13 +331,18 @@ def run_api():
                 is_training = params['subcommand_name_0'] in {'train', 'run'}
             except KeyError:
                 raise ValueError('parameter `subcommand_name_0` not given')
+            to_retrieve = []
+            if is_training:
+                to_retrieve.append('system.training-start-time')
+            if params['subcommand_name_0'] == 'metrics':
+                to_retrieve.append('system.metrics.results')
             try:
                 copied = APIApp.execute_session(
                     get_arg_spec(),
                     params,
                     app_initializer=setup_app_constraints,
                     with_config=cfg,
-                    retrieve_configs=['system.training-start-time'] if is_training else []
+                    retrieve_configs=to_retrieve
                 )
             except Exception as e:
                 log.warning(f'An exception occurred during user command: {e}')
@@ -349,8 +355,8 @@ def run_api():
             if result is None:
                 if is_training:
                     return {'run-id': copied['system.training-start-time']}
-                elif conf.is_registered('system.metrics.result'):
-                    return conf.get('system.metrics.result')
+                elif params['subcommand_name_0'] == 'metrics':
+                    return copied['system.metrics.results']
                 return {}
             return {'error': str(result)}
         finally:
@@ -882,62 +888,98 @@ def run_metrics_calculation_command():
     model_id = conf.get('metrics.model-id')
     model_config = db.get_model_config(model_id)
     version_id = conf.get('metrics.version-id')
-    metric_settings = json.load(conf.get('metrics.metrics'))
+    metric_settings = conf.get('metrics.metrics')
+    if isinstance(metric_settings, str):
+        metric_settings = json.loads(metric_settings.replace("'", '"'))
     results = db.load_training_results(model_id, version_id)
-    match conf.get('metrics.epoch'):
-        case 'last':
-            epoch = -1
-        case 'stopping-point':
-            es_settings = metric_settings['early_stopping_settings']
-            if es_settings['use_early_stopping']:
-                if es_settings['stopped_early']:
-                    epoch = -1 - es_settings['patience']
+    results_per_fold = []
+    for fold in results:
+        match conf.get('metrics.epoch'):
+            case 'last':
+                epoch = -1
+                results_per_fold.append([
+                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                ])
+            case 'stopping-point':
+                es_settings = metric_settings['early_stopping_settings']
+                if es_settings['use_early_stopping']:
+                    if es_settings['stopped_early']:
+                        epoch = -1 - es_settings['patience']
+                    else:
+                        epoch = -1
                 else:
                     epoch = -1
-            else:
-                epoch = -1
-        case 'all':
-            return conf.register(
-                'system.metrics.result',
-                object,
-                [
-                    _calculate_metrics(metric_settings, results, e, model_config)
-                    for e in range(len(results['predictions']['training']))
-                ]
-            )
-        case _ as x:
-            epoch = int(x)
-    return conf.register(
-        'system.metrics.result',
-        object,
-        [_calculate_metrics(metric_settings, results, epoch, model_config)]
-    )
+                results_per_fold.append([
+                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                ])
+            case 'all':
+                results_per_fold.append(
+                    [
+                        _calculate_metrics(metric_settings, fold, e, model_config)
+                        for e in range(len(results['predictions']['training']))
+                    ]
+                )
+            case _ as x:
+                epoch = int(x)
+                results_per_fold.append([
+                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                ])
+    # results_per_fold has the following structure:
+    #   [ fold1, fold2, ..., foldn]
+    # where foldi is list of metrics per epoch.
+    result = {
+        'folds': results_per_fold,
+        'aggregated': _compute_aggregate_metrics(metric_settings, results_per_fold)
+    }
+    conf.register('system.metrics.results', object, result)
+
+
+def _compute_aggregate_metrics(metric_settings, results_per_fold):
+    result = {'training': {}, 'validation': {}, 'testing': {}}
+    for metric in metric_settings:
+        mode = metric['dataset']
+        metric_name = metric['metric']
+        variant = metric['variant']
+        key = f'{metric_name}[{variant}]'
+        result[mode][key] = {}
+        result[mode][key]['average'] = [
+            statistics.mean([v[mode][key] for v in values])
+            for values in zip(*results_per_fold)
+        ]
+        if len(results_per_fold) == 1:
+            result[mode][key]['standard_deviation'] = [None] * len(result[mode][key]['average'])
+        else:
+            result[mode][key]['standard_deviation'] = [
+                statistics.stdev([v[key] for v in values])
+                for values in zip(*results_per_fold)
+            ]
+    return result
 
 
 def _calculate_metrics(metric_settings, results, epoch, model_config):
     training_manager = metrics.MetricCalculationManager(
-        y_true=results['truth']['training'],
-        y_pred=results['predictions']['training'][epoch],
+        y_true=numpy.asarray(results['truth']['training']),
+        y_pred=numpy.asarray(results['predictions']['training'][epoch]),
         output_mode=OutputMode.from_string(
-            model_config['output-mode']
+            model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
         ),
         classification_as_detection=conf.get('metrics.classification-as-detection'),
         include_non_arch=conf.get('metrics.include-non-arch')
     )
     validation_manager = metrics.MetricCalculationManager(
-        y_true=results['truth']['validation'],
-        y_pred=results['predictions']['validation'][epoch],
+        y_true=numpy.asarray(results['truth']['validation']),
+        y_pred=numpy.asarray(results['predictions']['validation'][epoch]),
         output_mode=OutputMode.from_string(
-            model_config['output-mode']
+            model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
         ),
         classification_as_detection=conf.get('metrics.classification-as-detection'),
         include_non_arch=conf.get('metrics.include-non-arch')
     )
     testing_manager = metrics.MetricCalculationManager(
-        y_true=results['truth']['testing'],
-        y_pred=results['predictions']['testing'][epoch],
+        y_true=numpy.asarray(results['truth']['testing']),
+        y_pred=numpy.asarray(results['predictions']['testing'][epoch]),
         output_mode=OutputMode.from_string(
-            model_config['output-mode']
+            model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
         ),
         classification_as_detection=conf.get('metrics.classification-as-detection'),
         include_non_arch=conf.get('metrics.include-non-arch')
@@ -954,5 +996,8 @@ def _calculate_metrics(metric_settings, results, epoch, model_config):
         variant = metric['variant']
         if mode not in result:
             raise ValueError(f'Invalid mode: {mode}')
-        result[mode][metric_name] = managers[mode].calc_metric(metric_name, variant)
+        if metric_name != 'loss':
+            result[mode][f'{metric_name}[{variant}]'] = managers[mode].calc_metric(metric_name, variant)
+        else:
+            result[mode][f'loss[{variant}]'] = results['loss'][mode][epoch]
     return result

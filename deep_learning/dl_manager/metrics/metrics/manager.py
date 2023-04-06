@@ -89,11 +89,11 @@ class MetricCalculationManager:
                 return confusion.compute_confusion_binary(self._y_true,
                                                           self._y_pred)
             case OutputMode.Classification3:
-                return confusion.compute_confusion_multi_class(self._y_true,
+                return confusion.compute_confusion_multi_label(self._y_true,
                                                                self._y_pred,
                                                                labels)
             case OutputMode.Classification3Simplified:
-                return confusion.compute_confusion_multi_label(self._y_true,
+                return confusion.compute_confusion_multi_class(self._y_true,
                                                                self._y_pred,
                                                                labels)
             case OutputMode.Classification8:
@@ -110,7 +110,7 @@ class MetricCalculationManager:
         if self._output_mode.output_encoding == OutputEncoding.OneHot:
             return {
                 cls: (self._y_true == key.index(1)).sum().item()
-                for key, cls in self._output_mode.output_encoding.items()
+                for key, cls in self._output_mode.label_encoding.items()
             }
         if self._output_mode == OutputMode.Classification3:
             return None
@@ -120,7 +120,8 @@ class MetricCalculationManager:
         if name == 'accuracy' and category == 'global':
             return self._global_acc
         if (metric_cls := self._cache.get(name)) is None:
-            self._cache = {m.name: m for m in base.metrics}
+            self._cache = {m.name(): m for m in base.metrics}
+            print(self._cache)
             metric_cls = self._cache[name]
         metric = metric_cls()
         match category:
