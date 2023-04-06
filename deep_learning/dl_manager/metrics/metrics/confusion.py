@@ -58,11 +58,18 @@ def compute_confusion_multi_class(y_true,
 
 def compute_confusion_multi_label(y_true,
                                   y_pred,
-                                  labels) -> tuple[float, dict[str, MetricSet]]:
+                                  labels, *,
+                                  all_negative_is_class=False,
+                                  all_negative_class_name='negative') -> tuple[float, dict[str, MetricSet]]:
     matrices = multilabel_confusion_matrix(y_true, y_pred)
     class_metrics = {}
     for matrix, label in zip(matrices, labels):
         class_metrics[label] = extract_confusion(matrix, 0, len(y_true))
+    if all_negative_is_class:
+        binary_y_true = (y_true == [0, 0, 0]).all(axis=0)
+        binary_y_pred = (y_pred == [0, 0, 0]).all(axis=0)
+        _, result = compute_confusion_binary(binary_y_true, binary_y_pred)
+        class_metrics[all_negative_class_name] = result 
     x, y = y_pred.shape
     total = x * y
     correct = sum(

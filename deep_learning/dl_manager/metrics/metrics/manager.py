@@ -91,7 +91,9 @@ class MetricCalculationManager:
             case OutputMode.Classification3:
                 return confusion.compute_confusion_multi_label(self._y_true,
                                                                self._y_pred,
-                                                               labels)
+                                                               labels,
+                                                               all_negative_is_class=self._include_non_arch,
+                                                               all_negative_class_name='Non-Architectural')
             case OutputMode.Classification3Simplified:
                 return confusion.compute_confusion_multi_class(self._y_true,
                                                                self._y_pred,
@@ -121,7 +123,6 @@ class MetricCalculationManager:
             return self._global_acc
         if (metric_cls := self._cache.get(name)) is None:
             self._cache = {m.name(): m for m in base.metrics}
-            print(self._cache)
             metric_cls = self._cache[name]
         metric = metric_cls()
         match category:
