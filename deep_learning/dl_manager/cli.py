@@ -14,6 +14,7 @@ import json
 import os.path
 import pathlib
 import getpass
+import statistics
 import typing
 import threading
 import warnings
@@ -34,7 +35,8 @@ from . import embeddings
 from . import learning
 from .config import conf, CLIApp, APIApp
 from .logger import get_logger
-from .database import DatabaseAPI
+from .database import DatabaseAPI, parse_query
+from . import metrics
 log = get_logger('CLI')
 
 from . import analysis
@@ -192,6 +194,7 @@ def setup_app_constraints(app, *, api=False):
     app.register_callback('generate-embedding', run_embedding_generation_command)
     app.register_callback('embedding-parameters', run_embedding_param_command)
     app.register_callback('embedding-generators', run_show_embeddings_command)
+    app.register_callback('metrics', run_metrics_calculation_command)
 
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
@@ -233,6 +236,8 @@ def setup_storage():
         conf.clone('predict.database-url', 'system.storage.database-url')
     if conf.is_active('generate-embedding.database-url'):
         conf.clone('generate-embedding.database-url', 'system.storage.database-url')
+    if conf.is_active('metrics.database-url'):
+        conf.clone('metrics.database-url', 'system.storage.database-url')
     if conf.is_registered('system.storage.database-url'):
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
         conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
@@ -326,13 +331,18 @@ def run_api():
                 is_training = params['subcommand_name_0'] in {'train', 'run'}
             except KeyError:
                 raise ValueError('parameter `subcommand_name_0` not given')
+            to_retrieve = []
+            if is_training:
+                to_retrieve.append('system.training-start-time')
+            if params['subcommand_name_0'] == 'metrics':
+                to_retrieve.append('system.metrics.results')
             try:
                 copied = APIApp.execute_session(
                     get_arg_spec(),
                     params,
                     app_initializer=setup_app_constraints,
                     with_config=cfg,
-                    retrieve_configs=['system.training-start-time'] if is_training else []
+                    retrieve_configs=to_retrieve
                 )
             except Exception as e:
                 log.warning(f'An exception occurred during user command: {e}')
@@ -345,6 +355,8 @@ def run_api():
             if result is None:
                 if is_training:
                     return {'run-id': copied['system.training-start-time']}
+                elif params['subcommand_name_0'] == 'metrics':
+                    return copied['system.metrics.results']
                 return {}
             return {'error': str(result)}
         finally:
@@ -426,7 +438,7 @@ def run_list_command():
         case 'inputs':
             _show_input_mode_list()
         case 'outputs':
-            _show_enum_list('Output Mode', deep_learning.dl_manager.model_io.OutputMode)
+            _show_enum_list('Output Mode', OutputMode)
 
 
 def _show_classifier_list():
@@ -569,13 +581,15 @@ def generate_features_and_get_data(architectural_only: bool = False,
         for param_name in mode_params:
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
-        training_query = {
-            '$and': [
-                {'tags': {'$eq': 'has-label'}},
-                {'tags': {'$ne': 'needs-review'}},
-                conf.get('run.training-data-query')
-            ]
-        }
+        training_query = json.dumps(
+            {
+                '$and': [
+                    {'tags': {'$eq': 'has-label'}},
+                    {'tags': {'$ne': 'needs-review'}},
+                    parse_query(conf.get('run.training-data-query'))
+                ]
+            }
+        )
         generator = feature_generators.generators[imode](**mode_params)
         dataset = generator.generate_features(training_query, output_mode)
         if labels_train is not None:
@@ -586,13 +600,15 @@ def generate_features_and_get_data(architectural_only: bool = False,
             binary_labels_train = dataset.binary_labels
         datasets_train.append(dataset)
         if not conf.get('run.test-with-training-data'):
-            testing_query = {
-                '$and': [
-                    {'tags': {'$eq': 'has-label'}},
-                    {'tags': {'$ne': 'needs-review'}},
-                    conf.get('run.test-data-query')
-                ]
-            }
+            testing_query = json.dumps(
+                {
+                    '$and': [
+                        {'tags': {'$eq': 'has-label'}},
+                        {'tags': {'$ne': 'needs-review'}},
+                        parse_query(conf.get('run.test-data-query'))
+                    ]
+                }
+            )
             generator = feature_generators.generators[imode](**mode_params)
             dataset = generator.generate_features(testing_query, output_mode)
             if labels_test is not None:
@@ -859,3 +875,129 @@ def run_prediction_command():
                                             model_version)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')
+
+
+##############################################################################
+##############################################################################
+# Command Dispatch - Metric Calculation
+##############################################################################
+
+
+def run_metrics_calculation_command():
+    db: DatabaseAPI = conf.get('system.storage.database-api')
+    model_id = conf.get('metrics.model-id')
+    model_config = db.get_model_config(model_id)
+    version_id = conf.get('metrics.version-id')
+    metric_settings = conf.get('metrics.metrics')
+    if isinstance(metric_settings, str):
+        metric_settings = json.loads(metric_settings.replace("'", '"'))
+    results = db.load_training_results(model_id, version_id)
+    results_per_fold = []
+    for fold in results:
+        match conf.get('metrics.epoch'):
+            case 'last':
+                epoch = -1
+                results_per_fold.append([
+                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                ])
+            case 'stopping-point':
+                es_settings = metric_settings['early_stopping_settings']
+                if es_settings['use_early_stopping']:
+                    if es_settings['stopped_early']:
+                        epoch = -1 - es_settings['patience']
+                    else:
+                        epoch = -1
+                else:
+                    epoch = -1
+                results_per_fold.append([
+                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                ])
+            case 'all':
+                results_per_fold.append(
+                    [
+                        _calculate_metrics(metric_settings, fold, e, model_config)
+                        for e in range(len(results['predictions']['training']))
+                    ]
+                )
+            case _ as x:
+                epoch = int(x)
+                results_per_fold.append([
+                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                ])
+    # results_per_fold has the following structure:
+    #   [ fold1, fold2, ..., foldn]
+    # where foldi is list of metrics per epoch.
+    result = {
+        'folds': results_per_fold,
+        'aggregated': _compute_aggregate_metrics(metric_settings, results_per_fold)
+    }
+    conf.register('system.metrics.results', object, result)
+
+
+def _compute_aggregate_metrics(metric_settings, results_per_fold):
+    result = {'training': {}, 'validation': {}, 'testing': {}}
+    for metric in metric_settings:
+        mode = metric['dataset']
+        metric_name = metric['metric']
+        variant = metric['variant']
+        key = f'{metric_name}[{variant}]'
+        result[mode][key] = {}
+        result[mode][key]['average'] = [
+            statistics.mean([v[mode][key] for v in values])
+            for values in zip(*results_per_fold)
+        ]
+        if len(results_per_fold) == 1:
+            result[mode][key]['standard_deviation'] = [None] * len(result[mode][key]['average'])
+        else:
+            result[mode][key]['standard_deviation'] = [
+                statistics.stdev([v[key] for v in values])
+                for values in zip(*results_per_fold)
+            ]
+    return result
+
+
+def _calculate_metrics(metric_settings, results, epoch, model_config):
+    training_manager = metrics.MetricCalculationManager(
+        y_true=numpy.asarray(results['truth']['training']),
+        y_pred=numpy.asarray(results['predictions']['training'][epoch]),
+        output_mode=OutputMode.from_string(
+            model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
+        ),
+        classification_as_detection=conf.get('metrics.classification-as-detection'),
+        include_non_arch=conf.get('metrics.include-non-arch')
+    )
+    validation_manager = metrics.MetricCalculationManager(
+        y_true=numpy.asarray(results['truth']['validation']),
+        y_pred=numpy.asarray(results['predictions']['validation'][epoch]),
+        output_mode=OutputMode.from_string(
+            model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
+        ),
+        classification_as_detection=conf.get('metrics.classification-as-detection'),
+        include_non_arch=conf.get('metrics.include-non-arch')
+    )
+    testing_manager = metrics.MetricCalculationManager(
+        y_true=numpy.asarray(results['truth']['testing']),
+        y_pred=numpy.asarray(results['predictions']['testing'][epoch]),
+        output_mode=OutputMode.from_string(
+            model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
+        ),
+        classification_as_detection=conf.get('metrics.classification-as-detection'),
+        include_non_arch=conf.get('metrics.include-non-arch')
+    )
+    managers = {
+        'training': training_manager,
+        'validation': validation_manager,
+        'testing': testing_manager
+    }
+    result = {'training': {}, 'validation': {}, 'testing': {}}
+    for metric in metric_settings:
+        mode = metric['dataset']
+        metric_name = metric['metric']
+        variant = metric['variant']
+        if mode not in result:
+            raise ValueError(f'Invalid mode: {mode}')
+        if metric_name != 'loss':
+            result[mode][f'{metric_name}[{variant}]'] = managers[mode].calc_metric(metric_name, variant)
+        else:
+            result[mode][f'loss[{variant}]'] = results['loss'][mode][epoch]
+    return result

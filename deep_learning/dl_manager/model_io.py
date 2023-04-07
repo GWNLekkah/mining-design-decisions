@@ -84,11 +84,47 @@ class OutputMode(enum.Enum):
         return 'Architectural'
 
     @property
+    def non_architectural_pattern(self):
+        match self:
+            case self.Detection:
+                return 0
+            case self.Classification3:
+                return 0, 0, 0
+            case self.Classification3Simplified:
+                return 0, 0, 0, 1
+            case self.Classification8:
+                return 1, 0, 0, 0, 0, 0, 0, 0
+
+    @property
     def index_label_encoding(self):
         if self not in (self.Classification3Simplified, self.Classification8):
             raise NotImplementedError
         mapping: dict[tuple[int, ...], str] = self.label_encoding
         return {key.index(1): value for key, value in mapping.items()}
+
+    @property
+    def output_vector_field_names(self) -> list[str]:
+        match self:
+            case self.Detection:
+                return ['Architectural']
+            case self.Classification3:
+                return [
+                    'Existence',
+                    'Executive',
+                    'Property'
+                ]
+            case self.Classification3Simplified:
+                return self._fields_from_one_hot()
+            case self.Classification8:
+                return self._fields_from_one_hot()
+
+    def _fields_from_one_hot(self) -> list[str]:
+        pairs = [
+            # type: ignore
+            (key.index(1), value) for key, value in self.label_encoding.items()
+        ]
+        pairs.sort()
+        return [pair[1] for pair in pairs]
 
     @property
     def label_encoding(self):

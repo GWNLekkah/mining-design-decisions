@@ -36,8 +36,12 @@ RUN python3.10 setup.py sdist
 RUN python3.10 -m pip install -r dl_manager.egg-info/requires.txt
 
 # Build acceleration module
-COPY ./dl_manager /app/dl_manager
+COPY ./dl_manager/accelerator /app/dl_manager/accelerator
+COPY ./dl_manager/feature_generators/util/technologies.csv /app/dl_manager/feature_generators/util/technologies.csv
 RUN python3.10 setup.py build_ext --inplace --verbose
+
+# Copy Python source files
+COPY ./dl_manager /app/dl_manager
 
 # Setup start-up command
 CMD ["python3.10", "-m", "dl_manager", "serve", "--keyfile", "server.key", "--certfile", "server.crt"]

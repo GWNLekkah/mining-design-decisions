@@ -28,7 +28,7 @@ from .model_io import OutputMode
 
 from . config import conf
 from . import stacking
-from .metrics import MetricLogger
+from .metrics.metric_logger import PredictionLogger
 from . import metrics
 from . import data_splitting as splitting
 from . import model_manager
@@ -250,14 +250,6 @@ def train_and_test_model(model: tf.keras.Model,
 
     callbacks = []
 
-    logger = MetricLogger(model,
-                          test_x,
-                          test_y,
-                          output_mode,
-                          label_mapping,
-                          test_issue_keys)
-    callbacks.append(logger)
-
     if conf.get('run.use-early-stopping'):
         attributes = conf.get('run.early-stopping-attribute')
         min_deltas = conf.get('run.early-stopping-min-delta')
@@ -275,6 +267,21 @@ def train_and_test_model(model: tf.keras.Model,
         warnings.warn('--epochs is ignored when using early stopping')
         conf.set('run.epochs', 1000)
     #print('Training data shape:', train_y.shape, train_x.shape)
+
+    logger = PredictionLogger(
+        model=model,
+        training_data=(train_x, train_y),
+        validation_data=dataset_val,
+        testing_data=(test_x, test_y),
+        label_mapping=output_mode.label_encoding,
+        max_epochs=epochs,
+        use_early_stopping=conf.get('run.use-early-stopping'),
+        early_stopping_attributes=conf.get('run.early-stopping-attribute'),
+        early_stopping_min_deltas=conf.get('run.early-stopping-min-delta'),
+        early_stopping_patience=conf.get('run.early-stopping-patience')
+    )
+    callbacks.append(logger)
+
     model.fit(x=train_x, y=train_y,
               batch_size=conf.get('run.batch_size'),
               epochs=epochs if epochs > 0 else 1,
