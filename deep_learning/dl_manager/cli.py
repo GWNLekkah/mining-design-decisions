@@ -198,7 +198,6 @@ def setup_app_constraints(app, *, api=False):
 
     app.register_setup_callback(setup_peregrine)
     app.register_setup_callback(setup_storage)
-    app.register_setup_callback(issue_warnings)
     app.register_setup_callback(setup_resources)
     app.register_setup_callback(setup_security)
 
@@ -290,14 +289,6 @@ def setup_security():
         log.info(f'Key file: {conf.get("system.security.ssl-keyfile")}')
     if not conf.is_registered('system.security.db-token'):
         conf.register('system.security.db-token', object, None)
-
-
-def issue_warnings():
-    if conf.is_active('run.output-mode'):
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-        include_detection = conf.get('run.include-detection-performance')
-        if output_mode == OutputMode.Detection and include_detection:
-            warnings.warn('--include-detection-performance is ignored when doing classification')
 
 
 def run_api():
@@ -920,7 +911,7 @@ def run_metrics_calculation_command():
                     ]
                 )
             case _ as x:
-                epoch = int(x)
+                epoch = int(x) - 1
                 results_per_fold.append([
                     _calculate_metrics(metric_settings, fold, epoch, model_config)
                 ])
@@ -950,7 +941,7 @@ def _compute_aggregate_metrics(metric_settings, results_per_fold):
             result[mode][key]['standard_deviation'] = [None] * len(result[mode][key]['average'])
         else:
             result[mode][key]['standard_deviation'] = [
-                statistics.stdev([v[key] for v in values])
+                statistics.stdev([v[mode][key] for v in values])
                 for values in zip(*results_per_fold)
             ]
     return result

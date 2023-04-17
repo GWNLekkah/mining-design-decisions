@@ -127,24 +127,24 @@ def get_token(username, password):
 
 
 def get_model_config(config_id: str):
-    return _call_endpoint(f'models/{config_id}', {}, 'GET')['config']
+    return _call_endpoint(f'models/{config_id}', {}, 'GET')['model_config']
 
 
 def select_issue_ids(query) -> list[str]:
     parsed = parse_query(query)
     validate_query(parsed)
-    return _call_endpoint('issue-ids', {'filter': parsed}, 'GET')['ids']
+    return _call_endpoint('issue-ids', {'filter': parsed}, 'GET')['issue_ids']
 
 
 def get_issue_labels_by_key(ids: list[str]):
-    return _call_endpoint('manual-labels', {'ids': ids}, 'GET')['labels']
+    return _call_endpoint('manual-labels', {'issue_ids': ids}, 'GET')['manual_labels']
 
 
 def get_issue_data_by_keys(ids: list[str], attributes: list[str]):
     return _call_endpoint(
         'issue-data',
         {
-            'ids': ids,
+            'issue_ids': ids,
             'attributes': attributes
         },
         'GET'
@@ -153,11 +153,8 @@ def get_issue_data_by_keys(ids: list[str], attributes: list[str]):
 
 def add_tag_to_issues(ids: list[str], tag: str):
     return _call_endpoint(
-        'add-tags',
-        {
-            'ids': ids,
-            'tags': [tag]
-        },
+        'bulk/add-tags',
+        {'data': [{'issue_id': id_, 'tags': [tag]} for id_ in ids]},
         'POST'
     )
 
@@ -190,12 +187,12 @@ def store_model(model_id: str, time: str, filename: str) -> str:
             'Authorization': 'Bearer ' + conf.get('system.security.db-token')
         }
     )
-    return response.json()['version-id']
+    return response.json()['version_id']
 
 
 def get_most_recent_model(model_id: str) -> str:
     versions = _call_endpoint(f'models/{model_id}/versions', {}, 'GET')['versions']
-    return max(versions, key=lambda x: datetime.datetime.fromisoformat(x['time']).timestamp())['id']
+    return max(versions, key=lambda x: datetime.datetime.fromisoformat(x['time']).timestamp())['version_id']
 
 
 def retrieve_model(model_id: str, version_id: str) -> bytes:
@@ -214,7 +211,7 @@ def save_model_results(model_id: str, version_id: str, results):
 
 def get_mode_results(model_id: str, version_id: str):
     endpoint = f'models/{model_id}/performances/{version_id}'
-    return _call_endpoint(endpoint, {}, 'GET')[version_id]
+    return _call_endpoint(endpoint, {}, 'GET')['performance']
 
 
 ##############################################################################
