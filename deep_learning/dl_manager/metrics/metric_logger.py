@@ -6,7 +6,7 @@
 import collections
 
 import keras.callbacks
-import numpy
+from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
 
 ##############################################################################
@@ -73,6 +73,8 @@ class PredictionLogger(keras.callbacks.Callback):
 
     def _save_predictions(self, x, y, label: str, logs, *, loss_key=None):
         z = self._model.predict(x)
+        if type(z) is TFSequenceClassifierOutput:
+            z = z['logits']
         self._result['predictions'][label].append(z.tolist())
         if loss_key is not None:
             loss = logs[loss_key]
