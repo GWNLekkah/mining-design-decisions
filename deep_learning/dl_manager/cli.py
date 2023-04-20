@@ -520,13 +520,15 @@ def run_embedding_param_command():
 
 
 def run_embedding_generation_command():
-    gen = conf.get('generate-embedding.generator')
-    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[gen]
-    query = conf.get('generate-embedding.training-data-query')
-    path = conf.get('generate-embedding.target-file')
-    handling = conf.get('generate-embedding.formatting-handling')
-    g = generator(**conf.get('generate-embedding.params'))
-    g.make_embedding(query, path, handling)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    embedding_id = conf.get('generate-embedding.embedding-id')
+    embedding = db.get_embedding_by_id(embedding_id)
+    embedding_config = embedding.config
+    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embedding_config['generator']
+    query = db_util.json_to_query(embedding_config['training-data-query'])
+    handling = embedding_config['formatting-handling']
+    g = generator(**embedding_config['params'])
+    g.make_embedding(query, handling)
 
 
 ##############################################################################

@@ -5,15 +5,19 @@ import pathlib
 import typing
 
 import nltk
-from .. import accelerator
 
+import issue_db_api
+
+from .. import accelerator
 from ..config import conf
-from ..database import DatabaseAPI
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
 from ..logger import get_logger
 
 log = get_logger('Embedding Generator')
+
+
+TEMP_EMBEDDING_PATH = pathlib.Path('embedding_binary.bin')
 
 
 @dataclasses.dataclass
@@ -51,11 +55,15 @@ class AbstractEmbeddingGenerator(abc.ABC):
     def __init__(self, **params):
         self.params = params
 
-    def make_embedding(self, query: str, path: pathlib.Path, formatting_handling: str):
+    def make_embedding(self,
+                       query: issue_db_api.Query,
+                       formatting_handling: str):
         # Loading issues from database
-        db: DatabaseAPI = conf.get('system.storage.database-api')
-        issues = db.select_issues(query)
-        data = db.get_issue_data(issues, ['summary', 'description'])
+        # db: DatabaseAPI = conf.get('system.storage.database-api')
+        # issues = db.select_issues(query)
+        # data = db.get_issue_data(issues, ['summary', 'description'])
+        db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+        issues = db.search(query, attributes=['summary', 'description'])
 
         # Setting up NLP stuff
         handling = FormattingHandling.from_string(formatting_handling)
@@ -79,8 +87,8 @@ class AbstractEmbeddingGenerator(abc.ABC):
         tagger = accelerator.Tagger(weights, classes, tagdict)
 
         # Bulk processing
-        summaries = [issue['summary'] for issue in data]
-        descriptions = [issue['description'] for issue in data]
+        summaries = [issue.summary for issue in issues]
+        descriptions = [issue.description for issue in issues]
         summaries = accelerator.bulk_clean_text_parallel(
             summaries, handling.as_string(), conf.get('system.resources.threads')
         )
@@ -119,7 +127,13 @@ class AbstractEmbeddingGenerator(abc.ABC):
             documents.append(document)
 
         # Embedding generation
-        self.generate_embedding(documents, path)
+        self.generate_embedding(documents, TEMP_EMBEDDING_PATH)
+
+        # Upload binary file
+        embedding_id = conf.get('generate-embedding.embedding-id')
+        embedding = db.get_embedding_by_id(embedding_id)
+        embedding.upload_binary(TEMP_EMBEDDING_PATH)
+
 
     @abc.abstractmethod
     def generate_embedding(self, issues: list[list[str]], path: pathlib.Path):

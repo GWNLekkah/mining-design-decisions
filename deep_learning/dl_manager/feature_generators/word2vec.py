@@ -1,6 +1,8 @@
 import abc
 import datetime
+import os
 
+import issue_db_api
 from gensim.models import Word2Vec as GensimWord2Vec
 from gensim import models
 
@@ -17,25 +19,19 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                          args: dict[str, str]):
         # Train or load a model
         if self.pretrained is None:
-            if 'pretrained-file' not in args:
-                model = GensimWord2Vec(tokenized_issues, min_count=int(args['min-count']),
-                                       vector_size=int(args['vector-length']))
-                filename = 'word2vec_' + datetime.datetime.now().strftime('%d-%m-%Y-%H-%M-%S') + '.bin'
-                model.wv.save_word2vec_format(filename, binary=True)
-                args['pretrained-file'] = filename
-                args['pretrained-binary'] = 'True'
+            db: issue_db_api.IssueRepository = conf.get('system.storage.database.api')
+            embedding = db.get_embedding_by_id(self.params['embedding-id'])
+            filename = self.params['embedding-id'] + '.bin'
+            if os.path.exists(filename):
+                os.remove(filename)
+            embedding.download_binary(filename)
 
             # Load the model
-            wv = models.KeyedVectors.load_word2vec_format(
-                args['pretrained-file'], binary=bool(args['pretrained-binary'])
-            )
+            wv = models.KeyedVectors.load_word2vec_format(filename, binary=True)
         else:
             aux_map = conf.get('system.storage.auxiliary_map')
             filename = aux_map[self.pretrained['model']]
-            wv = models.KeyedVectors.load_word2vec_format(
-                filename,
-                binary=self.pretrained['model-binary']
-            )
+            wv = models.KeyedVectors.load_word2vec_format(filename, binary=True)
 
         # Build the final feature vectors.
         # This function should also save the pretrained model
@@ -61,12 +57,8 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                 description='minimum occurrence for a word to be in the word2vec',
                 type='int'
             ),
-            'pretrained-file': ParameterSpec(
-                description='specify path to the pretrained word2vec model',
-                type='str'
-            ),
-            'pretrained-binary': ParameterSpec(
-                description='specify is pretrained word2vec is binary',
-                type='str'
-            ),
+           'embedding-id': ParameterSpec(
+               description='ID of the word embedding to use',
+               type='str',
+           )
         } | super(AbstractWord2Vec, AbstractWord2Vec).get_parameters()
