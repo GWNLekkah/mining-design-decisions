@@ -23,6 +23,8 @@ import traceback
 
 import numpy
 
+import issue_db_api
+
 from . import classifiers, kw_analyzer, model_manager, model_io
 from .classifiers import HyperParameter
 
@@ -32,10 +34,10 @@ from .model_io import OutputMode
 from . import data_manager
 from . import embeddings
 
+from . import db_util
 from . import learning
 from .config import conf, CLIApp, APIApp
 from .logger import get_logger
-from .database import DatabaseAPI, parse_query
 from . import metrics
 log = get_logger('CLI')
 
@@ -238,8 +240,23 @@ def setup_storage():
     if conf.is_active('metrics.database-url'):
         conf.clone('metrics.database-url', 'system.storage.database-url')
     if conf.is_registered('system.storage.database-url'):
+        conf.register(
+            'system.security.allow-self-signed-certificates',
+            bool,
+            os.environ['DL_MANAGER_ALLOW_UNSAFE_HTTPS'].upper() == 'TRUE'
+        )
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
-        conf.register('system.storage.database-api', DatabaseAPI, DatabaseAPI())    # Also invalidates the cache
+        api = issue_db_api.IssueRepository(
+            url=conf.get('system.storage.database-url'),
+            credentials=(
+                conf.get('system.security.db-username'),
+                conf.get('system.security.db-password')
+            ),
+            allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates')
+        )
+        conf.register('system.storage.database-api',
+                      issue_db_api.IssueRepository,
+                      api)
 
 
 def setup_resources():
@@ -256,39 +273,11 @@ def setup_resources():
 
 
 def setup_security():
-    conf.register(
-        'system.security.allow-self-signed',
-        bool,
-        os.environ.get('DL_MANAGER_ALLOW_SELF_SIGNED_CERTIFICATE', False)
-    )
-    conf.register(
-        'system.security.certificate-authority',
-        object,
-        os.environ.get('DL_MANAGER_LOCAL_PUBLIC_KEY', True)
-    )
-    conf.set('system.security.certificate-authority', False)
-    if conf.get('system.security.certificate-authority') is not True:
-        if not conf.get('system.security.allow-self-signed'):
-            raise ValueError('Cannot use self-signed certificates')
-
-    # if not conf.get('system.is-cli'):
-    #     if conf.is_active('train.keyfile'):
-    #         conf.clone('train.keyfile', 'system.security.ssl-keyfile')
-    #     if conf.is_active('train.certfile'):
-    #         conf.clone('train.certfile', 'system.security.ssl-certfile')
-    #     db: DatabaseAPI = conf.get('system.storage.database-api')
-    #     conf.register('system.security.db-token',
-    #                   object,
-    #                   db.get_token(os.environ['DL_MANAGER_USERNAME'], os.environ['DL_MANAGER_PASSWORD']))
-    # else:
-    #     conf.register('system.security.db-token', object, None)
     log.info(f'Running active command: {conf.get("system.active-command")}')
     if conf.get('system.active-command') == 'serve':
         conf.clone('serve.keyfile', 'system.security.ssl-keyfile')
         conf.clone('serve.certfile', 'system.security.ssl-certfile')
         log.info(f'Key file: {conf.get("system.security.ssl-keyfile")}')
-    if not conf.is_registered('system.security.db-token'):
-        conf.register('system.security.db-token', object, None)
 
 
 def run_api():
@@ -364,8 +353,8 @@ def run_api():
 
 def run_training_session():
     config_id = conf.get('train.model-id')
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    settings = db.get_model_config(config_id)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    settings = db.get_model_by_id(config_id).config
     settings |= {
         'subcommand_name_0': 'run',
         'num-threads': conf.get('system.resources.threads'),
@@ -572,14 +561,10 @@ def generate_features_and_get_data(architectural_only: bool = False,
         for param_name in mode_params:
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
-        training_query = json.dumps(
-            {
-                '$and': [
-                    {'tags': {'$eq': 'has-label'}},
-                    {'tags': {'$ne': 'needs-review'}},
-                    parse_query(conf.get('run.training-data-query'))
-                ]
-            }
+        training_query = issue_db_api.Query().land(
+            issue_db_api.Query().tag('has-label'),
+            issue_db_api.Query().not_tag('needs-review'),
+            db_util.json_to_query(conf.get('run.training-data-query'))
         )
         generator = feature_generators.generators[imode](**mode_params)
         dataset = generator.generate_features(training_query, output_mode)
@@ -591,14 +576,10 @@ def generate_features_and_get_data(architectural_only: bool = False,
             binary_labels_train = dataset.binary_labels
         datasets_train.append(dataset)
         if not conf.get('run.test-with-training-data'):
-            testing_query = json.dumps(
-                {
-                    '$and': [
-                        {'tags': {'$eq': 'has-label'}},
-                        {'tags': {'$ne': 'needs-review'}},
-                        parse_query(conf.get('run.test-data-query'))
-                    ]
-                }
+            testing_query = issue_db_api.Query().land(
+                issue_db_api.Query().tag('has-label'),
+                issue_db_api.Query().not_tag('needs-review'),
+                db_util.json_to_query(conf.get('run.test-data-query'))
             )
             generator = feature_generators.generators[imode](**mode_params)
             dataset = generator.generate_features(testing_query, output_mode)
@@ -798,13 +779,19 @@ def _normalize_param_names(params):
 
 def run_prediction_command():
     # Step 1: Load model data
-    data_query = conf.get('predict.data-query')
+    data_query = db_util.json_to_query(conf.get('predict.data-query'))
     model_id: str = conf.get('predict.model')
     model_version = conf.get('predict.version')
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    if model_version == 'most-recent':
-        model_version = db.get_most_recent_model(model_id)
-    model_manager.load_model_from_zip(db.retrieve_model(model_id, model_version))
+    # Load model from DB
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model = db.get_model_by_id(model_id)
+    if model_version == 'most_recent':
+        trained_model = max(model.versions, key=lambda v: v.version_id)
+    else:
+        trained_model = model.get_version_by_id(model_version)
+    trained_model.download(model_manager.MODEL_FILE)
+    model_manager.load_model_from_zip(model_manager.MODEL_FILE)
+    # Load model from file
     model = pathlib.Path(model_manager.MODEL_DIR)
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
@@ -824,8 +811,6 @@ def run_prediction_command():
     for generator in model_metadata['feature_generators']:
         with open(model / generator) as file:
             generator_data = json.load(file)
-        prefix = conf.get('system.storage.file-prefix')
-        feature_file = pathlib.Path(f'{prefix}_prediction_features.json')
         generator_class = feature_generators.generators[generator_data['generator']]
         generator = generator_class(
             pretrained_generator_settings=generator_data['settings']
@@ -875,14 +860,15 @@ def run_prediction_command():
 
 
 def run_metrics_calculation_command():
-    db: DatabaseAPI = conf.get('system.storage.database-api')
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model_id = conf.get('metrics.model-id')
-    model_config = db.get_model_config(model_id)
+    model = db.get_model_by_id(model_id)
+    model_config = model.config
     version_id = conf.get('metrics.version-id')
     metric_settings = conf.get('metrics.metrics')
     if isinstance(metric_settings, str):
         metric_settings = json.loads(metric_settings.replace("'", '"'))
-    results = db.load_training_results(model_id, version_id)
+    results = model.get_run_by_id(version_id)
     results_per_fold = []
     for fold in results:
         match conf.get('metrics.epoch'):

@@ -12,11 +12,12 @@ from keras.models import load_model
 from transformers import TFAutoModelForSequenceClassification
 from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
+import issue_db_api
+
 from .model_io import OutputMode, OutputEncoding
 from . import stacking
 from . import voting_util
 from .config import conf
-from .database import DatabaseAPI
 
 
 ##############################################################################
@@ -275,7 +276,7 @@ def _store_predictions(predictions,
                         'confidence': float(probabilities[i][7]) if probabilities is not None else None
                     }
                 }
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.save_predictions(model_id, model_version, predictions_by_id)
-    if (tag := conf.get('predict.with-tag')) != '':
-        db.add_tag(issue_ids, tag)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model = db.get_model_by_id(model_id)
+    version = model.get_version_by_id(model_version)
+    version.predictions = predictions_by_id

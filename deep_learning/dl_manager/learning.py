@@ -23,7 +23,8 @@ import numpy as np
 
 from collections import Counter
 
-from .database import DatabaseAPI
+import issue_db_api
+
 from .model_io import OutputMode
 
 from . config import conf
@@ -345,8 +346,11 @@ def dump_metrics(runs, filename_hint=None):
     #     json.dump(runs, file)
     # with open(directory / f'{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
     #     file.write(filename)
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.save_training_results(runs)
+    #db: DatabaseAPI = conf.get('system.storage.database-api')
+    #db.save_training_results(runs)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model = db.get_model_by_id(conf.get('run.model-id'))
+    model.add_test_run(runs, conf.get('system.training-start-time'))
 
 ##############################################################################
 ##############################################################################
@@ -520,8 +524,9 @@ def _save_voting_data(data):
     #     json.dump(data, file)
     # with open('most_recent_run.txt', 'w') as file:
     #     file.write(filename)
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.save_training_results(data)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model = db.get_model_by_id(conf.get('run.model-id'))
+    model.add_test_run(data, conf.get('system.training-start-time'))
 
 
 def _get_voting_predictions(truth, predictions):

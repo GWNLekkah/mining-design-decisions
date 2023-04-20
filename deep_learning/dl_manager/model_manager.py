@@ -11,9 +11,9 @@ import zipfile
 import io
 
 from .config import conf
-from .database import DatabaseAPI
 
 MODEL_DIR = 'model'
+MODEL_FILE = 'pretrained_model.zip'
 
 ##############################################################################
 ##############################################################################
@@ -149,8 +149,8 @@ def _upload_zip_data(path):
 ##############################################################################
 
 
-def load_model_from_zip(data: bytes):
-    zip_file = zipfile.ZipFile(io.BytesIO(data), 'r')
+def load_model_from_zip(filename: str):
+    zip_file = zipfile.ZipFile(filename, 'r')
     zip_file.extractall(MODEL_DIR)
     zip_file.close()
 

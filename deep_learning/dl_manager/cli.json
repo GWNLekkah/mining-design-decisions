@@ -407,15 +407,6 @@
           "style": "named"
         },
         {
-          "name": "with-tag",
-          "alias": "t",
-          "help": "Optional tag to add to all predicted issues",
-          "style": "named",
-          "type": "str",
-          "nargs": "1",
-          "default": ""
-        },
-        {
           "name": "num-threads",
           "help": "Number of threads to use for preprocessing",
           "style": "named",

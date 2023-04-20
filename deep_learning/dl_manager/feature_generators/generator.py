@@ -19,6 +19,8 @@ import string
 
 import nltk
 
+import issue_db_api
+
 from .util.text_cleaner import FormattingHandling, clean_issue_text
 from .. import accelerator
 from ..model_io import InputEncoding, classification8_lookup
@@ -26,7 +28,6 @@ from ..custom_kfold import stratified_trim
 from .util import ontology
 from ..config import conf
 from ..logger import get_logger, timer
-from ..database import DatabaseAPI
 from ..data_manager import Dataset
 
 
@@ -263,16 +264,17 @@ class AbstractFeatureGenerator(abc.ABC):
             ),
         }
 
-    def load_data_from_db(self, query, metadata_attributes):
-        api: DatabaseAPI = conf.get('system.storage.database-api')
-        issue_ids = api.select_issues(query)
+    def load_data_from_db(self, query: issue_db_api.Query, metadata_attributes):
+        api: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+        issues = api.search(query,
+                            attributes=metadata_attributes + ['key', 'summary', 'description'],
+                            load_labels=True)
         labels = {
             'detection': [],
             'classification3': [],
             'classification3simplified': [],
             'classification8': [],
             'issue_keys': [],
-            'issue_ids': issue_ids
         }
         classification_indices = {
             'Existence': [],
@@ -281,27 +283,23 @@ class AbstractFeatureGenerator(abc.ABC):
             'Non-Architectural': []
         }
         if self.pretrained is None:
-            raw_labels = api.get_labels(issue_ids)
+            raw_labels = [issue.manual_label for issue in issues]
             for index, raw in enumerate(raw_labels):
                 self.update_labels(labels,
                                    classification_indices,
                                    index,
-                                   raw['existence'],
-                                   raw['executive'],
-                                   raw['property'])
-        attributes = ['summary', 'description', 'key'] + metadata_attributes
-        raw_data = api.get_issue_data(issue_ids, attributes, raise_on_partial_result=True)
-        warnings.warn('Replace code again once database wrapper has been fixed')
-        # texts = [
-        #     issue.pop('summary') + issue.pop('description') for issue in raw_data
-        # ]
+                                   raw.existence,
+                                   raw.executive,
+                                   raw.property)
         texts = []
-        for issue in raw_data:
-            summary = x if (x := issue.pop('summary')) is not None else ''
-            description = x if (x := issue.pop('description')) is not None else ''
-            labels['issue_keys'].append(issue.pop('key'))
-            texts.append((summary, description))
-        metadata = raw_data     # summary and description have been popped
+        for issue in issues:
+            # summary = x if (x := issue.pop('summary')) is not None else ''
+            # description = x if (x := issue.pop('description')) is not None else ''
+            # labels['issue_keys'].append(issue.pop('key'))
+            texts.append((issue.summary, issue.description))
+        metadata = []
+        for issue in issues:
+            metadata.append({getattr(issue, attr) for attr in metadata_attributes})
         return texts, metadata, labels, classification_indices
 
     def update_labels(self,
@@ -340,7 +338,7 @@ class AbstractFeatureGenerator(abc.ABC):
         labels['classification3'].append(key)
 
     def generate_features(self,
-                          query,
+                          query: issue_db_api.Query,
                           output_mode: str):
         """Generate features from the data in the given source file,
         and store the results in the given target file.
