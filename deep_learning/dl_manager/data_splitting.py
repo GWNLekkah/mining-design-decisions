@@ -12,7 +12,7 @@ import numpy
 
 from . import kfold
 from . import custom_kfold
-from .config import conf
+from .config import Config
 
 ##############################################################################
 ##############################################################################
@@ -179,7 +179,8 @@ def make_dataset(labels, *features):
 
 class DataSplitter(abc.ABC):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
+        self.conf = conf
         self.max_train = t if (t := kwargs.pop('max_train', -1)) != -1 else None
         if kwargs:
             keys = ', '.join(kwargs)
@@ -200,14 +201,14 @@ class DataSplitter(abc.ABC):
 
 class SimpleSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.val_split = kwargs.pop('val_split_size')
         self.test_split = kwargs.pop('test_split_size')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         features, labels, issue_keys  = training_data_raw
         # labels, issue_keys, *features = shuffle_raw_data(labels,
         #                                                  issue_keys,
@@ -241,13 +242,13 @@ class SimpleSplitter(DataSplitter):
 
 class CrossFoldSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.k = kwargs.pop('k')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         if testing_data is not None:
             raise ValueError(
                 f'{self.__class__.__name__} does not support splitting with explicit testing data'
@@ -273,13 +274,13 @@ class CrossFoldSplitter(DataSplitter):
 
 class QuickCrossFoldSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.k = kwargs.pop('k')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         if testing_data is not None:
             raise ValueError(
                 f'{self.__class__.__name__} does not support splitting with explicit testing data'
@@ -321,15 +322,15 @@ class QuickCrossFoldSplitter(DataSplitter):
 
 class CrossProjectSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.val_split = kwargs.pop('val_split_size')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
         if self.max_train is not None:
             raise ValueError(f'{self.__class__.__name__} does not support max_train')
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         if testing_data is not None:
             raise ValueError(
                 f'{self.__class__.__name__} does not support splitting with explicit testing data'

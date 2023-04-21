@@ -12,7 +12,7 @@ from scipy.special import softmax, expit
 
 from .classifiers import models
 from .model_io import OutputMode, OutputEncoding
-from .config import conf
+from .config import Config
 from . import data_manager_bootstrap
 
 import tensorflow as tf
@@ -28,14 +28,14 @@ class KeywordEntry(typing.NamedTuple):
         }
 
 
-def model_is_convolution() -> bool:
+def model_is_convolution(conf: Config) -> bool:
     classifiers = conf.get('run.classifier')
     if len(classifiers) > 1:
         return False
     return models[classifiers[0]].input_must_support_convolution()
 
 
-def doing_one_run() -> bool:
+def doing_one_run(conf: Config) -> bool:
     k = conf.get('run.k-cross')
     if k > 0:
         return False
@@ -44,11 +44,16 @@ def doing_one_run() -> bool:
     return True
 
 
-def enabled() -> bool:
+def enabled(conf: Config) -> bool:
     return conf.get('run.analyze-keywords')
 
 
-def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
+def analyze_keywords(model,
+                     test_x,
+                     test_y,
+                     issue_keys,
+                     suffix,
+                     conf: Config):
     def _to_str(y):
         return OutputMode.Classification3Simplified.label_encoding[y]
 
@@ -66,11 +71,11 @@ def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     print('Analyzing Keywords...')
     if output_mode.output_encoding == OutputEncoding.Binary:
-        analyzer = BinaryConvolutionKeywordAnalyzer(model)
+        analyzer = BinaryConvolutionKeywordAnalyzer(model, conf)
         with alive_progress.alive_bar(len(issue_keys)) as bar:
             keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
     else:
-        analyzer = OneHotConvolutionKeywordAnalyzer(model)
+        analyzer = OneHotConvolutionKeywordAnalyzer(model, conf)
         with alive_progress.alive_bar(len(issue_keys)) as bar:
             keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
 
@@ -129,7 +134,8 @@ def sigmoid(x):
 
 class _ConvolutionKeywordAnalyzer(abc.ABC):
 
-    def __init__(self, model):
+    def __init__(self, model, conf: Config):
+        self.conf = conf
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))
         self.__binary = output_mode.output_encoding == OutputEncoding.Binary
 
@@ -139,7 +145,7 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
         self.__model = model
 
         # Get original text
-        with open(data_manager_bootstrap.get_raw_text_file_name()) as file:
+        with open(data_manager_bootstrap.get_raw_text_file_name(self.conf)) as file:
             self.__original_text_lookup = json.load(file)
 
         # Store weights of last dense layer
@@ -186,7 +192,7 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
         return 0.0
 
     def get_keywords(self, vectors, keys, truths, bar):
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
 
         # Compute all predictions and features.
         # Even though we might make more predictions than strictly
@@ -282,7 +288,7 @@ class BinaryConvolutionKeywordAnalyzer(_ConvolutionKeywordAnalyzer):
 
     def get_candidates(self, pre_predictions, truth, dense_weights):
         warnings.warn(f'{self.__class__.__name__} does not collect keywords for the negative class')
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
         list_tuple_prob = []
         if not isinstance(truth, np.ndarray):
             truth = np.array([truth])

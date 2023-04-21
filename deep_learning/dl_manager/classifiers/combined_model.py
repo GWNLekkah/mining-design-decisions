@@ -1,10 +1,10 @@
 import tensorflow as tf
 
 
-from ..config import conf
+from ..config import Config
 
 
-def get_simple_combinator():
+def get_simple_combinator(conf: Config):
     match conf.get('run.combination-strategy'):
         case 'add':
             return tf.keras.layers.add
@@ -25,13 +25,14 @@ def get_simple_combinator():
 
 
 def combine_models(parent_model, *models,
-                   fully_connected_layers=(None,)) -> tf.keras.Model:
+                   fully_connected_layers=(None,),
+                   conf: Config) -> tf.keras.Model:
     """Replacement for AbstractModel.get_model(), which
     combines multiple models into one.
     """
     assert len(models) >= 2
     instances = models
-    combiner = get_simple_combinator()
+    combiner = get_simple_combinator(conf)
     if combiner is None:
         raise NotImplementedError
     hidden = combiner([model.output for model in instances])

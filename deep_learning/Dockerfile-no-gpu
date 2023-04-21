@@ -31,6 +31,10 @@ RUN python3.10 -m pip install setuptools_rust nltk
 # Install build essentialls - required for Gensim
 RUN apt-get -y install --reinstall build-essential
 
+# Install OpenSSL dependencies
+RUN apt install pkg-config
+RUN apt-get -y install libssl-dev
+
 # Get list of dependencies and install them
 RUN python3.10 setup.py sdist
 RUN python3.10 -m pip install -r dl_manager.egg-info/requires.txt

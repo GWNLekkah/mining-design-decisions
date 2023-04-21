@@ -1,11 +1,7 @@
-import json
-import numpy
-
 from . import ParameterSpec
 from .abstract_auto_encoder import AbstractAutoEncoder
 from ..model_io import InputEncoding
 from .. import data_splitting
-from ..config import conf
 from ..logger import get_logger
 
 log = get_logger('Kate Auto Encoder')

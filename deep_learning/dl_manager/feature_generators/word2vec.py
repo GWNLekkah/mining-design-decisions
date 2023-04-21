@@ -1,13 +1,10 @@
 import abc
-import datetime
 import os
 
-import issue_db_api
-from gensim.models import Word2Vec as GensimWord2Vec
 from gensim import models
+import issue_db_api
 
 from .generator import FeatureEncoding
-from ..config import conf
 
 from ..feature_generators import AbstractFeatureGenerator, ParameterSpec
 
@@ -19,7 +16,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                          args: dict[str, str]):
         # Train or load a model
         if self.pretrained is None:
-            db: issue_db_api.IssueRepository = conf.get('system.storage.database.api')
+            db: issue_db_api.IssueRepository = self.conf.get('system.storage.database.api')
             embedding = db.get_embedding_by_id(self.params['embedding-id'])
             filename = self.params['embedding-id'] + '.bin'
             if os.path.exists(filename):
@@ -29,7 +26,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
             # Load the model
             wv = models.KeyedVectors.load_word2vec_format(filename, binary=True)
         else:
-            aux_map = conf.get('system.storage.auxiliary_map')
+            aux_map = self.conf.get('system.storage.auxiliary_map')
             filename = aux_map[self.pretrained['model']]
             wv = models.KeyedVectors.load_word2vec_format(filename, binary=True)
 
@@ -51,10 +48,6 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
         return {
             'vector-length': ParameterSpec(
                 description='specify the length of the output vector',
-                type='int'
-            ),
-            'min-count': ParameterSpec(
-                description='minimum occurrence for a word to be in the word2vec',
                 type='int'
             ),
            'embedding-id': ParameterSpec(

@@ -8,9 +8,10 @@ import os
 import pathlib
 import shutil
 import zipfile
-import io
 
-from .config import conf
+import issue_db_api
+
+from .config import Config
 
 MODEL_DIR = 'model'
 MODEL_FILE = 'pretrained_model.zip'
@@ -27,7 +28,7 @@ def _prepare_directory(path: str):
     os.makedirs(path, exist_ok=True)
 
 
-def _get_and_copy_feature_generators(directory: str):
+def _get_and_copy_feature_generators(directory: str, conf: Config):
     filenames = conf.get('system.storage.generators')
     for filename in filenames:
         full_path = os.path.join(directory, filename)
@@ -35,7 +36,7 @@ def _get_and_copy_feature_generators(directory: str):
     return filenames
 
 
-def _get_and_copy_auxiliary_files(directory: str):
+def _get_and_copy_auxiliary_files(directory: str, conf: Config):
     filenames = conf.get('system.storage.auxiliary')
     os.makedirs(os.path.join(directory, 'auxiliary'), exist_ok=True)
     result = {}
@@ -55,24 +56,25 @@ def _get_and_copy_auxiliary_files(directory: str):
 ##############################################################################
 
 
-def save_single_model(model):
+def save_single_model(model, conf: Config):
     directory = MODEL_DIR
     _prepare_directory(directory)
     _store_model(directory, 0, model)
     metadata = {
         'model_type': 'single',
         'model_path': '0',
-        'feature_generators': _get_and_copy_feature_generators(directory),
-        'auxiliary_files': _get_and_copy_auxiliary_files(directory)
-    } | _get_cli_settings()
+        'feature_generators': _get_and_copy_feature_generators(directory, conf),
+        'auxiliary_files': _get_and_copy_auxiliary_files(directory, conf)
+    } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
-    _upload_zip_data(directory)
+    _upload_zip_data(directory, conf)
 
 
 def save_stacking_model(meta_model,
                         conversion_strategy: str,
-                        *child_models):
+                        *child_models,
+                        conf: Config):
     directory = MODEL_DIR
     _prepare_directory(directory)
     _store_model(directory, 0, meta_model)
@@ -81,19 +83,19 @@ def save_stacking_model(meta_model,
     metadata = {
         'model_type': 'stacking',
         'meta_model': '0',
-        'feature_generators': _get_and_copy_feature_generators(directory),
+        'feature_generators': _get_and_copy_feature_generators(directory, conf),
         'input_conversion_strategy': conversion_strategy,
         'child_models': [
             str(i) for i in range(1, len(child_models) + 1)
         ],
-        'auxiliary_files': _get_and_copy_auxiliary_files(directory)
-    } | _get_cli_settings()
+        'auxiliary_files': _get_and_copy_auxiliary_files(directory, conf)
+    } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
-    _upload_zip_data(directory)
+    _upload_zip_data(directory, conf)
 
 
-def save_voting_model(*models):
+def save_voting_model(*models, conf: Config):
     directory = MODEL_DIR
     _prepare_directory(directory)
     for nr, model in enumerate(models):
@@ -101,12 +103,12 @@ def save_voting_model(*models):
     metadata = {
         'model_type': 'voting',
         'child_models': [str(x) for x in range(len(models))],
-        'feature_generators': _get_and_copy_feature_generators(directory),
-        'auxiliary_files': _get_and_copy_auxiliary_files(directory)
-    } | _get_cli_settings()
+        'feature_generators': _get_and_copy_feature_generators(directory, conf),
+        'auxiliary_files': _get_and_copy_auxiliary_files(directory, conf)
+    } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4)
-    _upload_zip_data(directory)
+    _upload_zip_data(directory, conf)
 
 
 def _store_model(directory, number, model):
@@ -120,7 +122,7 @@ def _store_model(directory, number, model):
         file.write(model.to_json(indent=4))
 
 
-def _get_cli_settings():
+def _get_cli_settings(conf: Config):
     return {
         'model_settings': {
             key: _convert_value(value)
@@ -135,12 +137,11 @@ def _convert_value(x):
     return x
 
 
-def _upload_zip_data(path):
-    # with open(os.path.join(path, 'model.zip'), 'rb') as file:
-    #     return file.read()
+def _upload_zip_data(path, conf: Config):
     filename = shutil.make_archive('model', 'zip', path)
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.store_model(conf.get('run.model-id'), filename)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model = db.get_model_by_id(conf.get('run.model-id'))
+    model.add_version(filename)
 
 
 ##############################################################################

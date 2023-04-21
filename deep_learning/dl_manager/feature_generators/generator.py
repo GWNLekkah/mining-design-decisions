@@ -13,8 +13,6 @@ import itertools
 import json
 import random
 import typing
-import warnings
-import cProfile
 import string
 
 import nltk
@@ -26,7 +24,7 @@ from .. import accelerator
 from ..model_io import InputEncoding, classification8_lookup
 from ..custom_kfold import stratified_trim
 from .util import ontology
-from ..config import conf
+from ..config import Config
 from ..logger import get_logger, timer
 from ..data_manager import Dataset
 
@@ -142,13 +140,14 @@ class ParameterSpec(typing.NamedTuple):
 
 class AbstractFeatureGenerator(abc.ABC):
 
-    def __init__(self, *,
+    def __init__(self, conf: Config, /, *,
                  pretrained_generator_settings: dict | None = None,
                  **params):
         self.__params = params
         self.__pretrained = pretrained_generator_settings
         self.__colors = None
         self.__keys=  None
+        self.conf = conf
         if self.__pretrained is not None:
             if self.__params:
                 raise ValueError(
@@ -160,8 +159,8 @@ class AbstractFeatureGenerator(abc.ABC):
                 if name in self.__pretrained:
                     self.__params[name] = self.__pretrained[name]
             if 'ontology-classes' in self.__pretrained:
-                aux = conf.get('system.storage.auxiliary_map')
-                conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
+                aux = self.conf.get('system.storage.auxiliary_map')
+                self.conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
 
     @property
     def params(self) -> dict[str, str]:
@@ -183,23 +182,25 @@ class AbstractFeatureGenerator(abc.ABC):
             raise RuntimeError('No keys yet')
         return self.__keys
 
-    def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str] = []):
+    def save_pretrained(self, pretrained_settings: dict, auxiliary_files: list[str] = None):
+        if auxiliary_files is None:
+            auxiliary_files = []
         log.info(f'Saving {self.__class__.__name__} feature encoding')
         settings = '_'.join(
             f'{key}-{value}' for key, value in self.__params.items()
         )
         filename = f'{self.__class__.__name__}__{settings}'
-        prefix = conf.get('system.storage.file-prefix')
+        prefix = self.conf.get('system.storage.file-prefix')
         filename = f'{prefix}_{hashlib.sha512(filename.encode()).hexdigest()}.json'
         for name in AbstractFeatureGenerator.get_parameters():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
-        ontologies = conf.get('run.ontology-classes')
+        ontologies = self.conf.get('run.ontology-classes')
         if ontologies:
             pretrained_settings['ontology-classes'] = ontologies
-            conf.get('system.storage.auxiliary').append(ontologies)
-        conf.get('system.storage.generators').append(filename)
-        conf.get('system.storage.auxiliary').extend(auxiliary_files)
+            self.conf.get('system.storage.auxiliary').append(ontologies)
+        self.conf.get('system.storage.generators').append(filename)
+        self.conf.get('system.storage.auxiliary').extend(auxiliary_files)
         with open(filename, 'w') as file:
             json.dump(
                 {
@@ -265,7 +266,7 @@ class AbstractFeatureGenerator(abc.ABC):
         }
 
     def load_data_from_db(self, query: issue_db_api.Query, metadata_attributes):
-        api: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+        api: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
         issues = api.search(query,
                             attributes=metadata_attributes + ['key', 'summary', 'description'],
                             load_labels=True)
@@ -383,7 +384,7 @@ class AbstractFeatureGenerator(abc.ABC):
 
         output['original'] = tokenized_issues
         if 'original' in output and not self.pretrained:    # Only dump original text when not pre-trained.
-            with open(get_raw_text_file_name(), 'w') as file:
+            with open(get_raw_text_file_name(self.conf), 'w') as file:
                 mapping = {key: text
                            for key, text in zip(labels['issue_keys'], output['original'])}
                 json.dump(mapping, file)
@@ -406,7 +407,7 @@ class AbstractFeatureGenerator(abc.ABC):
     def preprocess(self, issues):
         log.info('Preprocessing Features')
         with timer('Feature Preprocessing'):
-            ontology_path = conf.get('run.ontology-classes')
+            ontology_path = self.conf.get('run.ontology-classes')
             if ontology_path != '':
                 ontology_table = ontology.load_ontology(ontology_path)
             else:
@@ -419,7 +420,7 @@ class AbstractFeatureGenerator(abc.ABC):
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
             use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
-            use_ontologies = conf.get('run.apply-ontology-classes')
+            use_ontologies = self.conf.get('run.apply-ontology-classes')
             handling_string = self.__params.get('formatting-handling', 'markers')
             handling = FormattingHandling.from_string(handling_string)
             weights, tagdict, classes = nltk.load(
@@ -429,11 +430,11 @@ class AbstractFeatureGenerator(abc.ABC):
 
             summaries, descriptions = (list(x) for x in zip(*issues))
             summaries = accelerator.bulk_clean_text_parallel(
-                summaries, handling.as_string(), conf.get('system.resources.threads')
+                summaries, handling.as_string(), self.conf.get('system.resources.threads')
             )
             summaries = [clean_issue_text(summary) for summary in summaries]
             descriptions = accelerator.bulk_clean_text_parallel(
-                descriptions, handling.as_string(), conf.get('system.resources.threads')
+                descriptions, handling.as_string(), self.conf.get('system.resources.threads')
             )
             descriptions = [clean_issue_text(description) for description in descriptions]
             texts = [
@@ -444,7 +445,7 @@ class AbstractFeatureGenerator(abc.ABC):
                 for summary, description in zip(summaries, descriptions)
             ]
             tagged = tagger.bulk_tag_parallel(
-                texts, conf.get('system.resources.threads')
+                texts, self.conf.get('system.resources.threads')
             )
             tokenized_issues = []
             for issue in tagged:

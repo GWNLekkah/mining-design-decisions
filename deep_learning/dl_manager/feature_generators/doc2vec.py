@@ -1,11 +1,8 @@
-import datetime
 import os
 
 import issue_db_api
-from gensim.models.doc2vec import TaggedDocument
 from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
-from ..config import conf
 
 from .generator import AbstractFeatureGenerator, ParameterSpec, FeatureEncoding
 from ..model_io import InputEncoding
@@ -32,7 +29,7 @@ class Doc2Vec(AbstractFeatureGenerator):
             #     model.save(filename)
             #     args['pretrained-file'] = filename
 
-            db: issue_db_api.IssueRepository = conf.get('system.storage.database.api')
+            db: issue_db_api.IssueRepository = self.conf.get('system.storage.database.api')
             embedding = db.get_embedding_by_id(self.params['embedding-id'])
             filename = self.params['embedding-id'] + '.bin'
             if os.path.exists(filename):
@@ -53,7 +50,7 @@ class Doc2Vec(AbstractFeatureGenerator):
                 ]
             )
         else:
-            aux_map = conf.get('system.storage.auxiliary_map')
+            aux_map = self.conf.get('system.storage.auxiliary_map')
             filename = aux_map[self.pretrained['pretrained-file']]
             model = GensimDoc2Vec.load(filename)
             shape = self.pretrained['vector-length']

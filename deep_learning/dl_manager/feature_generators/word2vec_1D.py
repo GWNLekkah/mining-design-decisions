@@ -1,5 +1,3 @@
-import warnings
-
 from ..model_io import InputEncoding
 from .word2vec import AbstractWord2Vec
 

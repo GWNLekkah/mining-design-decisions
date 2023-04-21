@@ -5,78 +5,10 @@
 
 from copy import copy
 import collections
-import dataclasses
 
 import numpy
-import keras.callbacks
-from sklearn.metrics import confusion_matrix
 import matplotlib.pyplot as pyplot
 import texttable
-from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
-
-from ..model_io import OutputMode, OutputEncoding
-from ..config import conf
-
-
-##############################################################################
-##############################################################################
-# General Utility
-##############################################################################
-
-
-def _check_output_mode():
-    # output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-    # if output_mode == OutputMode.Classification3:
-    #     raise ValueError(
-    #         'Metric computation not supported for 3-Classification')
-    pass
-
-
-def get_binary_metrics():
-    return {
-        'true_positives', 'false_positives',
-        'true_negatives', 'false_negatives',
-        'accuracy', 'precision',
-        'recall', 'f_score_tf_macro',
-        'loss'
-    }
-
-
-def get_multi_class_metrics():
-    return {
-        'accuracy', 'loss', 'f_score_tf_macro'
-    }
-
-
-def get_multi_label_metrics():
-    return {
-        'accuracy', 'loss', 'f_score_tf_macro'
-    }
-
-
-def get_metrics():
-    output_mode = OutputMode.from_string(conf.get('run.output-mode'))
-    if output_mode.output_encoding == OutputEncoding.OneHot:
-        return get_multi_class_metrics()
-    _check_output_mode()
-    if output_mode.output_size == 1:
-        return get_binary_metrics()
-    return get_multi_label_metrics()
-
-
-def get_metric_translation_table():
-    return {
-        'true_positives': 'tp',
-        'false_positives': 'fp',
-        'true_negatives': 'tn',
-        'false_negatives': 'fn',
-        'loss': 'loss',
-        'accuracy': 'accuracy',
-        'precision': 'precision',
-        'recall': 'recall',
-        'f_score_tf_macro': 'f-score'
-    }
-
 
 ##############################################################################
 ##############################################################################

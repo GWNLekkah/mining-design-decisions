@@ -5,7 +5,7 @@ import typing
 import numpy
 
 from ..model_io import OutputMode
-from ..config import conf
+from ..config import Config
 
 
 @dataclasses.dataclass
@@ -20,8 +20,9 @@ class UpsamplerHyperParam:
 
 class AbstractUpSampler(abc.ABC):
 
-    def __init__(self, **hyper_params):
+    def __init__(self, conf: Config, /, **hyper_params):
         self.hyper_params = hyper_params
+        self.conf = conf
         self.__synthetic_key = 1
 
     def synthetic_keys(self, n: int):
@@ -33,7 +34,7 @@ class AbstractUpSampler(abc.ABC):
         return numpy.asarray(keys)
 
     def upsample_to_majority(self, labels: numpy.ndarray, keys, *features):
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
         counts = [
             (labels == label).sum() for label in output_mode.label_encoding
         ]
@@ -41,11 +42,11 @@ class AbstractUpSampler(abc.ABC):
         return self.upsample_to_size(target, labels, keys, *features)
 
     def upsample_to_size(self, size: int, labels: numpy.ndarray, keys, *features):
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
         targets = {label: size for label in output_mode.label_encoding}
         return self.upsample_to(targets, labels, keys, *features)
 
-    def upsample_to(self, targets, labels, keys, *features):
+    def upsample_to(self, targets: object, labels: object, keys: object, *features: object) -> object:
         indices = {
             target: numpy.where(labels == target)
             for target in targets

@@ -9,23 +9,19 @@ deep learning classifiers.
 ##############################################################################
 
 import collections
-import datetime
 import json
 import os.path
 import pathlib
 import getpass
 import statistics
 import typing
-import threading
 import warnings
-import shlex
-import traceback
 
 import numpy
 
 import issue_db_api
 
-from . import classifiers, kw_analyzer, model_manager, model_io
+from . import classifiers, kw_analyzer, model_manager
 from .classifiers import HyperParameter
 
 from . import feature_generators
@@ -36,12 +32,11 @@ from . import embeddings
 
 from . import db_util
 from . import learning
-from .config import conf, CLIApp, APIApp
+from .config import WebApp, Config
 from .logger import get_logger
 from . import metrics
 log = get_logger('CLI')
 
-from . import analysis
 from . import prediction
 
 
@@ -51,29 +46,9 @@ from . import prediction
 ##############################################################################
 
 
-def main(args=None):
-    conf.reset()
+def main(port, keyfile, certfile):
     app = build_app()
-    log.info('Dispatching user command')
-    app.parse_and_dispatch(args)
-
-
-def invoke_pipeline_with_command(command: str) -> None | Exception:
-    conf.reset()
-    try:
-        main(shlex.split(command))
-    except Exception as e:
-        return e
-
-
-def invoke_pipeline_with_config(args: dict) -> None | Exception:
-    conf.reset()
-    app = build_app(api=True)
-    log.info(f'Dispatching config: {args}')
-    try:
-        app.parse_and_dispatch(args)
-    except Exception as e:
-        return e
+    app.deploy(port, keyfile,  certfile)
 
 
 def get_arg_spec():
@@ -81,18 +56,15 @@ def get_arg_spec():
     return os.path.join(location, 'cli.json')
 
 
-def build_app(*, api=False):
+def build_app():
     location = get_arg_spec()
-    log.debug(f'Building CLI app from file {location}')
-    if not api:
-        app = CLIApp(location)
-    else:
-        app = APIApp(location)
-    setup_app_constraints(app, api=api)
+    log.debug(f'Building app from file {location}')
+    app = WebApp(location)
+    setup_app_constraints(app)
     return app
 
 
-def setup_app_constraints(app, *, api=False):
+def setup_app_constraints(app):
     def add_eq_len_constraint(p, q):
         app.add_constraint(lambda x, y: len(x) == len(y),
                            'Argument lists must have equal length.',
@@ -153,15 +125,15 @@ def setup_app_constraints(app, *, api=False):
         'run.quick-cross'
     )
     app.add_constraint(
-        lambda do_analyze, _:
-            not do_analyze or kw_analyzer.model_is_convolution(),
+        lambda do_analyze, _, conf:
+            not do_analyze or kw_analyzer.model_is_convolution(conf),
         'Can only analyze keywords when using a convolutional model',
-        'run.analyze-keywords', 'run.classifier'
+        'run.analyze-keywords', 'run.classifier', '#config'
     )
     app.add_constraint(
-        lambda do_analyze: (not do_analyze) or kw_analyzer.doing_one_run(),
+        lambda do_analyze, conf: (not do_analyze) or kw_analyzer.doing_one_run(conf),
         'Can not perform cross validation when extracting keywords',
-        'run.analyze-keywords'
+        'run.analyze-keywords', '#config'
     )
     app.add_constraint(
         lambda test_query, test_with_train: (
@@ -176,75 +148,51 @@ def setup_app_constraints(app, *, api=False):
     app.register_callback('hyperparams', run_hyper_params_command)
     app.register_callback('generator-params', run_generator_params_command)
     app.register_callback('combination-strategies', show_combination_strategies)
-    app.register_callback('run_analysis.summarize',
-                          analysis.run_summarize_command)
-    app.register_callback('run_analysis.plot-attributes',
-                          analysis.run_plot_attributes_command)
-    app.register_callback('run_analysis.plot',
-                          analysis.run_bar_plot_command)
-    app.register_callback('run_analysis.compare',
-                          analysis.run_comparison_command)
-    app.register_callback('run_analysis.confusion',
-                          analysis.run_confusion_matrix_command)
-    app.register_callback('run_analysis.compare-stats',
-                          analysis.run_stat_command)
     app.register_callback('train', run_training_session)
-
-    if not api:
-        app.register_callback('serve', run_api)
-
     app.register_callback('generate-embedding', run_embedding_generation_command)
     app.register_callback('embedding-parameters', run_embedding_param_command)
     app.register_callback('embedding-generators', run_show_embeddings_command)
     app.register_callback('metrics', run_metrics_calculation_command)
 
-    app.register_setup_callback(setup_peregrine)
+    app.register_setup_callback(setup_security)
+    app.register_setup_callback(setup_os)
     app.register_setup_callback(setup_storage)
     app.register_setup_callback(setup_resources)
-    app.register_setup_callback(setup_security)
 
-    conf.register('system.app', object, app)
-    conf.register('system.is-cli', bool, not api)
 
     log.debug('Finished building app')
     return app
 
 
-def setup_peregrine():
+def setup_security(conf: Config):
+    conf.set(
+        'system.security.allow-self-signed-certificates',
+        os.environ.get('DL_MANAGER_ALLOW_UNSAFE_SSL', 'false').lower() == 'true'
+    )
+
+
+def setup_os(conf: Config):
     conf.clone('run.peregrine', 'system.peregrine')
-    if conf.get('system.peregrine'):
-        print('Running on Peregrine!')
-        conf.register('system.peregrine.home', str, os.path.expanduser('~'))
-        conf.register('system.peregrine.data', str, f'/data/{getpass.getuser()}')
-        print(f'system.peregrine.home: {conf.get("system.peregrine.home")}')
-        print(f'system.peregrine.data: {conf.get("system.peregrine.data")}')
+    if conf.get('system.os.peregrine'):
+        conf.set('system.os.home-directory', os.path.expanduser('~'))
+        conf.set('system.os.data-directory', f'/data/{getpass.getuser()}')
+    else:
+        conf.set('system.os.home-directory', os.path.expanduser('~'))
+        conf.set('system.os.data-directory', f'')
 
 
-def setup_storage():
+def setup_storage(conf: Config):
     # Storage space and constants
-    conf.register('system.storage.generators', list, [])
-    conf.register('system.storage.auxiliary', list, [])
-    conf.register('system.storage.auxiliary_map', dict, {})
-    conf.register('system.storage.auxiliary_prefix', str, 'auxiliary')
-    conf.register('system.storage.file_prefix', str, 'dl_pipeline')
+    conf.set('system.storage.generators', [])
+    conf.set('system.storage.auxiliary', [])
+    conf.set('system.storage.auxiliary_map', {})
+    conf.set('system.storage.file_prefix', 'dl_manager')
 
-    # Setup database
-    if conf.is_active('run.database-url'):
-        conf.clone('run.database-url', 'system.storage.database-url')
-    if conf.is_active('train.database-url'):
-        conf.clone('train.database-url', 'system.storage.database-url')
-    if conf.is_active('predict.database-url'):
-        conf.clone('predict.database-url', 'system.storage.database-url')
-    if conf.is_active('generate-embedding.database-url'):
-        conf.clone('generate-embedding.database-url', 'system.storage.database-url')
-    if conf.is_active('metrics.database-url'):
-        conf.clone('metrics.database-url', 'system.storage.database-url')
-    if conf.is_registered('system.storage.database-url'):
-        conf.register(
-            'system.security.allow-self-signed-certificates',
-            bool,
-            os.environ['DL_MANAGER_ALLOW_UNSAFE_HTTPS'].upper() == 'TRUE'
-        )
+    endpoints_with_database = [
+        'run', 'train', 'predict', 'generate-embeddings'
+    ]
+    if (cmd := conf.get('system.management.active-command')) in endpoints_with_database:
+        conf.clone(f'{cmd}.database-url', 'system.storage.database-url')
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
         api = issue_db_api.IssueRepository(
             url=conf.get('system.storage.database-url'),
@@ -254,104 +202,26 @@ def setup_storage():
             ),
             allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates')
         )
-        conf.register('system.storage.database-api',
-                      issue_db_api.IssueRepository,
-                      api)
+        conf.set('system.storage.database-api', api)
 
 
-def setup_resources():
-    if conf.is_active('run.num-threads'):
-        conf.clone('run.num-threads', 'system.resources.threads')
-    if conf.is_active('train.num-threads'):
-        conf.clone('train.num-threads', 'system.resources.threads')
-    if conf.is_active('predict.num-threads'):
-        conf.clone('predict.num-threads', 'system.resources.threads')
-    if conf.is_active('generate-embedding.num-threads'):
-        conf.clone('generate-embedding.num-threads', 'system.resources.threads')
-    if conf.is_registered('system.resources.threads'):
-        log.info(f'Available threads for preprocessing: {conf.get("system.resources.threads")}')
+def setup_resources(conf: Config):
+    endpoints_with_threads = [
+        'run', 'train', 'predict', 'generate-embeddings'
+    ]
+    if (cmd := conf.get('system.management.active-command')) in endpoints_with_threads:
+        conf.clone(f'{cmd}.num-threads', 'system.resources.threads')
+        n = conf.get('system.resources.threads')
+        log.info(f'Number of available threads: {n}')
 
 
-def setup_security():
-    log.info(f'Running active command: {conf.get("system.active-command")}')
-    if conf.get('system.active-command') == 'serve':
-        conf.clone('serve.keyfile', 'system.security.ssl-keyfile')
-        conf.clone('serve.certfile', 'system.security.ssl-certfile')
-        log.info(f'Key file: {conf.get("system.security.ssl-keyfile")}')
+##############################################################################
+##############################################################################
+# Command Dispatch - Training Commands
+##############################################################################
 
 
-def run_api():
-    port = conf.get('serve.port')
-
-    import uvicorn
-    import fastapi
-
-    app = fastapi.FastAPI()
-
-    api_lock = threading.Lock()
-
-    @app.post('/invoke')
-    async def run_command(request: fastapi.Request, response: fastapi.Response):
-        if not api_lock.acquire(blocking=False):
-            response.status_code = 503  # Unavailable
-            return {'error': 'dl_manager is currently busy executing another command'}
-        payload = await request.json()
-        conf.set('system.security.db-token', payload['auth']['token'])
-        try:
-            params = payload['config']
-            log.info('Running pipeline with params', params)
-            #result = invoke_pipeline_with_config(params)
-            #web_app: APIApp = build_app(api=True)
-            cfg = {
-                'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
-                'system.security.ssl-certfile': (str, conf.get('system.security.ssl-certfile')),
-                'system.security.db-token': (object, conf.get('system.security.db-token'))
-            }
-            try:
-                is_training = params['subcommand_name_0'] in {'train', 'run'}
-            except KeyError:
-                raise ValueError('parameter `subcommand_name_0` not given')
-            to_retrieve = []
-            if is_training:
-                to_retrieve.append('system.training-start-time')
-            if params['subcommand_name_0'] == 'metrics':
-                to_retrieve.append('system.metrics.results')
-            try:
-                copied = APIApp.execute_session(
-                    get_arg_spec(),
-                    params,
-                    app_initializer=setup_app_constraints,
-                    with_config=cfg,
-                    retrieve_configs=to_retrieve
-                )
-            except Exception as e:
-                log.warning(f'An exception occurred during user command: {e}')
-                log.warning(' '.join(traceback.format_exception(e)))
-                copied = None   # Shut up, PyCharm
-                result = e
-            else:
-                result = None
-            conf.set('system.security.db-token', None)
-            if result is None:
-                if is_training:
-                    return {'run-id': copied['system.training-start-time']}
-                elif params['subcommand_name_0'] == 'metrics':
-                    return copied['system.metrics.results']
-                return {}
-            return {'error': str(result)}
-        finally:
-            api_lock.release()
-
-    uvicorn.run(
-        app,
-        host='0.0.0.0',
-        port=port,
-        ssl_keyfile=conf.get('system.security.ssl-keyfile'),
-        ssl_certfile=conf.get('system.security.ssl-certfile')
-    )
-
-
-def run_training_session():
+def run_training_session(conf: Config):
     config_id = conf.get('train.model-id')
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     settings = db.get_model_by_id(config_id).config
@@ -361,23 +231,13 @@ def run_training_session():
         'database-url': conf.get('system.storage.database-url'),
         'model-id': conf.get('train.model-id')
     }
-    cfg = {
-        'system.security.ssl-keyfile': (str, conf.get('system.security.ssl-keyfile')),
-        'system.security.ssl-certfile': (str, conf.get('system.security.ssl-certfile')),
-        'system.security.db-token': (object, conf.get('system.security.db-token'))
-    }
-    state = APIApp.execute_session(
-        get_arg_spec(),
-        settings,
-        app_initializer=setup_app_constraints,
-        retrieve_configs=['system.training-start-time'],
-        with_config=cfg
-    )
-    conf.register(
-        'system.training-start-time',
-        str,
-        state['system.training-start-time']
-    )
+    app: WebApp = conf.get('system.management.app')
+    new_conf = app.new_config('run', 'system')
+    conf.transfer(new_conf,
+                  'system.security.db-username',
+                  'system.security.db-password')
+    new_conf.update('run', **settings)
+    app.dispatch('run', new_conf)
 
 
 ##############################################################################
@@ -399,7 +259,7 @@ STRATEGIES = {
 }
 
 
-def show_combination_strategies():
+def show_combination_strategies(conf: Config):
     margin = max(map(len, STRATEGIES))
     for strategy in sorted(STRATEGIES):
         print(f'{strategy.rjust(margin)}: {STRATEGIES[strategy]}')
@@ -411,7 +271,7 @@ def show_combination_strategies():
 ##############################################################################
 
 
-def run_list_command():
+def run_list_command(conf: Config):
     match conf.get('list.arg'):
         case 'classifiers':
             _show_classifier_list()
@@ -449,7 +309,7 @@ def _print_keys(keys):
 ##############################################################################
 
 
-def run_hyper_params_command():
+def run_hyper_params_command(conf: Config):
     classifier = conf.get('hyperparams.classifier')
     if classifier not in classifiers.models:
         return print(f'Unknown classifier: {classifier}')
@@ -471,7 +331,7 @@ def run_hyper_params_command():
 ##############################################################################
 
 
-def run_generator_params_command():
+def run_generator_params_command(conf: Config):
     generator = conf.get('generator-params.generator')
     if generator not in feature_generators.generators:
         return print(f'Unknown feature generator: {generator}')
@@ -490,7 +350,7 @@ def run_generator_params_command():
 # Command Dispatch - embedding command
 #############################################################################
 
-def run_show_embeddings_command():
+def run_show_embeddings_command(conf: Config):
     print(','.join(embeddings.generators.keys()))
 
 ##############################################################################
@@ -499,7 +359,7 @@ def run_show_embeddings_command():
 #############################################################################
 
 
-def run_embedding_param_command():
+def run_embedding_param_command(conf: Config):
     generator: typing.Type[embeddings.AbstractEmbeddingGenerator]
     generator = conf.get('embedding-parameters.generator')
     if generator not in embeddings.generators:
@@ -513,22 +373,25 @@ def run_embedding_param_command():
     print(f'Parameters for {generator}:')
     _print_keys(keys)
 
+
 ##############################################################################
 ##############################################################################
 # Command Dispatch - Embedding Generation
 #############################################################################
 
 
-def run_embedding_generation_command():
+def run_embedding_generation_command(conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     embedding_id = conf.get('generate-embedding.embedding-id')
     embedding = db.get_embedding_by_id(embedding_id)
     embedding_config = embedding.config
-    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embedding_config['generator']
+    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[
+        embedding_config['generator']
+    ]
     query = db_util.json_to_query(embedding_config['training-data-query'])
     handling = embedding_config['formatting-handling']
     g = generator(**embedding_config['params'])
-    g.make_embedding(query, handling)
+    g.make_embedding(query, handling, conf=conf)
 
 
 ##############################################################################
@@ -538,7 +401,8 @@ def run_embedding_generation_command():
 
 
 def generate_features_and_get_data(architectural_only: bool = False,
-                                   force_regenerate: bool = False):
+                                   force_regenerate: bool = False, *,
+                                   conf: Config):
     input_mode = conf.get('run.input_mode')
     output_mode = conf.get('run.output_mode')
     params = conf.get('run.params')
@@ -638,23 +502,18 @@ def select_architectural_only(datasets, labels, binary_labels):
 ##############################################################################
 
 
-def run_classification_command():
-    conf.register('system.training-start-time', str, datetime.datetime.utcnow().isoformat())
+def run_classification_command(conf: Config):
+    # classifier = conf.get('run.classifier')
+    # input_mode = conf.get('run.input_mode')
+    # output_mode = conf.get('run.output_mode')
+    # params = conf.get('run.params')
+    # epochs = conf.get('run.epochs')
+    # k_cross = conf.get('run.k_cross')
+    # regenerate_data = not conf.get('run.cache-features')
+    # architectural_only = conf.get('run.architectural_only')
+    # hyper_parameters = conf.get('run.hyper-params')
 
-    classifier = conf.get('run.classifier')
-    input_mode = conf.get('run.input_mode')
-    output_mode = conf.get('run.output_mode')
-    params = conf.get('run.params')
-    epochs = conf.get('run.epochs')
-    k_cross = conf.get('run.k_cross')
-    regenerate_data = not conf.get('run.cache-features')
-    architectural_only = conf.get('run.architectural_only')
-    hyper_parameters = conf.get('run.hyper-params')
-
-    datasets_train, labels_train, datasets_test, labels_test, factory = _get_model_factory(
-        input_mode, output_mode, params, hyper_parameters,
-        architectural_only, regenerate_data, classifier
-    )
+    datasets_train, labels_train, datasets_test, labels_test, factory = _get_model_factory(conf)
 
     training_data = (
         [ds.features for ds in datasets_train],
@@ -674,37 +533,34 @@ def run_classification_command():
         learning.run_ensemble(factory,
                               training_data,
                               testing_data,
-                              OutputMode.from_string(output_mode).label_encoding)
+                              OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
+                              conf=conf)
         log.info(f'Model ID: {conf.get("system.training-start-time")}')
         return
 
     # 5) Invoke actual DL process
-    if k_cross == 0 and not conf.get('run.cross-project'):
+    if conf.get('k-cross') == 0 and not conf.get('run.cross-project'):
         learning.run_single(factory(),
-                            epochs,
-                            OutputMode.from_string(output_mode),
-                            OutputMode.from_string(output_mode).label_encoding,
+                            conf.get('run.epochs'),
+                            OutputMode.from_string(conf.get('run.output-mode')),
+                            OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
                             training_data,
-                            testing_data)
+                            testing_data,
+                            conf=conf)
     else:
         learning.run_cross(factory,
-                           epochs,
-                           OutputMode.from_string(output_mode),
-                           OutputMode.from_string(output_mode).label_encoding,
+                           conf.get('run.epochs'),
+                           OutputMode.from_string(conf.get('run.output-mode')),
+                           OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
                            training_data,
-                           testing_data)
-    log.info(f'Model ID: {conf.get("system.training-start-time")}')
+                           testing_data,
+                           conf=conf)
 
-
-def _get_model_factory(input_mode,
-                       output_mode,
-                       params,
-                       hyper_parameters,
-                       architectural_only,
-                       regenerate_data,
-                       classifier):
+def _get_model_factory(conf: Config):
     ((datasets, labels), (datasets_test, labels_test)) = generate_features_and_get_data(
-        architectural_only, regenerate_data
+        conf.get('run.architectural-only'),
+        not conf.get('run.cache-features'),
+        conf=conf
     )
 
     # 3) Define model factory
@@ -712,9 +568,9 @@ def _get_model_factory(input_mode,
     def factory():
         models = []
         keras_models = []
-        output_encoding = OutputMode.from_string(output_mode).output_encoding
-        output_size = OutputMode.from_string(output_mode).output_size
-        stream = zip(classifier, input_mode, datasets)
+        output_encoding = OutputMode.from_string(conf.get('run.output-mode')).output_encoding
+        output_size = OutputMode.from_string(conf.get('run.output-mode')).output_size
+        stream = zip(conf.get('run.classifier'), conf.get('run.input-mode'), datasets)
         model_counts = collections.defaultdict(int)
         for name, mode, data in stream:
             try:
@@ -737,6 +593,7 @@ def _get_model_factory(input_mode,
             models.append(model)
             model_number = model_counts[name]
             model_counts[name] += 1
+            hyper_parameters = conf.get('run.hyper-parameters')
             hyperparams = _normalize_param_names(
                 hyper_parameters.get(name, {}) |
                 hyper_parameters.get(f'{name}[{model_number}]', {}) |
@@ -759,7 +616,7 @@ def _get_model_factory(input_mode,
             final_model = keras_models[0]
         elif conf.get('run.ensemble_strategy') not in ('stacking', 'voting') and not conf.get('run.test-separately'):
             final_model = classifiers.combine_models(
-                models[0], *keras_models, fully_connected_layers=(None, None)
+                models[0], *keras_models, fully_connected_layers=(None, None), conf=conf
             )
         else:
             return keras_models  # Return all models separately, required for stacking or separate testing
@@ -779,7 +636,7 @@ def _normalize_param_names(params):
 ##############################################################################
 
 
-def run_prediction_command():
+def run_prediction_command(conf: Config):
     # Step 1: Load model data
     data_query = db_util.json_to_query(conf.get('predict.data-query'))
     model_id: str = conf.get('predict.model')
@@ -834,7 +691,8 @@ def run_prediction_command():
                                             output_mode,
                                             ids,
                                             model_id,
-                                            model_version)
+                                            model_version,
+                                            conf=conf)
         case 'stacking':
             prediction.predict_stacking_model(model,
                                               model_metadata,
@@ -842,7 +700,8 @@ def run_prediction_command():
                                               output_mode,
                                               ids,
                                               model_id,
-                                              model_version)
+                                              model_version,
+                                              conf=conf)
         case 'voting':
             prediction.predict_voting_model(model,
                                             model_metadata,
@@ -850,7 +709,8 @@ def run_prediction_command():
                                             output_mode,
                                             ids,
                                             model_id,
-                                            model_version)
+                                            model_version,
+                                            conf=conf)
         case _ as tp:
             raise ValueError(f'Invalid model type: {tp}')
 
@@ -861,7 +721,7 @@ def run_prediction_command():
 ##############################################################################
 
 
-def run_metrics_calculation_command():
+def run_metrics_calculation_command(conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model_id = conf.get('metrics.model-id')
     model = db.get_model_by_id(model_id)
@@ -870,14 +730,14 @@ def run_metrics_calculation_command():
     metric_settings = conf.get('metrics.metrics')
     if isinstance(metric_settings, str):
         metric_settings = json.loads(metric_settings.replace("'", '"'))
-    results = model.get_run_by_id(version_id)
+    results = model.get_run_by_id(version_id).data
     results_per_fold = []
     for fold in results:
         match conf.get('metrics.epoch'):
             case 'last':
                 epoch = -1
                 results_per_fold.append([
-                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                    _calculate_metrics(metric_settings, fold, epoch, model_config, conf=conf)
                 ])
             case 'stopping-point':
                 es_settings = metric_settings['early_stopping_settings']
@@ -889,19 +749,19 @@ def run_metrics_calculation_command():
                 else:
                     epoch = -1
                 results_per_fold.append([
-                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                    _calculate_metrics(metric_settings, fold, epoch, model_config, conf=conf)
                 ])
             case 'all':
                 results_per_fold.append(
                     [
-                        _calculate_metrics(metric_settings, fold, e, model_config)
+                        _calculate_metrics(metric_settings, fold, e, model_config, conf=conf)
                         for e in range(len(results['predictions']['training']))
                     ]
                 )
             case _ as x:
                 epoch = int(x) - 1
                 results_per_fold.append([
-                    _calculate_metrics(metric_settings, fold, epoch, model_config)
+                    _calculate_metrics(metric_settings, fold, epoch, model_config, conf=conf)
                 ])
     # results_per_fold has the following structure:
     #   [ fold1, fold2, ..., foldn]
@@ -910,7 +770,7 @@ def run_metrics_calculation_command():
         'folds': results_per_fold,
         'aggregated': _compute_aggregate_metrics(metric_settings, results_per_fold)
     }
-    conf.register('system.metrics.results', object, result)
+    return results
 
 
 def _compute_aggregate_metrics(metric_settings, results_per_fold):
@@ -935,7 +795,7 @@ def _compute_aggregate_metrics(metric_settings, results_per_fold):
     return result
 
 
-def _calculate_metrics(metric_settings, results, epoch, model_config):
+def _calculate_metrics(metric_settings, results, epoch, model_config, *, conf: Config):
     training_manager = metrics.MetricCalculationManager(
         y_true=numpy.asarray(results['truth']['training']),
         y_pred=numpy.asarray(results['predictions']['training'][epoch]),

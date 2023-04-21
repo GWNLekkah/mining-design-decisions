@@ -9,7 +9,7 @@ import nltk
 import issue_db_api
 
 from .. import accelerator
-from ..config import conf
+from ..config import Config
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
 from ..logger import get_logger
@@ -57,13 +57,15 @@ class AbstractEmbeddingGenerator(abc.ABC):
 
     def make_embedding(self,
                        query: issue_db_api.Query,
-                       formatting_handling: str):
+                       formatting_handling: str,
+                       conf: Config):
         # Loading issues from database
         # db: DatabaseAPI = conf.get('system.storage.database-api')
         # issues = db.select_issues(query)
         # data = db.get_issue_data(issues, ['summary', 'description'])
         db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
         issues = db.search(query, attributes=['summary', 'description'])
+        log.info(f'Training embedding on {len(issues)} issues (query: {query})')
 
         # Setting up NLP stuff
         handling = FormattingHandling.from_string(formatting_handling)
@@ -132,7 +134,7 @@ class AbstractEmbeddingGenerator(abc.ABC):
         # Upload binary file
         embedding_id = conf.get('generate-embedding.embedding-id')
         embedding = db.get_embedding_by_id(embedding_id)
-        embedding.upload_binary(TEMP_EMBEDDING_PATH)
+        embedding.upload_binary(str(TEMP_EMBEDDING_PATH))
 
 
     @abc.abstractmethod

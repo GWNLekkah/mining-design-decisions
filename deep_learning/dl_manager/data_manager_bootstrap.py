@@ -1,7 +1,6 @@
-import json
 import os
 
-from .config import conf
+from .config import Config
 
 ##############################################################################
 ##############################################################################
@@ -9,7 +8,7 @@ from .config import conf
 ##############################################################################
 
 
-def get_raw_text_file_name() -> str:
+def get_raw_text_file_name(conf: Config) -> str:
     if conf.get('system.peregrine'):
         path = os.path.join(conf.get('system.peregrine.data'),
                             f'{conf.get("system.storage.file_prefix")}_raw_words')
