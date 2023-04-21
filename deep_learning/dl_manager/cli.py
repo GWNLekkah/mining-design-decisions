@@ -53,7 +53,7 @@ def main(port, keyfile, certfile):
 
 def get_arg_spec():
     location = os.path.split(__file__)[0]
-    return os.path.join(location, 'cli.json')
+    return os.path.join(location, 'web_api.json')
 
 
 def build_app():

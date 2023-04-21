@@ -13,7 +13,6 @@
       "args": [
         {
           "name": "arg",
-          "style": "positional",
           "help": "Possible categories to list options for.",
           "nargs": "1",
           "type": "enum",
@@ -21,7 +20,8 @@
             "classifiers",
             "inputs",
             "outputs"
-          ]
+          ],
+          "required": true
         }
       ]
     },
@@ -32,9 +32,10 @@
         {
           "name": "classifier",
           "help": "Classifier to view. Use `list` for options.",
-          "style": "positional",
           "nargs": "1",
-          "type": "str"
+          "type": "str",
+          "required": true,
+          "options": []
         }
       ]
     },
@@ -45,9 +46,10 @@
         {
           "name": "generator",
           "help": "Generator to view. Use `list` for options.",
-          "style": "positional",
           "nargs": "1",
-          "type": "str"
+          "type": "str",
+          "required": true,
+          "options": []
         }
       ]
     },
@@ -57,29 +59,27 @@
       "args": [
         {
           "name": "input-mode",
-          "alias": "i",
           "help": "Generator to use. Use `list` for options.",
-          "style": "named",
           "nargs": "+",
           "type": "str",
-          "required": true
+          "required": true,
+          "options": []
         },
         {
           "name": "output-mode",
-          "alias": "o",
           "help": "Output mode to use. Use `list` for options.",
-          "style": "named",
           "nargs": "1",
           "type": "str",
-          "required": true
+          "required": true,
+          "options": []
         },
         {
           "name": "params",
-          "alias": "p",
           "help": "Generator params. Items in the name=value format.",
           "nargs": "+",
-          "type": "dict",
-          "style": "named"
+          "type": "arglist",
+          "required": true,
+          "options": []
         },
         {
           "name": "ontology-classes",
@@ -87,111 +87,136 @@
           "nargs": "1",
           "type": "str",
           "default": "",
-          "style": "named"
+          "required": false,
+          "options": []
         },
         {
           "name": "apply-ontology-classes",
           "help": "Enable application of ontology classes",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "classifier",
           "help": "Classifier to use. Use `list` for options",
-          "style": "positional",
           "nargs": "+",
-          "type": "str"
+          "type": "str",
+          "required": true,
+          "options": []
         },
         {
           "name": "epochs",
-          "alias": "e",
           "help": "Amount of training epochs",
-          "style": "named",
           "nargs": "1",
           "type": "int",
-          "required": true
+          "required": true,
+          "options": []
         },
         {
           "name": "split-size",
-          "alias": "s",
           "help": "Size of testing and validation splits.",
           "type": "float",
           "default": "0.2",
-          "style": "named",
-          "nargs": "1"
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "max-train",
           "help": "Maximum amount of training items. -1 for infinite",
-          "style": "named",
           "nargs": "1",
           "type": "int",
-          "default": "-1"
+          "default": "-1",
+          "required": false,
+          "options": []
         },
         {
           "name": "k-cross",
-          "alias": "k",
           "help": "Enable k-fold cross-validation.",
-          "style": "named",
           "type": "int",
           "default": "0",
-          "nargs": "1"
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "quick-cross",
-          "alias": "qc",
           "help": "Enable k-fold cross validation",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "cross-project",
           "help": "Run cross project validation.",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "cache-features",
           "help": "Force caching of features. NOTE: the pipeline does not handle cache invalidation!",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "architectural-only",
-          "alias": "ao",
           "help": "If specified, only architectural issues are used",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "hyper-params",
-          "alias": "hp",
           "help": "Hyper-parameters params. Items in the name=value format.",
           "nargs": "+",
-          "type": "dict",
-          "style": "named"
+          "type": "arglist",
+          "required": true,
+          "options": []
         },
         {
           "name": "class-balancer",
           "help": "Enable Class-Balancing",
-          "style": "named",
           "nargs": "1",
           "type": "str",
-          "default": "None"
+          "default": "None",
+          "required": false,
+          "options": []
         },
         {
           "name": "batch-size",
           "help": "Specify the batch size used during training",
           "type": "int",
           "default": "32",
-          "style": "named"
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "peregrine",
           "help": "Specify to enable running on peregrine",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "combination-strategy",
-          "alias": "cs",
           "help": "Strategy used to combine models. Use `combination-strategies` for more information.",
           "nargs": "1",
-          "style": "named",
           "default": "concat",
           "type": "enum",
           "options": [
@@ -202,145 +227,179 @@
             "multiply",
             "dot",
             "concat"
-          ]
+          ],
+          "required": false
         },
         {
           "name": "ensemble-strategy",
-          "alias": "es",
           "help": "Strategy used to combine models. Use `combination-strategies` for more information.",
           "nargs": "1",
-          "style": "named",
           "default": "none",
           "type": "enum",
           "options": [
             "stacking",
             "boosting",
             "voting"
-          ]
+          ],
+          "required": false
         },
         {
           "name": "stacking-meta-classifier",
           "help": "Classifier to use as meta-classifier in stacking.",
           "nargs": "1",
           "type": "str",
-          "style": "named"
+          "required": true,
+          "options": []
         },
         {
           "name": "stacking-meta-classifier-hyper-parameters",
           "help": "Hyper-parameters for the meta-classifier",
-          "type": "dict",
+          "type": "arglist",
           "nargs": "+",
-          "style": "named"
+          "required": true,
+          "options": []
         },
         {
           "name": "stacking-use-concat",
           "help": "Use simple concatenation to create the input for the meta classifier",
-          "style": "flag",
-          "nargs": "1"
+          "nargs": "1",
+          "type": "bool",
+          "default": false,
+          "required": false,
+          "options": []
         },
         {
           "name": "stacking-no-matrix",
           "help": "Disallow the use of matrices for meta classifier input",
-          "style": "flag",
-          "nargs": "1"
+          "nargs": "1",
+          "type": "bool",
+          "default": false,
+          "required": false,
+          "options": []
         },
         {
           "name": "boosting-rounds",
           "help": "Amount of rounds in the boosting process",
-          "style": "named",
           "nargs": "1",
           "default": "10",
-          "type": "int"
+          "type": "int",
+          "required": false,
+          "options": []
         },
         {
           "name": "use-early-stopping",
           "help": "If specified, use early stopping.",
           "nargs": "1",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "required": false,
+          "options": []
         },
         {
           "name": "early-stopping-patience",
           "help": "Patience used when using early stopping",
           "nargs": "1",
-          "style": "named",
           "type": "int",
-          "default": "5"
+          "default": "5",
+          "required": false,
+          "options": []
         },
         {
           "name": "early-stopping-min-delta",
           "help": "Minimum delta used when using early stopping. One entry for every attribute used.",
           "nargs": "+",
-          "style": "named",
           "type": "float",
-          "default": "0.001"
+          "default": "0.001",
+          "required": false,
+          "options": []
         },
         {
           "name": "early-stopping-attribute",
           "help": "Attribute(s) to use for early stopping (from the validation set)",
           "nargs": "+",
-          "style": "named",
           "type": "str",
-          "default": "loss"
+          "default": "loss",
+          "required": false,
+          "options": []
         },
         {
           "name": "test-separately",
           "help": "If given, disable combining multiple classifiers. In stead, test them separately on the same data.",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "store-model",
-          "alias": "sm",
           "help": "If given, store the trained model. Can only be used when training a single model.",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "model-id",
           "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
-          "style": "named",
           "type": "str",
-          "default": ""
+          "default": "",
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "analyze-keywords",
           "help": "Compute a list of important keywords (convolutional mode only)",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "training-data-query",
           "help": "Query to obtain data from the database for training",
           "type": "str",
           "required": true,
-           "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "test-data-query",
           "help": "Query to obtain data from the database for performance evaluation",
           "type": "str",
-          "style": "named"
+          "required": true,
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "database-url",
-          "alias": "db",
           "help": "URL of the database (wrapper)",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "test-with-training-data",
           "help": "Draw testing data from training data using train/test split",
-          "style": "flag",
-          "default": false
+          "default": false,
+          "type": "bool",
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "num-threads",
           "help": "Number of threads to use for preprocessing",
-          "style": "named",
           "required": true,
           "type": "int",
-          "nargs": "1"
+          "nargs": "1",
+          "options": []
         }
-     ]
+      ]
     },
     {
       "name": "train",
@@ -348,27 +407,28 @@
       "args": [
         {
           "name": "database-url",
-          "alias": "db",
           "help": "URL of the database (wrapper)",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "model-id",
           "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
-          "style": "named",
           "type": "str",
           "default": "",
-          "required": true
+          "required": false,
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "num-threads",
           "help": "Number of threads to use for preprocessing",
-          "style": "named",
           "required": true,
           "type": "int",
-          "nargs": "1"
+          "nargs": "1",
+          "options": []
         }
       ]
     },
@@ -378,71 +438,74 @@
       "args": [
         {
           "name": "model",
-          "alias": "m",
+          "help": "Model to predict with",
           "required": true,
-          "style": "named",
-          "type": "str"
+          "type": "str",
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "version",
-          "alias": "v",
-          "required": true,
-          "style": "named",
+          "help": "Trained instance of the given model to use for prediction",
+          "required": false,
           "type": "str",
-          "default": "most-recent"
+          "default": "most-recent",
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "data-query",
-          "alias": "d",
+          "help": "Query used to retrieve issues to predict",
           "required": true,
-          "style": "named",
-          "type": "str"
+          "type": "str",
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "database-url",
-          "alias": "db",
           "help": "URL of the database (wrapper)",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "num-threads",
           "help": "Number of threads to use for preprocessing",
-          "style": "named",
           "required": true,
           "type": "int",
-          "nargs": "1"
+          "nargs": "1",
+          "options": []
         }
       ]
     },
     {
       "name": "generate-embedding",
-      "description": "Generate a word or document embedding for use in a feature generator",
+      "help": "Generate a word or document embedding for use in a feature generator",
       "args": [
         {
           "name": "embedding-id",
-          "alias": "id",
           "help": "Embedding to train",
           "required": true,
-          "style": "named",
-          "type": "str"
+          "type": "str",
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "database-url",
-          "alias": "db",
           "help": "URL of the database (wrapper)",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "num-threads",
           "help": "Number of threads to use for preprocessing",
-          "style": "named",
           "required": true,
           "type": "int",
-          "nargs": "1"
+          "nargs": "1",
+          "options": []
         }
       ]
     },
@@ -453,22 +516,25 @@
         {
           "name": "generator",
           "help": "Generator to use",
-          "style": "positional",
           "nargs": "1",
           "type": "enum",
           "options": [
-            "Word2VecGenerator", "Doc2VecGenerator"
-          ]
+            "Word2VecGenerator",
+            "Doc2VecGenerator"
+          ],
+          "required": true
         }
       ]
     },
     {
       "name": "embedding-generators",
-      "help": "Show available embedding generators"
+      "help": "Show available embedding generators",
+      "args": []
     },
     {
       "name": "combination-strategies",
-      "help": "Give a comprehensive overview of all available model combination strategies."
+      "help": "Give a comprehensive overview of all available model combination strategies.",
+      "args": []
     },
     {
       "name": "serve",
@@ -476,12 +542,12 @@
       "args": [
         {
           "name": "port",
-          "alias": "p",
           "type": "int",
           "default": "9011",
           "nargs": "1",
-          "style": "named",
-          "help": "Port to bind to"
+          "help": "Port to bind to",
+          "required": false,
+          "options": []
         },
         {
           "name": "keyfile",
@@ -490,8 +556,8 @@
           "options": [
             "pathlib.Path"
           ],
-          "style": "named",
-          "required": true
+          "required": true,
+          "nargs": "1"
         },
         {
           "name": "certfile",
@@ -500,8 +566,8 @@
           "options": [
             "pathlib.Path"
           ],
-          "style": "named",
-          "required": true
+          "required": true,
+          "nargs": "1"
         }
       ]
     },
@@ -511,51 +577,61 @@
       "args": [
         {
           "name": "database-url",
-          "alias": "db",
           "help": "URL of the database (wrapper)",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "model-id",
-          "alias": "m",
           "help": "ID of the model from which predictions must be fetched",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "version-id",
-          "alias": "v",
           "help": "ID of the model version from which predictions must be fetched",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "metrics",
           "help": "JSON string describing which metrics should be calculated",
           "type": "str",
           "required": true,
-          "style": "named"
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "classification-as-detection",
           "help": "Evaluate detection performance of a classification model",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         },
         {
           "name": "epoch",
           "help": "Epoch to evaluate metrics at. Either an epoch, `last`, `stopping-point`, or `all`",
           "type": "str",
-          "style": "named",
-          "required": true
+          "required": true,
+          "nargs": "1",
+          "options": []
         },
         {
           "name": "include-non-arch",
           "help": "Include the non-architectural class as a class in Classification3",
-          "style": "flag"
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
         }
       ]
     }

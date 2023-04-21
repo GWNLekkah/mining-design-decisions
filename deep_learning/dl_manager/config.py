@@ -21,6 +21,9 @@ import json
 import fastapi
 import uvicorn
 
+from . import logger
+log = logger.get_logger('App Builder')
+
 ##############################################################################
 ##############################################################################
 # Custom Exceptions
@@ -176,15 +179,15 @@ class WebApp:
     def __init__(self, filename: str):
         self._app = fastapi.FastAPI()
         self._router = fastapi.APIRouter()
-        with open(filename) as file:
-            spec = json.load(file)
-        self._build_endpoints(spec['commands'])
         self._callbacks = {}
         self._setup_callbacks = []
         self._constraints = []
         self._endpoints = []
         self._config_factory = ConfigFactory()
         self._register_system_properties()
+        with open(filename) as file:
+            spec = json.load(file)
+        self._build_endpoints(spec['commands'])
 
     def _register_system_properties(self):
         self._config_factory.register_namespace('system.storage')
@@ -245,7 +248,8 @@ class WebApp:
 
     def _build_endpoint(self, spec):
         endpoint = _Endpoint(spec, self._config_factory, self.dispatch)
-        self._router.add_api_route(endpoint.name, endpoint, description=endpoint.description)
+        self._router.post(endpoint.name, description=endpoint.description)(endpoint.__call__)
+        # self._router.add_api_route(endpoint.name, endpoint, description=endpoint.description)
 
     def register_callback(self, event, func):
         self._callbacks[event] = func
@@ -292,8 +296,9 @@ class _Endpoint:
                  config_factory: ConfigFactory,
                  callback):
         self.name = spec['name']
+        log.info(f'Registering endpoint {self.name!r}')
         self.description = spec['help']
-        self._args = spec
+        self._args = spec['args']
         validators = [_ArgumentValidator(arg) for arg in self._args]
         self._validators = {arg.name: arg for arg in validators}
         self._required = {arg.name for arg in validators if arg.required}
@@ -304,7 +309,7 @@ class _Endpoint:
         self._dispatcher = callback
         self._config_factory.register_namespace(self.name)
         for v in self._validators:
-            self._config_factory.register(f'{self.name}.{v.name}')
+            self._config_factory.register(f'{self.name}.{v}')
 
 
     def __call__(self, req: fastapi.Request):
@@ -344,15 +349,17 @@ class _ArgumentValidator:
 
     def __init__(self, spec):
         self.name = spec['name']
+        log.info(f'Registering argument {self.name!r}')
         self.description = spec['help']
         self.required = spec.get('required', False)
         self.default = spec.get('default', self.NOT_SET)
         self._nargs = '1' if 'nargs' not in spec else spec['nargs']
         self._type = spec['type']
+        #self._options = spec.get('options', [])
         self._options = spec['options']
         if self._nargs not in ('1', '*', '+'):
             raise ValueError(f'[{self.name}] Invalid nargs: {self._nargs}')
-        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'args'):
+        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float'):
             raise ValueError(f'[{self.name}] Invalid type: {self._type}')
         if self._type == 'class':
             if len(self._options) != 1:
@@ -394,6 +401,10 @@ class _ArgumentValidator:
                 if not isinstance(x, bool):
                     self._raise_invalid_type('bool', x)
                 return x
+            case 'float':
+                if not isinstance(x, float):
+                    self._raise_invalid_type('float', x)
+                return x
             case 'enum':
                 if not isinstance(x, str):
                     raise fastapi.HTTPException(
@@ -414,8 +425,8 @@ class _ArgumentValidator:
                         detail=f'Error while converting {self.name!r} to {self._options[0].__class__.__name__}: {e}',
                         status_code=400
                     )
-            case 'args':
-                raise NotImplementedError
+            case 'arglist':
+                return x
 
     def _raise_invalid_type(self, expected, got):
         raise fastapi.HTTPException(
