@@ -34,7 +34,7 @@ class NoSuchSetting(LookupError):
 
     def __init__(self, attribute, action):
         message = (f'Cannot perform action {action!r} on setting '
-                   f'{attribute} since it does not exist')
+                   f'{attribute!r} since it does not exist')
         super().__init__(message)
 
 
@@ -97,7 +97,7 @@ class ConfigFactory:
         for n in legal:
             if '.' in n:
                 raise ValueError(f'Can only register top-level namespaces as legal, not {n}')
-        Config(
+        return Config(
             legal,
             self._namespace,
             self._new_namespace_tree(self._namespace)
@@ -131,7 +131,7 @@ class Config:
         for part in path:
             if current_n is None:
                 raise NoSuchSetting(name, action)
-            if path not in current_n:
+            if part not in current_n:
                 raise NoSuchSetting(name, action)
             current_n = current_n[part]
             current_d = current_d[part]
@@ -144,18 +144,18 @@ class Config:
         *path, prop = self._normalize_name(name)
         namespace = self._resolve(name, 'get', path)
         if prop not in namespace:
-            raise NoSuchSetting(prop, 'get')
+            raise NoSuchSetting(name, 'get')
         return namespace[prop]
 
     def set(self, name: str, value):
         *path, prop = self._normalize_name(name)
         namespace = self._resolve(name, 'set', path)
         if prop not in namespace:
-            raise NoSuchSetting(prop, 'set')
+            raise NoSuchSetting(name, 'set')
         namespace[prop] = value
 
     def clone(self, from_: str, to: str):
-        self.set(from_, self.get(to))
+        self.set(to, self.get(from_))
 
     def transfer(self, target: Config, *properties):
         for prop in properties:
@@ -236,6 +236,7 @@ class WebApp:
 
         # Current system state
         self._config_factory.register('system.management.active-command')
+        self._config_factory.register('system.management.app')
 
         # Target home and data directories.
         self._config_factory.register('system.os.peregrine')
@@ -248,7 +249,7 @@ class WebApp:
 
     def _build_endpoint(self, spec):
         endpoint = _Endpoint(spec, self._config_factory, self.dispatch)
-        self._router.post(endpoint.name, description=endpoint.description)(endpoint.__call__)
+        self._router.post('/' + endpoint.name, description=endpoint.description)(endpoint.invoke)
         # self._router.add_api_route(endpoint.name, endpoint, description=endpoint.description)
 
     def register_callback(self, event, func):
@@ -282,7 +283,7 @@ class WebApp:
         conf.set('system.management.active-command', name)
         conf.set('system.management.app', self)
         for callback in self._setup_callbacks:
-            callback()
+            callback(conf)
         self._callbacks[name](conf)
 
     def new_config(self, *namespaces) -> Config:
@@ -312,10 +313,14 @@ class _Endpoint:
             self._config_factory.register(f'{self.name}.{v}')
 
 
-    def __call__(self, req: fastapi.Request):
-        payload = req.json()
-        args = self._validate(payload)
+    async def invoke(self, req: fastapi.Request):
+        payload = await req.json()
+        args = self._validate(payload['config'])
         conf = self._config_factory.build_config(self.name, 'system')
+        if 'auth' in payload:
+            auth = payload['auth']
+            conf.set('system.security.db-username', auth['username'])
+            conf.set('system.security.password', auth['password'])
         for name, value in args.items():
             conf.set(f'{self.name}.{name}', value)
         self._dispatcher(self.name, conf)

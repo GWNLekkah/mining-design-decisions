@@ -172,7 +172,10 @@ def setup_security(conf: Config):
 
 
 def setup_os(conf: Config):
-    conf.clone('run.peregrine', 'system.peregrine')
+    conf.set(
+        'system.os.peregrine',
+        os.environ.get('DL_MANAGER_RUNNING_ON_PEREGRINE', 'false').lower() == 'true'
+    )
     if conf.get('system.os.peregrine'):
         conf.set('system.os.home-directory', os.path.expanduser('~'))
         conf.set('system.os.data-directory', f'/data/{getpass.getuser()}')
