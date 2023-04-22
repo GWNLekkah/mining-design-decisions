@@ -26,7 +26,7 @@ class DeepLearningData:
         'BOWFrequency',
         'BOWNormalized',
         'TfidfGenerator',
-        'Word2Vec1D',
+        'Word2Vec',
         'Doc2Vec',
         'AutoEncoder',
         'KateAutoEncoder',

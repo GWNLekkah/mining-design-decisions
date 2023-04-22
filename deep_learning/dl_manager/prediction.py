@@ -63,11 +63,11 @@ def predict_simple_model(path: pathlib.Path,
                          model_version, *,
                          conf: Config):
     _check_output_mode(output_mode)
-    if model_metadata['model_settings']['run.classifier'][0] == 'Bert':
-        model = TFAutoModelForSequenceClassification.from_pretrained(path / model_metadata['model_path'])
+    if model_metadata['model-settings']['classifier'][0] == 'Bert':
+        model = TFAutoModelForSequenceClassification.from_pretrained(path / model_metadata['model-path'])
         model.classifier.activation = tf.keras.activations.sigmoid
     else:
-        model = load_model(path / model_metadata['model_path'])
+        model = load_model(path / model_metadata['model-path'])
     if len(features) == 1:
         features = features[0]
 
@@ -107,15 +107,15 @@ def predict_stacking_model(path: pathlib.Path,
                            conf: Config):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
-                                                model_metadata['child_models'],
+                                                model_metadata['child-models'],
                                                 features)
     conversion = stacking.InputConversion.from_json(
-        model_metadata['input_conversion_strategy']
+        model_metadata['input-conversion-strategy']
     )
     new_features = stacking.transform_predictions_to_stacking_input(output_mode,
                                                                     predictions,
                                                                     conversion)
-    meta_model = load_model(path / model_metadata['meta_model'])
+    meta_model = load_model(path / model_metadata['meta-model'])
     final_predictions = meta_model.predict(new_features)
     if output_mode.output_encoding == OutputEncoding.Binary:
         canonical_predictions = round_binary_predictions(final_predictions)
@@ -147,7 +147,7 @@ def predict_voting_model(path: pathlib.Path,
                          conf: Config):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
-                                                model_metadata['child_models'],
+                                                model_metadata['child-models'],
                                                 features)
     voting_predictions = voting_util.get_voting_predictions(output_mode,
                                                             predictions)
@@ -287,4 +287,5 @@ def _store_predictions(predictions,
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(model_id)
     version = model.get_version_by_id(model_version)
+    print(predictions_by_id)
     version.predictions = predictions_by_id

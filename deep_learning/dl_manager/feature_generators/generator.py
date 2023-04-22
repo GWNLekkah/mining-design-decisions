@@ -143,6 +143,8 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         self.__colors = None
         self.__keys=  None
         self.conf = conf
+        self.__ontology_classes = None
+        self.__apply_ontologies = False
         if self.__pretrained is not None:
             if self.__params:
                 raise ValueError(
@@ -154,8 +156,13 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 if name in self.__pretrained:
                     self.__params[name] = self.__pretrained[name]
             if 'ontology-classes' in self.__pretrained:
-                aux = self.conf.get('system.storage.auxiliary_map')
-                self.conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
+                aux = self.conf.get('system.storage.auxiliary-map')
+                #self.conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
+                self.__ontology_classes = aux[self.__pretrained['ontology-classes']]
+                self.__apply_ontologies = self.__pretrained['use-ontology-classes']
+        else:
+            self.__ontology_classes = conf.get('run.ontology-classes')
+            self.__apply_ontologies = conf.get('run.apply-ontology-classes')
 
     @property
     def params(self) -> dict[str, str]:
@@ -194,6 +201,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         if ontologies:
             pretrained_settings['ontology-classes'] = ontologies
             self.conf.get('system.storage.auxiliary').append(ontologies)
+        pretrained_settings['use-ontology-classes'] = self.conf.get('run.apply-ontology-classes')
         self.conf.get('system.storage.generators').append(filename)
         self.conf.get('system.storage.auxiliary').extend(auxiliary_files)
         with open(filename, 'w') as file:
@@ -423,9 +431,8 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
     def preprocess(self, issues):
         log.info('Preprocessing Features')
         with timer('Feature Preprocessing'):
-            ontology_path = self.conf.get('run.ontology-classes')
-            if ontology_path is not None:
-                ontology_table = ontology.load_ontology(ontology_path)
+            if self.__ontology_classes is not None:
+                ontology_table = ontology.load_ontology(self.__ontology_classes)
             else:
                 ontology_table = None
 
@@ -436,7 +443,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
             use_lowercase = self.__params['disable-lowercase']
-            use_ontologies = self.conf.get('run.apply-ontology-classes')
+            use_ontologies = self.__apply_ontologies
             handling_string = self.__params['formatting-handling']
             handling = FormattingHandling.from_string(handling_string)
             weights, tagdict, classes = nltk.load(

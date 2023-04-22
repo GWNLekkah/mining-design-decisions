@@ -107,7 +107,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         }
         if InputEncoding.Embedding in cls.supported_input_encodings():
             result |= {
-                'use_trainable_embedding': BoolArgument(default=False,
+                'use-trainable-embedding': BoolArgument(default=False,
                                                         name='use-trainable-embedding',
                                                         description='Whether to make the word-embedding trainable')
             }
@@ -242,7 +242,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                                embedding_output_size=embedding_output_size,
                                **kwargs)
         model.compile(optimizer=self.get_optimizer(**kwargs),
-                      loss=self.__get_loss_function(),
+                      loss=self.__get_loss_function(**kwargs),
                       metrics=self.get_metric_list())
         return model
 

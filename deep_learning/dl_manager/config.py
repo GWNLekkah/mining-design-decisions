@@ -760,21 +760,23 @@ class ArgumentListParser:
         #    raise fastapi.HTTPException(detail='Single-valued arglist cannot contain a default section',
         #                                status_code=400)
         indices = collections.defaultdict(int)
-        result = collections.defaultdict(dict)
+        result = {}
         for name, args in values.items():
             if '[' in args:
                 cls, index = name.split('[')
                 index = int(index.removesuffix(']'))
-                result[cls][index] = self._validate(cls, args)
+                result.setdefault(cls, {})[index] = self._validate(cls, args)
             else:
                 if name in indices:
                     raise fastapi.HTTPException(detail=f'Un-numbered occurrence of name {name!r} in arglist',
                                                 status_code=400)
                 cls = name
-                result[cls][0] = self._validate(cls, args)
+                result.setdefault(cls, {})[0] = self._validate(cls, args)
         return result
 
     def _validate(self, name, obj):
+        log.info(f'Parsing argument list for {name!r}')
+        log.info(f'Raw input: {obj}')
         try:
             cls: typing.Type[ArgumentConsumer] = self._map[name]
         except KeyError:
@@ -797,10 +799,12 @@ class ArgumentListParser:
                 raise fastapi.HTTPException(detail=f'Unknown argument {key} for {name}',
                                             status_code=400)
             result[key] = args[key].validate(value)
+            log.info(f'Parsed argument {key!r}: {result[key]}')
 
         for arg in args.values():
             if arg.argument_name not in result and arg.has_default:
-                result[arg.argument_name] = arg.default
+                result[arg.argument_name] = arg.validate(arg.default)
+                log.info(f'Applied default: {arg.argument_name!r}: {result[arg.argument_name]}')
         missing = required - set(result)
         if missing:
             raise fastapi.HTTPException(

@@ -46,7 +46,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
 
     @staticmethod
     def get_arguments() -> dict[str, Argument]:
-        return {
+        args = {
             'vector-length': IntArgument(
                 name='vector-length',
                 minimum=1,
@@ -57,3 +57,9 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                description='ID of the word embedding to use',
            )
         } | super(AbstractWord2Vec, AbstractWord2Vec).get_arguments()
+        args['max-len'] = IntArgument(
+            name='max-len',
+            description='Maximum length of the input issues. Must be positive for embeddings',
+            minimum=1
+        )
+        return args

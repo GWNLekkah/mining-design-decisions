@@ -104,12 +104,13 @@ def run_single(model_or_models,
         # which means the loop only runs once.
         if conf.get('run.store-model'):
             model_manager.save_single_model(trained_model, conf)
-        dump_metrics([metrics_], conf=conf)
+        ident = dump_metrics([metrics_], conf=conf)
         comparator.add_result(metrics_)
     comparator.add_truth(test[1])
     comparator.finalize()
     if conf.get('run.test-separately'):
         comparator.compare()
+    return ident
 
 
 def run_cross(model_factory,
@@ -196,10 +197,9 @@ def _separate_datasets(train, test, validation):
 
 
 def print_and_save_k_cross_results(results,
-                                   best_results,
-                                   filename_hint=None, *,
+                                   best_results, *,
                                    conf: Config):
-    dump_metrics(results, filename_hint, conf=conf)
+    ident = dump_metrics(results, conf=conf)
     metric_list = []
     # metric_list = ['accuracy', 'f-score']
     for key in metric_list:
@@ -216,6 +216,7 @@ def print_and_save_k_cross_results(results,
         except statistics.StatisticsError:
             pass
         print('    * Median:', statistics.median(stat_data))
+    return ident
 
 
 def train_and_test_model(model: tf.keras.Model,
@@ -344,28 +345,10 @@ def upsample(features, labels):
     return features, labels
 
 
-def dump_metrics(runs, filename_hint=None, *, conf: Config):
-    # if conf.get('system.peregrine'):
-    #     data = pathlib.Path(conf.get('system.peregrine.data'))
-    #     directory = data / f'{conf.get("system.storage.file_prefix")}_results'
-    # else:
-    #     directory = pathlib.Path('.')
-    # if not directory.exists():
-    #     directory.mkdir(exist_ok=True)
-    # if filename_hint is None:
-    #     filename_hint = ''
-    # else:
-    #     filename_hint = '_' + filename_hint
-    # filename = f'{conf.get("system.storage.file_prefix")}_run_results_{datetime.datetime.now().timestamp()}{filename_hint}.json'
-    # with open(directory / filename, 'w') as file:
-    #     json.dump(runs, file)
-    # with open(directory / f'{conf.get("system.storage.file_prefix")}_most_recent_run.txt', 'w') as file:
-    #     file.write(filename)
-    #db: DatabaseAPI = conf.get('system.storage.database-api')
-    #db.save_training_results(runs)
+def dump_metrics(runs, *, conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
-    model.add_test_run(runs, conf.get('system.training-start-time'))
+    return model.add_test_run(runs)
 
 ##############################################################################
 ##############################################################################
@@ -528,15 +511,13 @@ def run_stacking_ensemble(factory,
             print(f'Model {model_number} results:')
             print_and_save_k_cross_results(sub_model_results,
                                            best_sub_model_results,
-                                           f'sub_model_{model_number}',
                                            conf=conf)
             print('=' * 72)
             print('=' * 72)
         print('Total Stacking Ensemble Results:')
-        print_and_save_k_cross_results(results,
-                                       best_results,
-                                       'stacking_ensemble_total',
-                                       conf=conf)
+        return print_and_save_k_cross_results(results,
+                                              best_results,
+                                              conf=conf)
     else:   # Voting ensemble
         __voting_ensemble_hook[1](voting_result_data, conf=conf)
 

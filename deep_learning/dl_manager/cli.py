@@ -235,7 +235,6 @@ def run_training_session(conf: Config):
         'database-url': conf.get('system.storage.database-url'),
         'model-id': conf.get('train.model-id')
     }
-    print(settings)
     app: WebApp = conf.get('system.management.app')
     new_conf = app.new_config('run', 'system')
     conf.transfer(new_conf,
@@ -536,7 +535,7 @@ def run_classification_command(conf: Config):
         return
 
     # 5) Invoke actual DL process
-    if conf.get('k-cross') == 0 and not conf.get('run.cross-project'):
+    if conf.get('run.k-cross') == 0 and not conf.get('run.cross-project'):
         learning.run_single(factory(),
                             conf.get('run.epochs'),
                             OutputMode.from_string(conf.get('run.output-mode')),
@@ -590,12 +589,8 @@ def _get_model_factory(conf: Config):
             models.append(model)
             model_number = model_counts[name]
             model_counts[name] += 1
-            hyper_parameters = conf.get('run.hyper-parameters')
+            hyper_parameters = conf.get('run.hyper-params')
             hyperparams = hyper_parameters[name][model_number]
-            allowed_hyper_params = model.get_arguments()
-            for param_name in hyperparams:
-                if param_name not in allowed_hyper_params:
-                    raise ValueError(f'Illegal hyperparameter for model {name}: {param_name}')
             if data.is_embedding():
                 keras_model = model.get_compiled_model(embedding=data.embedding_weights,
                                                        embedding_size=data.vocab_size,
@@ -607,7 +602,7 @@ def _get_model_factory(conf: Config):
         # 4) If necessary, combine models
         if len(models) == 1:
             final_model = keras_models[0]
-        elif conf.get('run.ensemble_strategy') not in ('stacking', 'voting') and not conf.get('run.test-separately'):
+        elif conf.get('run.ensemble-strategy') not in ('stacking', 'voting') and not conf.get('run.test-separately'):
             final_model = classifiers.combine_models(
                 models[0], *keras_models, fully_connected_layers=(None, None), conf=conf
             )
@@ -627,14 +622,15 @@ def _get_model_factory(conf: Config):
 
 def run_prediction_command(conf: Config):
     # Step 1: Load model data
-    data_query = db_util.json_to_query(conf.get('predict.data-query'))
+    data_query = conf.get('predict.data-query')
     model_id: str = conf.get('predict.model')
     model_version = conf.get('predict.version')
     # Load model from DB
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(model_id)
-    if model_version == 'most_recent':
+    if model_version == 'most-recent':
         trained_model = max(model.versions, key=lambda v: v.version_id)
+        model_version = trained_model.version_id
     else:
         trained_model = model.get_version_by_id(model_version)
     trained_model.download(model_manager.MODEL_FILE)
@@ -644,7 +640,7 @@ def run_prediction_command(conf: Config):
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
     output_mode = OutputMode.from_string(
-        model_metadata['model_settings']['run.output_mode']
+        model_metadata['model-settings']['output_mode']
     )
 
     # Step 2: Load data
@@ -652,11 +648,11 @@ def run_prediction_command(conf: Config):
     warnings.warn('The predict command does not cache features!')
     auxiliary_files = {
         file: os.path.join(model, path)
-        for file, path in model_metadata['auxiliary_files'].items()
+        for file, path in model_metadata['auxiliary-files'].items()
     }
-    conf.get('system.storage.auxiliary_map').update(auxiliary_files)
+    conf.get('system.storage.auxiliary-map').update(auxiliary_files)
     ids = None
-    for generator in model_metadata['feature_generators']:
+    for generator in model_metadata['feature-generators']:
         with open(model / generator) as file:
             generator_data = json.load(file)
         generator_class = feature_generators.generators[generator_data['generator']]
@@ -672,7 +668,7 @@ def run_prediction_command(conf: Config):
             datasets.append(numpy.asarray(data_stuff.features))
 
     # Step 3: Load the model and get the predictions
-    match model_metadata['model_type']:
+    match model_metadata['model-type']:
         case 'single':
             prediction.predict_simple_model(model,
                                             model_metadata,

@@ -39,5 +39,5 @@
         "fastapi==0.93.*",
         "uvicorn==0.20.*",
         "transformers==4.26.1",
-        "issue_db_api==0.4.*"
+        "issue_db_api==0.6.*"
     ]

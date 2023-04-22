@@ -36,7 +36,10 @@ class PredictionLogger(keras.callbacks.Callback):
         self._max_epochs = max_epochs
         self._label_mapping = label_mapping
         self._result = {
-            'classes': list(self._label_mapping.items()),
+            'classes': [
+                [(list(k) if isinstance(k, tuple) else k), v]
+                for k, v in self._label_mapping.items()
+            ],
             'loss': collections.defaultdict(list),
             'predictions': collections.defaultdict(list),
             'truth': {

@@ -7,6 +7,8 @@ import json
 import os
 import pathlib
 import shutil
+import typing
+
 import zipfile
 
 import issue_db_api
@@ -15,6 +17,20 @@ from .config import Config
 
 MODEL_DIR = 'model'
 MODEL_FILE = 'pretrained_model.zip'
+
+##############################################################################
+##############################################################################
+# JSON support for queries
+##############################################################################
+
+
+class QueryJSONEncoder(json.JSONEncoder):
+
+    def default(self, o: typing.Any) -> typing.Any:
+        if isinstance(o, issue_db_api.Query):
+            return o.to_json()
+        return super().default(o)
+
 
 ##############################################################################
 ##############################################################################
@@ -61,13 +77,13 @@ def save_single_model(model, conf: Config):
     _prepare_directory(directory)
     _store_model(directory, 0, model)
     metadata = {
-        'model_type': 'single',
-        'model_path': '0',
-        'feature_generators': _get_and_copy_feature_generators(directory, conf),
-        'auxiliary_files': _get_and_copy_auxiliary_files(directory, conf)
+        'model-type': 'single',
+        'model-path': '0',
+        'feature-generators': _get_and_copy_feature_generators(directory, conf),
+        'auxiliary-files': _get_and_copy_auxiliary_files(directory, conf)
     } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
-        json.dump(metadata, file, indent=4)
+        json.dump(metadata, file, indent=4, cls=QueryJSONEncoder)
     _upload_zip_data(directory, conf)
 
 
@@ -81,17 +97,17 @@ def save_stacking_model(meta_model,
     for nr, model in enumerate(child_models, start=1):
         _store_model(directory, nr, model)
     metadata = {
-        'model_type': 'stacking',
-        'meta_model': '0',
-        'feature_generators': _get_and_copy_feature_generators(directory, conf),
-        'input_conversion_strategy': conversion_strategy,
-        'child_models': [
+        'model-type': 'stacking',
+        'meta-model': '0',
+        'feature-generators': _get_and_copy_feature_generators(directory, conf),
+        'input-conversion_strategy': conversion_strategy,
+        'child-models': [
             str(i) for i in range(1, len(child_models) + 1)
         ],
-        'auxiliary_files': _get_and_copy_auxiliary_files(directory, conf)
+        'auxiliary-files': _get_and_copy_auxiliary_files(directory, conf)
     } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
-        json.dump(metadata, file, indent=4)
+        json.dump(metadata, file, indent=4, cls=QueryJSONEncoder)
     _upload_zip_data(directory, conf)
 
 
@@ -101,13 +117,13 @@ def save_voting_model(*models, conf: Config):
     for nr, model in enumerate(models):
         _store_model(directory, nr, model)
     metadata = {
-        'model_type': 'voting',
-        'child_models': [str(x) for x in range(len(models))],
-        'feature_generators': _get_and_copy_feature_generators(directory, conf),
-        'auxiliary_files': _get_and_copy_auxiliary_files(directory, conf)
+        'model-type': 'voting',
+        'child-models': [str(x) for x in range(len(models))],
+        'feature-generators': _get_and_copy_feature_generators(directory, conf),
+        'auxiliary-files': _get_and_copy_auxiliary_files(directory, conf)
     } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
-        json.dump(metadata, file, indent=4)
+        json.dump(metadata, file, indent=4, cls=QueryJSONEncoder)
     _upload_zip_data(directory, conf)
 
 
@@ -124,7 +140,7 @@ def _store_model(directory, number, model):
 
 def _get_cli_settings(conf: Config):
     return {
-        'model_settings': {
+        'model-settings': {
             key: _convert_value(value)
             for key, value in conf.get_all('run').items()
         },
