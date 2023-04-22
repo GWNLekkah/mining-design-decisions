@@ -3,7 +3,8 @@ import collections
 
 from ..logger import timer
 
-from .generator import AbstractFeatureGenerator, ParameterSpec, FeatureEncoding
+from ..config import Argument, IntArgument
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -68,10 +69,11 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
         return FeatureEncoding.Numerical
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'min-doc-count': ParameterSpec(
+            'min-doc-count': IntArgument(
+                name='min-doc-count',
                 description='Minimum number of document occurrences for a word to be included',
-                type='int'
+                minimum=0
             )
-        } | super(AbstractBOW, AbstractBOW).get_parameters()
+        } | super(AbstractBOW, AbstractBOW).get_arguments()

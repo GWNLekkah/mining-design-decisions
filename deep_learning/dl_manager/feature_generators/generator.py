@@ -12,13 +12,13 @@ import hashlib
 import itertools
 import json
 import random
-import typing
 import string
 
 import nltk
 
 import issue_db_api
 
+from ..config import Argument, BoolArgument, IntArgument, StringArgument, EnumArgument, ArgumentConsumer
 from .util.text_cleaner import FormattingHandling, clean_issue_text
 from .. import accelerator
 from ..model_io import InputEncoding, classification8_lookup
@@ -127,18 +127,13 @@ class _NullDict(dict):
         return key
 
 
-class ParameterSpec(typing.NamedTuple):
-    description: str
-    type: str
-
-
 ##############################################################################
 ##############################################################################
 # Main Class
 ##############################################################################
 
 
-class AbstractFeatureGenerator(abc.ABC):
+class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
 
     def __init__(self, conf: Config, /, *,
                  pretrained_generator_settings: dict | None = None,
@@ -155,7 +150,7 @@ class AbstractFeatureGenerator(abc.ABC):
                 )
             # Populate params for default pre-processing,
             # which does not require any trained settings.
-            for name in AbstractFeatureGenerator.get_parameters():
+            for name in AbstractFeatureGenerator.get_arguments():
                 if name in self.__pretrained:
                     self.__params[name] = self.__pretrained[name]
             if 'ontology-classes' in self.__pretrained:
@@ -192,7 +187,7 @@ class AbstractFeatureGenerator(abc.ABC):
         filename = f'{self.__class__.__name__}__{settings}'
         prefix = self.conf.get('system.storage.file-prefix')
         filename = f'{prefix}_{hashlib.sha512(filename.encode()).hexdigest()}.json'
-        for name in AbstractFeatureGenerator.get_parameters():
+        for name in AbstractFeatureGenerator.get_arguments():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
         ontologies = self.conf.get('run.ontology-classes')
@@ -233,36 +228,56 @@ class AbstractFeatureGenerator(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'max-len': ParameterSpec(
-                description='words limit of the issue text',
-                type='int'
+            'max-len': IntArgument(
+                name='max-len',
+                description='words limit of the issue text. Set to -1 to disable.',
+                minimum=-1,
+                default=-1
             ),
-            'disable-lowercase': ParameterSpec(
+            'disable-lowercase': BoolArgument(
+                name='disable-lowercase',
                 description='transform words to lowercase',
-                type='bool'
+                default=False
             ),
-            'disable-stopwords': ParameterSpec(
+            'disable-stopwords': BoolArgument(
+                name='disable-stopwords',
                 description='remove stopwords from text',
-                type='bool'
+                default=False
             ),
-            'use-stemming': ParameterSpec(
+            'use-stemming': BoolArgument(
+                name='use-stemming',
                 description='stem the words in the text',
-                type='bool'
+                default=False
             ),
-            'use-lemmatization': ParameterSpec(
+            'use-lemmatization': BoolArgument(
+                name='use-lemmatization',
                 description='Use lemmatization on words in the text',
-                type='bool'
+                default=False
             ),
-            'use-pos': ParameterSpec(
-                'Enhance words in the text with part of speech information',
-                type='bool'
+            'use-pos': BoolArgument(
+                name='use-pos',
+                description='Enhance words in the text with part of speech information',
+                default=False,
             ),
-            'class-limit': ParameterSpec(
-                description='limit the amount of items per class',
-                type='int'
+            'class-limit': IntArgument(
+                name='class-limit',
+                description='limit the amount of items per class. Set to -1 to disable',
+                default=-1,
+                minimum=-1
             ),
+            'metadata-attributes': StringArgument(
+                name='metadata-attributes',
+                description='Comma-separated list of metadata attributes to fetch for use in feature generation',
+                default=''
+            ),
+            'formatting-handling': EnumArgument(
+                name='formatting-handling',
+                description='How to handle formatting',
+                options=['markers', 'remove', 'keep'],
+                default='markers'
+            )
         }
 
     def load_data_from_db(self, query: issue_db_api.Query, metadata_attributes):
@@ -275,7 +290,8 @@ class AbstractFeatureGenerator(abc.ABC):
             'classification3': [],
             'classification3simplified': [],
             'classification8': [],
-            'issue_keys': [],
+            'issue_keys': [issue.key for issue in issues],
+            'issue_ids': [issue.identifier for issue in issues]
         }
         classification_indices = {
             'Existence': [],
@@ -345,7 +361,7 @@ class AbstractFeatureGenerator(abc.ABC):
         and store the results in the given target file.
         """
         metadata_attributes = [
-            attr for attr in self.__params.get('metadata-attributes', '').split(',') if attr
+            attr for attr in self.__params['metadata-attributes'].split(',') if attr
         ]
         for attr in metadata_attributes:
             if attr not in ATTRIBUTE_CONSTANTS:
@@ -355,7 +371,7 @@ class AbstractFeatureGenerator(abc.ABC):
             query, metadata_attributes
         )
 
-        limit = int(self.params.get('class-limit', -1))
+        limit = self.params['class-limit']
         if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
             random.seed(42)
             stratified_indices = []
@@ -408,20 +424,20 @@ class AbstractFeatureGenerator(abc.ABC):
         log.info('Preprocessing Features')
         with timer('Feature Preprocessing'):
             ontology_path = self.conf.get('run.ontology-classes')
-            if ontology_path != '':
+            if ontology_path is not None:
                 ontology_table = ontology.load_ontology(ontology_path)
             else:
                 ontology_table = None
 
             stopwords = nltk.corpus.stopwords.words('english')
-            use_stemming = self.__params.get('use-stemming', 'False') == 'True'
-            use_lemmatization = self.__params.get('use-lemmatization', 'False') == 'True'
-            use_pos = self.__params.get('use-pos', 'False') == 'True'
+            use_stemming = self.__params['use-stemming']
+            use_lemmatization = self.__params['use-lemmatization']
+            use_pos = self.__params['use-pos']
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
-            use_lowercase = self.__params.get('disable-lowercase', 'False') == 'False'
+            use_lowercase = self.__params['disable-lowercase']
             use_ontologies = self.conf.get('run.apply-ontology-classes')
-            handling_string = self.__params.get('formatting-handling', 'markers')
+            handling_string = self.__params['formatting-handling']
             handling = FormattingHandling.from_string(handling_string)
             weights, tagdict, classes = nltk.load(
                 'taggers/averaged_perceptron_tagger/averaged_perceptron_tagger.pickle'
@@ -459,7 +475,7 @@ class AbstractFeatureGenerator(abc.ABC):
                         words = ontology.apply_ontologies_to_sentence(words, ontology_table)
 
                     # Remove stopwords
-                    if self.__params.get('disable-stopwords', 'False') != 'True':
+                    if self.__params['disable-stopwords']:
                         words = [(word, tag) for word, tag in words if word not in stopwords]
 
                     if use_stemming and use_lemmatization:
@@ -481,9 +497,9 @@ class AbstractFeatureGenerator(abc.ABC):
                     all_words.extend(words)
 
                 # Limit issue length
-                if 'max-len' in self.__params:
-                    if len(all_words) > int(self.__params['max-len']):
-                        all_words = all_words[0:int(self.__params['max-len'])]
+                if (m := self.__params['max-len']) > 0:
+                    if len(all_words) > m:
+                        all_words = all_words[0:m]
 
                 tokenized_issues.append(all_words)
 

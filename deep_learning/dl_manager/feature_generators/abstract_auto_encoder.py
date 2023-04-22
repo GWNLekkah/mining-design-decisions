@@ -9,7 +9,7 @@ import issue_db_api
 import keras.models
 from .. import db_util
 from .generator import AbstractFeatureGenerator, FeatureEncoding
-from .generator import ParameterSpec
+from ..config import Argument, EnumArgument, IntArgument, QueryArgument
 from ..model_io import InputEncoding
 from .bow_frequency import BOWFrequency
 from .bow_normalized import BOWNormalized
@@ -81,7 +81,7 @@ class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
                 shutil.rmtree(encoder_dir)
             os.makedirs(encoder_dir, exist_ok=True)
             encoder.save(encoder_dir)
-            feature_size = int(self.params['target-feature-size'])
+            feature_size = self.params['target-feature-size']
             self.save_pretrained(
                 {
                     'wrapped-generator': wrapped_generator,
@@ -156,18 +156,21 @@ class AbstractAutoEncoder(AbstractFeatureGenerator, abc.ABC):
         return FeatureEncoding.Numerical
 
     @classmethod
-    def get_parameters(cls) -> dict[str, ParameterSpec]:
-        return super(AbstractAutoEncoder, AbstractAutoEncoder).get_parameters() | {
-            'training-data-query': ParameterSpec(
-                description='Query to retrieve data used to train the auto-encoder',
-                type='str'
+    def get_arguments(cls) -> dict[str, Argument]:
+        return super(AbstractAutoEncoder, AbstractAutoEncoder).get_arguments() | {
+            'training-data-query': QueryArgument(
+                name='training-data-query',
+                description='Query to retrieve data used to train the auto-encoder'
             ),
-            'bow-min-count': ParameterSpec(
+            'bow-min-count': IntArgument(
+                name='bow-min-count',
                 description='Minimum document count for bag of words',
-                type='int'
+                minimum=0,
+                default=0
             ),
-            'inner-generator': ParameterSpec(
+            'inner-generator': EnumArgument(
+                name='inner-generator',
                 description='Feature generator to transform issues to text',
-                type='str'
+                options=['BOWFrequency', 'BOWNormalized', 'TfidfGenerator']
             ),
         }

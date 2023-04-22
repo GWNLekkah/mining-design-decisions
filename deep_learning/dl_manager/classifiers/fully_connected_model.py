@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..config import Argument, IntArgument, EnumArgument
+from .model import AbstractModel
 from ..model_io import InputEncoding
 
 
@@ -15,17 +16,17 @@ class FullyConnectedModel(AbstractModel):
             embedding=embedding,
             embedding_size=embedding_size,
             embedding_output_size=embedding_output_size,
-            trainable_embedding=kwargs.get('use-trainable-embedding', False)
+            trainable_embedding=kwargs['use-trainable-embedding']
         )
         if self.input_encoding == InputEncoding.Embedding:
             current = tf.keras.layers.Flatten()(next_layer)
         else:
             current = next_layer
-        n_layers = int(kwargs.get('number-of-hidden-layers', 1))
+        n_layers = kwargs['number-of-hidden-layers', 1]
         for i in range(1, n_layers + 1):
-            layer_size = int(kwargs.get(f'hidden-layer-{i}-size', 64))
+            layer_size = kwargs[f'hidden-layer-{i}-size']
             current = tf.keras.layers.Dense(layer_size)(current)
-            if (act := kwargs.get(f'layer-{i}-activation', 'linear')) != 'linear':
+            if (act := kwargs[f'layer-{i}-activation']) != 'linear':
                 current = self.get_activation(act)(current)
         outputs = self.get_output_layer()(current)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
@@ -42,21 +43,29 @@ class FullyConnectedModel(AbstractModel):
         return False
 
     @classmethod
-    @_fix_hyper_params
-    def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
+    def get_arguments(cls) -> dict[str, Argument]:
         max_layers = 11
-        num_layers_param = HyperParameter(default=1, minimum=0, maximum=max_layers)
+        num_layers_param = IntArgument(default=1, minimum=0, maximum=max_layers,
+                                       name='number-of-hidden-layer',
+                                       description='number of hidden layers in the model.')
         layer_sizes = {
-            f'hidden_layer_{i}_size': HyperParameter(minimum=2, default=32, maximum=16384)
+            f'hidden-layer-{i}-size': IntArgument(minimum=2, default=32, maximum=16384,
+                                                  name=f'hidden-layer-{i}-size',
+                                                  description='Number of units in the i-th hidden layer.')
             for i in range(1, max_layers + 1)
         }
-        return {
-            'number_of_hidden_layers': num_layers_param,
-            'layer-{i}-activation': HyperParameter(
-                minimum=None, maximum=None, default='linear',
+        activations = {
+            f'layer-{i}-activation': EnumArgument(
+                default='linear',
                 options=[
                     'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
                     'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
-                ]
+                ],
+                name=f'layer-{i}-activation',
+                description='Activation to use in the i-th hidden layer'
             )
-        } | layer_sizes | super().get_hyper_parameters()
+            for i in range(1, max_layers + 1)
+        }
+        return {
+            'number-of-hidden-layers': num_layers_param,
+        } | layer_sizes | activations | super().get_arguments()

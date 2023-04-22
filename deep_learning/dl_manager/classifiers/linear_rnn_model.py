@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..config import IntArgument, EnumArgument, Argument
+from .model import AbstractModel
 from ..model_io import InputEncoding
 
 
@@ -15,15 +16,15 @@ class LinearRNNModel(AbstractModel):
             embedding=embedding,
             embedding_size=embedding_size,
             embedding_output_size=embedding_output_size,
-            trainable_embedding=(kwargs.get('use-trainable-embedding', 'False') == 'True')
+            trainable_embedding=kwargs['use-trainable-embedding']
         )
-        bilayer_size = int(kwargs.get('bidirectional-layer-size', 64))
+        bilayer_size = kwargs['bidirectional-layer-size']
         current = tf.keras.layers.Bidirectional(
             tf.keras.layers.LSTM(bilayer_size)
         )(next_layer)
-        n_layers = int(kwargs.get('number-of-hidden-layers', 1))
+        n_layers = kwargs['number-of-hidden-layers']
         for i in range(1, n_layers + 1):
-            layer_size = int(kwargs.get(f'hidden-layer-{i}-size', 64))
+            layer_size = kwargs[f'hidden-layer-{i}-size']
             current = tf.keras.layers.Dense(layer_size)(current)
         outputs = self.get_output_layer()(current)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
@@ -40,17 +41,24 @@ class LinearRNNModel(AbstractModel):
         return False
 
     @classmethod
-    @_fix_hyper_params
-    def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
+    def get_arguments(cls) -> dict[str, Argument]:
         max_layers = 5
-        num_layers_param = HyperParameter(default=1, minimum=0, maximum=max_layers)
+        num_layers_param = IntArgument(default=1, minimum=0, maximum=max_layers,
+                                       name='number-of-hidden-layers',
+                                       description='Number of hidden layers in the network.')
         layer_sizes = {
-            f'hidden_layer_{i}_size': HyperParameter(minimum=2, default=32, maximum=16384)
+            f'hidden-layer-{i}-size': IntArgument(minimum=2,
+                                                  default=32,
+                                                  maximum=16384,
+                                                  name=f'hidden-layer-{i}-size',
+                                                  description='Number of units in the i-th hidden layer.')
             for i in range(1, max_layers + 1)
         }
         return {
-            'bidirectional_layer_size': HyperParameter(
-                default=64, minimum=1, maximum=128
+            'bidirectional-layer-size': IntArgument(
+                default=64, minimum=1, maximum=128,
+                name='bidirectional-layer-size',
+                description='Size of the bidirectional layer.'
             ),
-            'number_of_hidden_layers': num_layers_param
-        } | layer_sizes | super().get_hyper_parameters()
+            'number-of-hidden-layers': num_layers_param
+        } | layer_sizes | super().get_arguments()

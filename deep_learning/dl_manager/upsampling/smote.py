@@ -1,6 +1,7 @@
 import imblearn
 
-from .base import AbstractUpSampler, UpsamplerHyperParam
+from ..config import EnumArgument
+from .base import AbstractUpSampler
 from ..feature_generators import generators, FeatureEncoding
 from ..data_utilities import Features2Vector
 
@@ -33,7 +34,7 @@ class SmoteUpSampler(AbstractUpSampler):
 
     def upsample(self, indices, targets, labels, keys, *features):
         self._check_feature_encoding()
-        smote = self._get_smote(self.hyper_params.get('smote', 'default'))
+        smote = self._get_smote(self.hyper_params['smote'])
         transformer = Features2Vector(self.conf.get('run.input-mode'), features)
         transformed = transformer.forward_transform(features)
         sampler = imblearn.combine.SMOTETomek(targets, smote=smote)
@@ -45,12 +46,12 @@ class SmoteUpSampler(AbstractUpSampler):
         raise NotImplementedError('upsample_class not used for smote upsampling')
 
     @staticmethod
-    def get_hyper_params():
+    def get_arguments():
         return {
-            'smote': UpsamplerHyperParam(
+            'smote': EnumArgument(
+                name='smote',
                 description='Variant of the SMOTE algorithm to use',
-                allowed_values=['default', 'kmeans', 'svm', 'borderline', 'adasyn'],
+                options=['default', 'kmeans', 'svm', 'borderline', 'adasyn'],
                 default='default',
-                data_type='str'
             )
         }

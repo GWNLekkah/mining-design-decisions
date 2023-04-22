@@ -1,15 +1,13 @@
 import abc
-import dataclasses
 import itertools
 import pathlib
-import typing
 
 import nltk
 
 import issue_db_api
 
 from .. import accelerator
-from ..config import Config
+from ..config import Config, BoolArgument, Argument, ArgumentConsumer
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
 from ..logger import get_logger
@@ -18,15 +16,6 @@ log = get_logger('Embedding Generator')
 
 
 TEMP_EMBEDDING_PATH = pathlib.Path('embedding_binary.bin')
-
-
-@dataclasses.dataclass
-class EmbeddingGeneratorParam:
-    description: str
-    data_type: str
-    minimum: int | None = None
-    maximum: int | None = None
-    options: typing.Any | None = None
 
 
 POS_CONVERSION = {
@@ -50,7 +39,7 @@ POS_CONVERSION = {
 }
 
 
-class AbstractEmbeddingGenerator(abc.ABC):
+class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
 
     def __init__(self, **params):
         self.params = params
@@ -70,9 +59,9 @@ class AbstractEmbeddingGenerator(abc.ABC):
         # Setting up NLP stuff
         handling = FormattingHandling.from_string(formatting_handling)
         stopwords = nltk.corpus.stopwords.words('english')
-        use_lemmatization = self.params.get('use-lemmatization', 'False') == 'True'
-        use_stemming = self.params.get('use-stemming', 'False') == 'True'
-        use_pos = self.params.get('use-pos', 'False') == 'True'
+        use_lemmatization = self.params['use-lemmatization']
+        use_stemming = self.params['use-stemming']
+        use_pos = self.params['use-pos']
         if use_stemming and use_lemmatization:
             raise ValueError('Cannot use both stemming and lemmatization')
         if not (use_stemming or use_lemmatization):
@@ -143,18 +132,21 @@ class AbstractEmbeddingGenerator(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def get_params() -> dict[str, EmbeddingGeneratorParam]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'use-stemming': EmbeddingGeneratorParam(
+            'use-stemming': BoolArgument(
+                name='use-stemming',
                 description='stem the words in the text',
-                data_type='bool'
+                default=False
             ),
-            'use-lemmatization': EmbeddingGeneratorParam(
+            'use-lemmatization': BoolArgument(
+                name='use-lemmatization',
                 description='Use lemmatization on words in the text',
-                data_type='bool'
+                default=True
             ),
-            'use-pos': EmbeddingGeneratorParam(
-                'Enhance words in the text with part of speech information',
-                data_type='bool'
+            'use-pos': BoolArgument(
+                name='use-pos',
+                description='Enhance words in the text with part of speech information',
+                default=False,
             )
         }

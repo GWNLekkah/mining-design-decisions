@@ -76,17 +76,23 @@
         {
           "name": "params",
           "help": "Generator params. Items in the name=value format.",
-          "nargs": "+",
+          "nargs": "1",
           "type": "arglist",
           "required": true,
-          "options": []
+          "options": [
+            {
+              "map-path": "dl_manager.feature_generators.generators",
+              "multi-valued": true
+            }
+          ]
         },
         {
           "name": "ontology-classes",
           "help": "Path to a file containing ontology classes.",
           "nargs": "1",
           "type": "str",
-          "default": "",
+          "default": null,
+          "null-if": {"name": "apply-ontology-classes", "value": false},
           "required": false,
           "options": []
         },
@@ -117,7 +123,7 @@
         },
         {
           "name": "split-size",
-          "help": "Size of testing and validation splits.",
+          "help": "Size of testing and validation splits. Ignored when k-cross > 0",
           "type": "float",
           "default": "0.2",
           "nargs": "1",
@@ -129,7 +135,7 @@
           "help": "Maximum amount of training items. -1 for infinite",
           "nargs": "1",
           "type": "int",
-          "default": "-1",
+          "default": -1,
           "required": false,
           "options": []
         },
@@ -181,25 +187,35 @@
         {
           "name": "hyper-params",
           "help": "Hyper-parameters params. Items in the name=value format.",
-          "nargs": "+",
+          "nargs": "1",
           "type": "arglist",
           "required": true,
-          "options": []
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.models",
+              "multi-valued": true
+            }
+          ]
         },
         {
           "name": "class-balancer",
           "help": "Enable Class-Balancing",
           "nargs": "1",
-          "type": "str",
-          "default": "None",
+          "type": "enum",
+          "default": "none",
           "required": false,
-          "options": []
+          "options": [
+            "smote",
+            "random",
+            "synonyms",
+            "none"
+          ]
         },
         {
           "name": "batch-size",
           "help": "Specify the batch size used during training",
           "type": "int",
-          "default": "32",
+          "default": 32,
           "nargs": "1",
           "required": false,
           "options": []
@@ -217,8 +233,9 @@
           "name": "combination-strategy",
           "help": "Strategy used to combine models. Use `combination-strategies` for more information.",
           "nargs": "1",
-          "default": "concat",
+          "default": null,
           "type": "enum",
+          "null-unless": {"name": "ensemble-strategy", "value": "combination"},
           "options": [
             "add",
             "subtract",
@@ -238,8 +255,8 @@
           "type": "enum",
           "options": [
             "stacking",
-            "boosting",
-            "voting"
+            "voting",
+            "none"
           ],
           "required": false
         },
@@ -248,16 +265,24 @@
           "help": "Classifier to use as meta-classifier in stacking.",
           "nargs": "1",
           "type": "str",
-          "required": true,
+          "required": false,
+          "null-unless": {"name": "ensemble-strategy", "value": "stacking"},
+          "default": null,
           "options": []
         },
         {
           "name": "stacking-meta-classifier-hyper-parameters",
           "help": "Hyper-parameters for the meta-classifier",
           "type": "arglist",
-          "nargs": "+",
-          "required": true,
-          "options": []
+          "nargs": "1",
+          "null-unless": {"name": "ensemble-strategy", "value": "stacking"},
+          "default": null,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.models",
+              "multi-valued": false
+            }
+          ]
         },
         {
           "name": "stacking-use-concat",
@@ -274,15 +299,6 @@
           "nargs": "1",
           "type": "bool",
           "default": false,
-          "required": false,
-          "options": []
-        },
-        {
-          "name": "boosting-rounds",
-          "help": "Amount of rounds in the boosting process",
-          "nargs": "1",
-          "default": "10",
-          "type": "int",
           "required": false,
           "options": []
         },
@@ -344,7 +360,8 @@
           "name": "model-id",
           "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
           "type": "str",
-          "default": "",
+          "default": null,
+          "null-unless": {"name": "store-model", "value": true},
           "nargs": "1",
           "required": false,
           "options": []
@@ -361,7 +378,7 @@
         {
           "name": "training-data-query",
           "help": "Query to obtain data from the database for training",
-          "type": "str",
+          "type": "query",
           "required": true,
           "nargs": "1",
           "options": []
@@ -369,9 +386,11 @@
         {
           "name": "test-data-query",
           "help": "Query to obtain data from the database for performance evaluation",
-          "type": "str",
-          "required": true,
+          "type": "query",
+          "required": false,
           "nargs": "1",
+          "default": null,
+          "null-if": {"name": "test-with-training-data", "value": true},
           "options": []
         },
         {
@@ -457,7 +476,7 @@
           "name": "data-query",
           "help": "Query used to retrieve issues to predict",
           "required": true,
-          "type": "str",
+          "type": "query",
           "nargs": "1",
           "options": []
         },

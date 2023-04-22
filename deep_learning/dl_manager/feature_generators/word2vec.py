@@ -4,10 +4,11 @@ import os
 from gensim import models
 import issue_db_api
 
+from ..config import Argument, IntArgument, StringArgument
+
 from .generator import FeatureEncoding
 
-from ..feature_generators import AbstractFeatureGenerator, ParameterSpec
-
+from ..feature_generators import AbstractFeatureGenerator
 
 class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
     def generate_vectors(self,
@@ -16,7 +17,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
                          args: dict[str, str]):
         # Train or load a model
         if self.pretrained is None:
-            db: issue_db_api.IssueRepository = self.conf.get('system.storage.database.api')
+            db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
             embedding = db.get_embedding_by_id(self.params['embedding-id'])
             filename = self.params['embedding-id'] + '.bin'
             if os.path.exists(filename):
@@ -44,14 +45,15 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
         return FeatureEncoding.Numerical
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'vector-length': ParameterSpec(
+            'vector-length': IntArgument(
+                name='vector-length',
+                minimum=1,
                 description='specify the length of the output vector',
-                type='int'
             ),
-           'embedding-id': ParameterSpec(
+           'embedding-id': StringArgument(
+               name='embedding-id',
                description='ID of the word embedding to use',
-               type='str',
            )
-        } | super(AbstractWord2Vec, AbstractWord2Vec).get_parameters()
+        } | super(AbstractWord2Vec, AbstractWord2Vec).get_arguments()

@@ -1,4 +1,4 @@
-from . import ParameterSpec
+from ..config import Argument, IntArgument
 from .abstract_auto_encoder import AbstractAutoEncoder
 from ..model_io import InputEncoding
 from .. import data_splitting
@@ -21,7 +21,7 @@ class KateAutoEncoder(AbstractAutoEncoder):
         # Prepare Training data
         log.info('Building Features')
         training_keys, training_data = self.prepare_features(
-            generator_name=self.params.get('inner-generator', 'BOWNormalized')
+            generator_name=self.params['inner-generator']
         )
         shape = training_data['feature_shape']
         features = training_data['features']
@@ -45,10 +45,10 @@ class KateAutoEncoder(AbstractAutoEncoder):
         # The model code is based on
         # https://github.com/hugochan/KATE/blob/master/autoencoder/core/ae.py
         tied_layer = tf.keras.layers.Dense(
-            int(self.params.get('hidden-layer-size')), activation='tanh', kernel_initializer='glorot_normal'
+            self.params['hidden-layer-size'], activation='tanh', kernel_initializer='glorot_normal'
         )
         hidden = tied_layer(inp)
-        encoded = KCompetitive(int(self.params.get('k-competitive')), 'kcomp', name='encoder_layer')(hidden)
+        encoded = KCompetitive(self.params['k-competitive'], 'kcomp', name='encoder_layer')(hidden)
         decoded = Dense_tied(shape, activation='sigmoid', tied_to=tied_layer)(encoded)
         model = tf.keras.Model(inputs=[inp], outputs=decoded)
         #encoder_model = tf.keras.Model(inputs=[inp], outputs=encoded)
@@ -108,19 +108,21 @@ class KateAutoEncoder(AbstractAutoEncoder):
         return encoder
 
     @classmethod
-    def get_parameters(cls) -> dict[str, ParameterSpec]:
-        return super(KateAutoEncoder, KateAutoEncoder).get_parameters() | cls.get_extra_params()
+    def get_arguments(cls) -> dict[str, Argument]:
+        return super(KateAutoEncoder, KateAutoEncoder).get_arguments() | cls.get_extra_params()
 
     @staticmethod
     def get_extra_params():
         return {
-            'hidden-layer-size': ParameterSpec(
+            'hidden-layer-size': IntArgument(
+                name='hidden-layer-size',
                 description='Size of the hidden layer',
-                type='int'
+                minimum=2
             ),
-            'k-competitive': ParameterSpec(
+            'k-competitive': IntArgument(
+                name='k-competitive',
                 description='Size of the K-Competitive layer',
-                type='int'
+                minimum=2
             ),
             # 'loss': ParameterSpec(
             #     description='Loss to use for training the encoder. Either "contractive" or "crossentropy"',

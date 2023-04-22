@@ -7,7 +7,8 @@ import issue_db_api
 import numpy
 from gensim import models
 
-from .base import AbstractUpSampler, UpsamplerHyperParam
+from ..config import StringArgument, IntArgument
+from .base import AbstractUpSampler
 from ..feature_generators import generators, FeatureEncoding
 from .. import data_manager_bootstrap
 
@@ -70,11 +71,11 @@ class SynonymUpSampler(AbstractUpSampler):
                 case _ as x:
                     raise ValueError(f'Unsupported feature generator: {x}')
         synonym_wv = models.KeyedVectors.load_word2vec_format(embedding_id + '.bin', binary=True)
-        min_replace = int(self.hyper_params.get('min-replace', '10'))
-        max_replace = int(self.hyper_params.get('max-replace', '20'))
+        min_replace = self.hyper_params['min-replace']
+        max_replace = self.hyper_params['max-replace']
         if min_replace > max_replace:
             raise ValueError('min-replace must be <= max-replace')
-        n_synonyms = int(self.hyper_params.get('n-synonyms', '5'))
+        n_synonyms = self.hyper_params['n-synonyms']
         failures = 0
         new_features = []
         for i in random.choices(indices, k=target - len(indices)):
@@ -135,26 +136,28 @@ class SynonymUpSampler(AbstractUpSampler):
                     raise ValueError(f'Unhandled generator: {g}')
 
     @staticmethod
-    def get_hyper_params():
-        return super().get_hyper_params() | {
-            'word-embedding': UpsamplerHyperParam(
+    def get_arguments():
+        return super().get_arguments() | {
+            'word-embedding': StringArgument(
+                name='word-embedding',
                 description='Path to the word embedding file to use to determine synonyms',
-                data_type='str',
-                default=''
             ),
-            'min-replace': UpsamplerHyperParam(
+            'min-replace': IntArgument(
+                name='min-replace',
                 description='Minimum amount of words to replace per issue',
-                data_type='int',
+                minimum=1,
                 default=10
             ),
-            'max-replace': UpsamplerHyperParam(
+            'max-replace': IntArgument(
+                name='max-replace',
                 description='Maximum amount of words to replace per issue',
-                data_type='int',
+                minimum=1,
                 default=20
             ),
-            'n-synonyms': UpsamplerHyperParam(
+            'n-synonyms': IntArgument(
+                name='n-synonyms',
                 description='Amount of synonyms to consider per replacement',
-                data_type='int',
+                minimum=1,
                 default=5
             )
         }

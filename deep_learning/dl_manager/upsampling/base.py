@@ -1,24 +1,12 @@
 import abc
-import dataclasses
-import typing
 
 import numpy
 
 from ..model_io import OutputMode
-from ..config import Config
+from ..config import Config, Argument, ArgumentConsumer
 
 
-@dataclasses.dataclass
-class UpsamplerHyperParam:
-    description: str
-    data_type: str
-    default: typing.Any
-    allowed_values: list | None = None
-    minimum: int | None = None
-    maximum: int | None = None
-
-
-class AbstractUpSampler(abc.ABC):
+class AbstractUpSampler(abc.ABC, ArgumentConsumer):
 
     def __init__(self, conf: Config, /, **hyper_params):
         self.hyper_params = hyper_params
@@ -80,5 +68,5 @@ class AbstractUpSampler(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def get_hyper_params():
+    def get_arguments() -> dict[str, Argument]:
         return {}

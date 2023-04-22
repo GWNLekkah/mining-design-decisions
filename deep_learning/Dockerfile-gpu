@@ -53,4 +53,4 @@ RUN python3.10 setup.py build_ext --inplace --verbose
 COPY ./dl_manager /app/dl_manager
 
 # Setup start-up command
-CMD ["python3.10", "-m", "dl_manager", "serve", "--keyfile", "server.key", "--certfile", "server.crt"]
+CMD ["python3.10", "-m", "dl_manager",  "--keyfile", "server.key", "--certfile", "server.crt"]

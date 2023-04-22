@@ -1,6 +1,6 @@
 import collections
 
-from . import ParameterSpec
+from ..config import Argument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
@@ -93,5 +93,5 @@ class OntologyFeatures(AbstractFeatureGenerator):
         return FeatureEncoding.Numerical
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
-        return super(OntologyFeatures, OntologyFeatures).get_parameters()
+    def get_arguments() -> dict[str, Argument]:
+        return super(OntologyFeatures, OntologyFeatures).get_arguments()

@@ -1,4 +1,5 @@
-from .generator import AbstractFeatureGenerator, ParameterSpec
+from ..config import Argument
+from .generator import AbstractFeatureGenerator
 from ..model_io import InputEncoding
 
 
@@ -41,5 +42,5 @@ class Metadata(AbstractFeatureGenerator):
         }
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
-        return {} | super(Metadata, Metadata).get_parameters()
+    def get_arguments() -> dict[str, Argument]:
+        return {} | super(Metadata, Metadata).get_arguments()

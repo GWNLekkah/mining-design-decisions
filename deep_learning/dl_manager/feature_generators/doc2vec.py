@@ -4,7 +4,8 @@ import issue_db_api
 from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
 
-from .generator import AbstractFeatureGenerator, ParameterSpec, FeatureEncoding
+from ..config import Argument, IntArgument, StringArgument
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -36,17 +37,17 @@ class Doc2Vec(AbstractFeatureGenerator):
                 os.remove(filename)
             embedding.download_binary(filename)
 
-            model = GensimDoc2Vec.load(args['pretrained-file'])
+            model = GensimDoc2Vec.load(filename)
 
             shape = int(args['vector-length'])
 
             self.save_pretrained(
                 {
-                    'pretrained-file': args['pretrained-file'],
+                    'pretrained-file': filename,
                     'vector-length': shape
                 },
                 [
-                    args['pretrained-file']
+                    filename
                 ]
             )
         else:
@@ -73,14 +74,15 @@ class Doc2Vec(AbstractFeatureGenerator):
         return FeatureEncoding.Numerical
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'vector-length': ParameterSpec(
+            'vector-length': IntArgument(
                 description='specify the length of the output vector',
-                type='int'
+                name='vector-length',
+                minimum=1
             ),
-            'embedding-id': ParameterSpec(
+            'embedding-id': StringArgument(
+                name='embedding-id',
                 description='ID of the embedding to use',
-                type='str'
             )
-        } | super(Doc2Vec, Doc2Vec).get_parameters()
+        } | super(Doc2Vec, Doc2Vec).get_arguments()

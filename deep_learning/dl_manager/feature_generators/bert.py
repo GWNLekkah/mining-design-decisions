@@ -1,6 +1,7 @@
 from .generator import FeatureEncoding
 from ..model_io import InputEncoding
-from .word2vec import AbstractFeatureGenerator, ParameterSpec
+from ..config import Argument
+from .word2vec import AbstractFeatureGenerator
 from transformers import AutoTokenizer
 
 
@@ -39,5 +40,5 @@ class Bert(AbstractFeatureGenerator):
         return FeatureEncoding.Bert
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
-        return super(Bert, Bert).get_parameters()
+    def get_arguments() -> dict[str, Argument]:
+        return super(Bert, Bert).get_arguments()

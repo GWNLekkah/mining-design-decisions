@@ -15,12 +15,19 @@ from __future__ import annotations
 # Imports
 ##############################################################################
 
+import abc
+import collections
+import graphlib
 import importlib
 import json
+import math
+import typing
 
 import fastapi
+import issue_db_api
 import uvicorn
 
+from . import db_util
 from . import logger
 log = logger.get_logger('App Builder')
 
@@ -182,7 +189,7 @@ class WebApp:
         self._callbacks = {}
         self._setup_callbacks = []
         self._constraints = []
-        self._endpoints = []
+        self._endpoints = {}
         self._config_factory = ConfigFactory()
         self._register_system_properties()
         with open(filename) as file:
@@ -250,6 +257,7 @@ class WebApp:
     def _build_endpoint(self, spec):
         endpoint = _Endpoint(spec, self._config_factory, self.dispatch)
         self._router.post('/' + endpoint.name, description=endpoint.description)(endpoint.invoke)
+        self._endpoints[endpoint.name] = endpoint
         # self._router.add_api_route(endpoint.name, endpoint, description=endpoint.description)
 
     def register_callback(self, event, func):
@@ -271,23 +279,26 @@ class WebApp:
             ssl_certfile=certfile
         )
 
+    def invoke_endpoint(self, name: str, conf: Config, payload):
+        return self._endpoints[name].run(conf, payload)
+
     def dispatch(self, name, conf: Config):
         for keys, predicate, message in self._constraints:
             try:
                 values = [(conf.get(key) if key != '#config' else conf) for key in keys]
             except IllegalNamespace:
                 continue    # Constraint not relevant
-            if not predicate(values):
+            if not predicate(*values):
                 error = f'Constraint check on {",".join(keys)} failed: {message}'
-                raise ValueError(error)
+                raise fastapi.HTTPException(detail=error, status_code=400)
         conf.set('system.management.active-command', name)
         conf.set('system.management.app', self)
         for callback in self._setup_callbacks:
             callback(conf)
-        self._callbacks[name](conf)
+        return self._callbacks[name](conf)
 
     def new_config(self, *namespaces) -> Config:
-        self._config_factory.build_config(*namespaces)
+        return self._config_factory.build_config(*namespaces)
 
 
 class _Endpoint:
@@ -302,6 +313,15 @@ class _Endpoint:
         self._args = spec['args']
         validators = [_ArgumentValidator(arg) for arg in self._args]
         self._validators = {arg.name: arg for arg in validators}
+        for v in self._validators.values():
+            if v.depends is None:
+                continue
+            if v.depends not in self._validators:
+                raise ValueError(f'[{self.name}] Argument {v.name!r} depends on unknown argument {v.depends!r}')
+            #if self._validators[v.depends].dtype != 'bool':
+            #    raise ValueError(f'[{self.name}] Argument {v.name!r} depends on non-Boolean argument {v.depends!r}')
+        self._order = []
+        self._compute_validation_order()
         self._required = {arg.name for arg in validators if arg.required}
         self._defaults = {arg.name: arg.default
                           for arg in validators
@@ -312,39 +332,71 @@ class _Endpoint:
         for v in self._validators:
             self._config_factory.register(f'{self.name}.{v}')
 
+    def _compute_validation_order(self):
+        sorter = graphlib.TopologicalSorter()
+        for v in self._validators.values():
+            if v.depends is not None:
+                sorter.add(v.name, v.depends)
+            else:
+                sorter.add(v.name)
+        try:
+            self._order = list(sorter.static_order())
+        except graphlib.CycleError:
+            raise ValueError(f'[{self.name}] Cycle in if_null/unless_null declarations.')
 
     async def invoke(self, req: fastapi.Request):
         payload = await req.json()
-        args = self._validate(payload['config'])
         conf = self._config_factory.build_config(self.name, 'system')
         if 'auth' in payload:
             auth = payload['auth']
             conf.set('system.security.db-username', auth['username'])
-            conf.set('system.security.password', auth['password'])
+            conf.set('system.security.db-password', auth['password'])
+        return self.run(conf, payload['config'])
+
+    def run(self, conf: Config, payload):
+        args = self.validate(payload)
         for name, value in args.items():
             conf.set(f'{self.name}.{name}', value)
-        self._dispatcher(self.name, conf)
+        return self._dispatcher(self.name, conf)
+
+    def validate(self, obj):
+        return self._validate(obj)
 
     def _validate(self, obj):
         if not isinstance(obj, dict):
             raise fastapi.HTTPException(detail='Expected a JSON object',
                                         status_code=400)
         parsed = {}
-        for name, value in obj.items():
+        for name in self._order:
+            try:
+                value = obj[name]
+            except KeyError:
+                if name in self._defaults:
+                    value = self._defaults[name]
+                else:
+                    continue
             if name not in self._validators:
                 raise fastapi.HTTPException(
                     status_code=400,
                     detail=f'Invalid argument for endpoint {self.name!r}: {name}'
                 )
-            parsed[name] = self._validators[name].validate(value)
+            validator = self._validators[name]
+            if validator.depends is not None:
+                parsed[name] = validator.validate_conditionally(value, parsed[validator.depends])
+            else:
+                parsed[name] = validator.validate(value)
         missing = self._required - set(parsed.keys())
         if missing:
             raise fastapi.HTTPException(
                 status_code=400,
                 detail=f'Endpoint {self.name!r} is missing the following required arguments: {", ".join(missing)}'
             )
-        for name in set(self._defaults) - set(parsed):
-            parsed[name] = self._validators[name](self._defaults[name])
+        #for name in set(self._defaults) - set(parsed):
+        #    val = self._validators[name]
+        #    if val.depends is not None:
+        #        parsed[name] = val.validate_conditionally(value, parsed[validator.depends])
+        #    else:
+        #        parsed[name] = self._validators[name].validate(self._defaults[name])
         return parsed
 
 
@@ -360,21 +412,77 @@ class _ArgumentValidator:
         self.default = spec.get('default', self.NOT_SET)
         self._nargs = '1' if 'nargs' not in spec else spec['nargs']
         self._type = spec['type']
+        self._null_if = spec.get('null-if', None)
+        if self._null_if is not None:
+            if not isinstance(self._null_if, dict):
+                raise ValueError(f'[{self.name}] "null-if" value must be a dict')
+            if 'name' not in self._null_if or 'value' not in self._null_if:
+                raise ValueError(f'[{self.name}] "null-if" must have keys "name" and "value"')
+        self._null_unless = spec.get('null-unless', None)
+        if self._null_unless is not None:
+            if not isinstance(self._null_unless, dict):
+                raise ValueError(f'[{self.name}] "null-unless" value must be a dict')
+            if 'name' not in self._null_unless or 'value' not in self._null_unless:
+                raise ValueError(f'[{self.name}] "null-unless" must have keys "name" and "value"')
+        if self._null_if is not None and self._null_unless is not None:
+            raise ValueError(f'[{self.name}] Cannot set both "null-if" and "null-unless"')
         #self._options = spec.get('options', [])
         self._options = spec['options']
         if self._nargs not in ('1', '*', '+'):
             raise ValueError(f'[{self.name}] Invalid nargs: {self._nargs}')
-        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float'):
+        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query'):
             raise ValueError(f'[{self.name}] Invalid type: {self._type}')
         if self._type == 'class':
             if len(self._options) != 1:
                 raise ValueError(f'[{self.name}] Argument of type "class" requires exactly one option.')
             dotted_name = self._options[0]
-            module, item = dotted_name.split('.')
+            module, item = dotted_name.rsplit('.', maxsplit=1)
             mod = importlib.import_module(module)
             cls = getattr(mod, item)
             self._options = [cls]
+        if self._type == 'arglist':
+            if len(self._options) != 1 or not isinstance(self._options[0], dict):
+                raise ValueError(f'[{self.name}] Argument of type "arglist" requires exactly one option of type "dict".')
+            if 'map-path' not in self._options[0] or 'multi-valued' not in self._options[0]:
+                raise ValueError(f'[{self.name}] Option of "arglist" argument must contain "map-path" and "multi-valued".')
+            module, item = self._options[0]['map-path'].rsplit('.', maxsplit=1)
+            self._options[0] = ArgumentListParser(
+                name=self.name,
+                lookup_map=getattr(importlib.import_module(module), item),
+                multi_valued=self._options[0]['multi-valued']
+            )
 
+    @property
+    def depends(self):
+        if self._null_if:
+            return self._null_if['name']
+        if self._null_unless:
+            return self._null_unless['name']
+        return None
+
+    @property
+    def dtype(self):
+        return self._type
+
+    def validate_conditionally(self, value, flag):
+        if self._null_if and self._null_if['value'] == flag:
+            if value is not None:
+                raise fastapi.HTTPException(
+                    detail=f'Argument {self.name!r} must be null because {self.depends!r} == {self._null_if["value"]}',
+                    status_code=400
+                )
+            return None
+        elif self._null_if and self._null_if['value'] != flag:
+            return self.validate(value)
+        elif self._null_unless and self._null_unless['value'] == flag:
+            return self.validate(value)
+        else:
+            if value is not None:
+                raise fastapi.HTTPException(
+                    detail=f'Argument {self.name!r} must be null because {self.depends!r} != {self._null_unless["value"]}',
+                    status_code=400
+                )
+            return None
 
     def validate(self, value):
         if self._nargs == '1':
@@ -382,7 +490,7 @@ class _ArgumentValidator:
         else:
             if not isinstance(value, list):
                 raise fastapi.HTTPException(
-                    detail=f'{self.name!r} is a multi-valued argument. Expected a list.',
+                    detail=f'{self.name!r} is a multi-valued argument. Expected a list. (got {value})',
                     status_code=400
                 )
             if self._nargs == '+' and not value:
@@ -403,7 +511,7 @@ class _ArgumentValidator:
                     self._raise_invalid_type('int', x)
                 return x
             case 'bool':
-                if not isinstance(x, bool):
+                if not isinstance(x, bool) and (not isinstance(x, int) or x not in (0, 1)):
                     self._raise_invalid_type('bool', x)
                 return x
             case 'float':
@@ -430,11 +538,274 @@ class _ArgumentValidator:
                         detail=f'Error while converting {self.name!r} to {self._options[0].__class__.__name__}: {e}',
                         status_code=400
                     )
+            case 'query':
+                try:
+                    return db_util.json_to_query(x)
+                except Exception as e:
+                    raise fastapi.HTTPException(
+                        detail=f'Invalid query for param {self.name!r}: {x} ({e})',
+                        status_code=400
+                    )
             case 'arglist':
-                return x
+                return self._options[0].validate(x)
 
     def _raise_invalid_type(self, expected, got):
         raise fastapi.HTTPException(
             detail=f'{self.name!r} must be of type {expected}, got {got.__class__.__name__}',
             status_code=400
         )
+
+
+##############################################################################
+##############################################################################
+# ArgList Support
+##############################################################################
+
+
+class ArgumentConsumer:
+
+    @staticmethod
+    def get_arguments() -> dict[str, Argument]:
+        return {}
+
+
+class Argument(abc.ABC):
+
+    _NOT_SET = object()
+
+    def __init__(self, name: str, description: str, data_type, default=_NOT_SET):
+        self._name = name
+        self._description = description
+        self._data_type = data_type
+        self._default = default
+
+    @property
+    def argument_name(self):
+        return self._name
+
+    @property
+    def argument_description(self):
+        return self._description
+
+    @property
+    def default(self):
+        return self._default
+
+    @property
+    def has_default(self):
+        return self._default is not self._NOT_SET
+
+    @property
+    def argument_type(self):
+        return self._data_type
+
+    @abc.abstractmethod
+    def validate(self, value):
+        pass
+
+    @property
+    @abc.abstractmethod
+    def legal_values(self):
+        pass
+
+    def raise_invalid(self, msg):
+        raise fastapi.HTTPException(
+            detail=f'Argument {self.argument_name!r} is invalid: {msg}',
+            status_code=400
+        )
+
+
+class FloatArgument(Argument):
+
+    def __init__(self,
+                 name: str,
+                 description: str,
+                 default=Argument._NOT_SET,
+                 minimum: float | None = None,
+                 maximum: float | None = None):
+        super().__init__(name, description, float, default)
+        self._min = minimum
+        self._max = maximum
+
+    def validate(self, value):
+        if not isinstance(value, float):
+            self.raise_invalid(f'Must be float, got {value.__class__.__name__}')
+        if self._min is not None and value < self._min:
+            self.raise_invalid(f'Must be >= {self._min}')
+        if self._max is not None and value > self._max:
+            self.raise_invalid(f'Must be <= {self._max}')
+        return value
+
+    def legal_values(self):
+        lo = self._min if self._min is not None else -float('inf')
+        hi = self._max if self._max is not None else float('inf')
+        return f'[{lo}, {hi}]'
+
+
+class IntArgument(Argument):
+
+    def __init__(self,
+                 name: str,
+                 description: str,
+                 default=Argument._NOT_SET,
+                 minimum: int | None = None,
+                 maximum: int | None = None):
+        super().__init__(name, description, int, default)
+        self._min = minimum
+        self._max = maximum
+
+    def validate(self, value):
+        if not isinstance(value, int):
+            self.raise_invalid(f'Must be int, got {value.__class__.__name__}')
+        if self._min is not None and value < self._min:
+            self.raise_invalid(f'Must be >= {self._min}')
+        if self._max is not None and value > self._max:
+            self.raise_invalid(f'Must be <= {self._max}')
+        return value
+
+    def legal_values(self):
+        lo = self._min if self._min is not None else -float('inf')
+        hi = self._max if self._max is not None else float('inf')
+        if math.isinf(lo) or math.isinf(hi):
+            return f'[{lo}, {hi}]'
+        return range(self._min, self._max + 1)
+
+
+class EnumArgument(Argument):
+
+    def __init__(self,
+                 name: str,
+                 description: str,
+                 default=Argument._NOT_SET,
+                 options: list[str] = None):
+        super().__init__(name, description, str, default)
+        if options is None:
+            self._options = []
+        else:
+            self._options = options
+
+    def validate(self, value):
+        if not isinstance(value, str):
+            self.raise_invalid(f'Must be string, got {value.__class__.__name__}')
+        if value not in self._options:
+            self.raise_invalid(f'Must be one of {", ".join(self._options)}')
+        return value
+
+    def legal_values(self):
+        return self._options
+
+
+class BoolArgument(Argument):
+
+    def __init__(self, name: str, description: str, default=Argument._NOT_SET):
+        super().__init__(name, description, bool, default)
+
+    def validate(self, value):
+        if isinstance(value, bool) or (isinstance(value, int) and value in (0, 1)):
+            return value
+        self.raise_invalid(f'Must be Boolean, got {value.__class__.__name__}')
+
+    def legal_values(self):
+        return [False, True]
+
+
+class StringArgument(Argument):
+
+    def __init__(self, name: str, description: str, default=Argument._NOT_SET):
+        super().__init__(name, description, str, default)
+
+    def validate(self, value):
+        if not isinstance(value, str):
+            self.raise_invalid(f'Must be string, got {value.__class__.__name__}')
+        return value
+
+    def legal_values(self):
+        return 'Any'
+
+
+class QueryArgument(Argument):
+
+    def __init__(self, name: str, description: str, default=Argument._NOT_SET):
+        super().__init__(name, description, issue_db_api.Query, default)
+
+    def validate(self, value):
+        if value is None:
+            return value
+        try:
+            return db_util.object_to_query(value)
+        except Exception as e:
+            self.raise_invalid(f'Invalid query: {e}')
+
+    def legal_values(self):
+        return ''
+
+
+class ArgumentListParser:
+
+    def __init__(self, name: str, lookup_map, *, multi_valued=False):
+        self._map = lookup_map
+        self._name = name
+        self._multi_valued = multi_valued
+
+    def validate(self, values):
+        if not isinstance(values, dict):
+            raise fastapi.HTTPException(
+                detail=f'Parameter {self._name!r} requires a dict.',
+                status_code=400
+            )
+        if (not self._multi_valued) and len(values) != 1:
+            raise fastapi.HTTPException(detail=f'[{self._name}] Non-multivalued argument list can only contain a single key',
+                                        status_code=400)
+        #if not self._multi_valued and 'default' in values:
+        #    raise fastapi.HTTPException(detail='Single-valued arglist cannot contain a default section',
+        #                                status_code=400)
+        indices = collections.defaultdict(int)
+        result = collections.defaultdict(dict)
+        for name, args in values.items():
+            if '[' in args:
+                cls, index = name.split('[')
+                index = int(index.removesuffix(']'))
+                result[cls][index] = self._validate(cls, args)
+            else:
+                if name in indices:
+                    raise fastapi.HTTPException(detail=f'Un-numbered occurrence of name {name!r} in arglist',
+                                                status_code=400)
+                cls = name
+                result[cls][0] = self._validate(cls, args)
+        return result
+
+    def _validate(self, name, obj):
+        try:
+            cls: typing.Type[ArgumentConsumer] = self._map[name]
+        except KeyError:
+            raise fastapi.HTTPException(
+                detail=f'Cannot find class {name!r} in map (available: {", ".join(self._map)})',
+                status_code=400
+            )
+        args = cls.get_arguments()
+        if not isinstance(obj, dict):
+            raise fastapi.HTTPException(
+                detail=f'arglist must contain dicts, got {obj.__class__.__name__}',
+                status_code=400
+            )
+        required = {arg.argument_name
+                    for arg in args.values()
+                    if not arg.has_default}
+        result = {}
+        for key, value in obj.items():
+            if key not in args:
+                raise fastapi.HTTPException(detail=f'Unknown argument {key} for {name}',
+                                            status_code=400)
+            result[key] = args[key].validate(value)
+
+        for arg in args.values():
+            if arg.argument_name not in result and arg.has_default:
+                result[arg.argument_name] = arg.default
+        missing = required - set(result)
+        if missing:
+            raise fastapi.HTTPException(
+                detail=f'Missing arguments for {name}: {", ".join(missing)}',
+                status_code=400
+            )
+        return result
+

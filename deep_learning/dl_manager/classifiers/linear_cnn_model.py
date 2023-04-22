@@ -1,6 +1,7 @@
 import tensorflow as tf
 
-from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..config import Argument, IntArgument, EnumArgument
+from .model import AbstractModel
 from ..model_io import InputEncoding
 
 
@@ -15,15 +16,15 @@ class LinearConv1Model(AbstractModel):
             embedding=embedding,
             embedding_size=embedding_size,
             embedding_output_size=embedding_output_size,
-            trainable_embedding=kwargs.get('use-trainable-embedding', False)
+            trainable_embedding=kwargs['use-trainable-embedding']
         )
-        layer_size = int(kwargs.get('fully-connected-layer-size', 32))
-        filters = int(kwargs.get('filters', 32))
-        num_convolutions = int(kwargs.get('number-of-convolutions', 1))
-        convolution_sizes = [int(kwargs.get(f'kernel-{i}-size', 8))
+        layer_size = kwargs['fully-connected-layer-size']
+        filters = kwargs['filters']
+        num_convolutions = kwargs['number-of-convolutions']
+        convolution_sizes = [kwargs[f'kernel-{i}-size']
                              for i in range(1, num_convolutions + 1)]
         height = self.input_size
-        pooling_sizes = [height - int(kwargs.get(f'kernel-{i}-size', 8))
+        pooling_sizes = [height - kwargs[f'kernel-{i}-size']
                          for i in range(1, num_convolutions + 1)]
         convolutions = [
             tf.keras.layers.Conv1D(filters=filters,
@@ -46,7 +47,7 @@ class LinearConv1Model(AbstractModel):
         hidden = tf.keras.layers.Flatten()(concatenated)
         if layer_size > 0:
             hidden = tf.keras.layers.Dense(layer_size)(hidden)
-        if (act := kwargs.get('fnn-layer-activation', 'linear')) != 'linear':
+        if (act := kwargs['fnn-layer-activation']) != 'linear':
             hidden = self.get_activation(act)(hidden)
         outputs = self.get_output_layer()(hidden)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
@@ -63,32 +64,42 @@ class LinearConv1Model(AbstractModel):
         return True
 
     @classmethod
-    @_fix_hyper_params
-    def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
+    def get_arguments(cls) -> dict[str, Argument]:
         max_convolutions = 11
-        num_convolutions = HyperParameter(
-            default=1, minimum=1, maximum=max_convolutions
+        num_convolutions = IntArgument(
+            default=1, minimum=1, maximum=max_convolutions,
+            name='number-of-convolutions',
+            description='Number of different convolutions to use'
         )
         kernel_sizes = {
-            f'kernel_{i}_size': HyperParameter(minimum=1, default=4, maximum=512)
+            f'kernel-{i}-size': IntArgument(minimum=1,
+                                            default=4,
+                                            maximum=512,
+                                            name=f'kernel-{i}-size',
+                                            description='Size of the i-th convolution kernel.')
             for i in range(1, max_convolutions + 1)
         }
         return {
-            'fully_connected_layer_size': HyperParameter(
-                default=32, minimum=1, maximum=16384
+            'fully-connected-layer-size': IntArgument(
+                default=32, minimum=0, maximum=16384,
+                name='fully-connected-layer-size',
+                description='Size of the fully connected layer. Set to 0 to disable.'
             ),
-            'number_of_convolutions': num_convolutions,
-            'filters': HyperParameter(
-                default=32, minimum=1, maximum=64
+            'number-of-convolutions': num_convolutions,
+            'filters': IntArgument(
+                default=32, minimum=1, maximum=64,
+                name='filters', description='Number of filters per convolution layer.'
             ),
-            'fnn-layer-activation': HyperParameter(
-                minimum=None, maximum=None, default='linear',
+            'fnn-layer-activation': EnumArgument(
+                default='linear',
                 options=[
                     'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
                     'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
-                ]
+                ],
+                name='fnn-layer-activation',
+                description='Activation to use in the fully connected layer.'
             )
             # 'pooling_size': HyperParameter(
             #     default=2, minimum=2, maximum=16
             # ),
-        } | kernel_sizes | super().get_hyper_parameters()
+        } | kernel_sizes | super().get_arguments()

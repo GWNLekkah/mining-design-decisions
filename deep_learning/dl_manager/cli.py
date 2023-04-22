@@ -22,10 +22,8 @@ import numpy
 import issue_db_api
 
 from . import classifiers, kw_analyzer, model_manager
-from .classifiers import HyperParameter
 
 from . import feature_generators
-from .feature_generators import ParameterSpec
 from .model_io import OutputMode
 from . import data_manager
 from . import embeddings
@@ -135,13 +133,17 @@ def setup_app_constraints(app):
         'Can not perform cross validation when extracting keywords',
         'run.analyze-keywords', '#config'
     )
-    app.add_constraint(
-        lambda test_query, test_with_train: (
-            (not test_with_train) or test_query
-        ),
-        'Must either test with training data, or give a testing data query',
-        'run.testing-data-query', 'run.test-with-training-data'
-    )
+
+    # Enforced using null-if
+    # app.add_constraint(
+    #     lambda test_query, test_with_train: (
+    #         (not test_with_train) or test_query
+    #     ),
+    #     'Must either test with training data, or give a testing data query',
+    #     'run.test-data-query', 'run.test-with-training-data'
+    # )
+
+
     app.register_callback('predict', run_prediction_command)
     app.register_callback('run', run_classification_command)
     app.register_callback('list', run_list_command)
@@ -158,7 +160,6 @@ def setup_app_constraints(app):
     app.register_setup_callback(setup_os)
     app.register_setup_callback(setup_storage)
     app.register_setup_callback(setup_resources)
-
 
     log.debug('Finished building app')
     return app
@@ -203,7 +204,8 @@ def setup_storage(conf: Config):
                 conf.get('system.security.db-username'),
                 conf.get('system.security.db-password')
             ),
-            allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates')
+            allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates'),
+            label_caching_policy='use_local_after_load'
         )
         conf.set('system.storage.database-api', api)
 
@@ -229,18 +231,17 @@ def run_training_session(conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     settings = db.get_model_by_id(config_id).config
     settings |= {
-        'subcommand_name_0': 'run',
         'num-threads': conf.get('system.resources.threads'),
         'database-url': conf.get('system.storage.database-url'),
         'model-id': conf.get('train.model-id')
     }
+    print(settings)
     app: WebApp = conf.get('system.management.app')
     new_conf = app.new_config('run', 'system')
     conf.transfer(new_conf,
                   'system.security.db-username',
                   'system.security.db-password')
-    new_conf.update('run', **settings)
-    app.dispatch('run', new_conf)
+    return app.invoke_endpoint('run', new_conf, settings)
 
 
 ##############################################################################
@@ -319,8 +320,7 @@ def run_hyper_params_command(conf: Config):
     cls = classifiers.models[classifier]
     keys = []
     name: str
-    param: HyperParameter
-    for name, param in cls.get_hyper_parameters().items():
+    for name, param in cls.get_arguments().items():
         keys.append((f'{name} -- '
                      f'[min, max] = [{param.minimum}, {param.maximum}] -- '
                      f'default = {param.default}'))
@@ -341,8 +341,7 @@ def run_generator_params_command(conf: Config):
     cls = feature_generators.generators[generator]
     keys = []
     name: str
-    param: ParameterSpec
-    for name, param in cls.get_parameters().items():
+    for name, param in cls.get_arguments().items():
         keys.append(f'{name} -- {param.description}')
     print(f'Parameters for {generator}:')
     _print_keys(keys)
@@ -370,8 +369,7 @@ def run_embedding_param_command(conf: Config):
     cls = embeddings.generators[generator]
     keys = []
     name: str
-    param: embeddings.EmbeddingGeneratorParam
-    for name, param in cls.get_params().items():
+    for name, param in cls.get_arguments().items():
         keys.append(f'{name} -- {param.description}')
     print(f'Parameters for {generator}:')
     _print_keys(keys)
@@ -420,22 +418,18 @@ def generate_features_and_get_data(architectural_only: bool = False,
         number = imode_counts[imode]
         imode_counts[imode] += 1
         # Get the parameters for the feature generator
-        mode_params = _normalize_param_names(
-            params.get(imode, {}) |
-            params.get('default', {}) |
-            params.get(f'{imode}[{number}]', {})
-        )
+        mode_params = params[imode][number]
         # Validate that the parameters are valid
-        valid_params = feature_generators.generators[imode].get_parameters()
+        valid_params = feature_generators.generators[imode].get_arguments()
         for param_name in mode_params:
             if param_name not in valid_params:
                 raise ValueError(f'Invalid parameter for feature generator {imode}: {param_name}')
         training_query = issue_db_api.Query().land(
             issue_db_api.Query().tag('has-label'),
             issue_db_api.Query().not_tag('needs-review'),
-            db_util.json_to_query(conf.get('run.training-data-query'))
+            conf.get('run.training-data-query')
         )
-        generator = feature_generators.generators[imode](**mode_params)
+        generator = feature_generators.generators[imode](conf, **mode_params)
         dataset = generator.generate_features(training_query, output_mode)
         if labels_train is not None:
             assert labels_train == dataset.labels
@@ -448,9 +442,9 @@ def generate_features_and_get_data(architectural_only: bool = False,
             testing_query = issue_db_api.Query().land(
                 issue_db_api.Query().tag('has-label'),
                 issue_db_api.Query().not_tag('needs-review'),
-                db_util.json_to_query(conf.get('run.test-data-query'))
+                conf.get('run.test-data-query')
             )
-            generator = feature_generators.generators[imode](**mode_params)
+            generator = feature_generators.generators[imode](conf, **mode_params)
             dataset = generator.generate_features(testing_query, output_mode)
             if labels_test is not None:
                 assert labels_test == dataset.labels
@@ -597,12 +591,8 @@ def _get_model_factory(conf: Config):
             model_number = model_counts[name]
             model_counts[name] += 1
             hyper_parameters = conf.get('run.hyper-parameters')
-            hyperparams = _normalize_param_names(
-                hyper_parameters.get(name, {}) |
-                hyper_parameters.get(f'{name}[{model_number}]', {}) |
-                hyper_parameters.get('default', {})
-            )
-            allowed_hyper_params = model.get_hyper_parameters()
+            hyperparams = hyper_parameters[name][model_number]
+            allowed_hyper_params = model.get_arguments()
             for param_name in hyperparams:
                 if param_name not in allowed_hyper_params:
                     raise ValueError(f'Illegal hyperparameter for model {name}: {param_name}')
@@ -627,10 +617,6 @@ def _get_model_factory(conf: Config):
         return final_model
 
     return datasets, labels, datasets_test, labels_test, factory
-
-
-def _normalize_param_names(params):
-    return {key.replace('_', '-'): value for key, value in params.items()}
 
 
 ##############################################################################
@@ -675,7 +661,7 @@ def run_prediction_command(conf: Config):
             generator_data = json.load(file)
         generator_class = feature_generators.generators[generator_data['generator']]
         generator = generator_class(
-            pretrained_generator_settings=generator_data['settings']
+            conf, pretrained_generator_settings=generator_data['settings']
         )
         data_stuff = generator.generate_features(data_query, output_mode.name)
         if ids is None:

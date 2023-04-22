@@ -8,37 +8,14 @@ This module defines a base class for all future models.
 ##############################################################################
 
 import abc
-import numbers
-import typing
 
 import numpy
 import tensorflow as tf
 import tensorflow_addons as tfa
 
+from ..config import Argument, BoolArgument, StringArgument, EnumArgument, FloatArgument, ArgumentConsumer
 from  ..model_io import InputEncoding, OutputEncoding
 
-
-##############################################################################
-##############################################################################
-# Auxiliary classes and functions
-##############################################################################
-
-
-class HyperParameter(typing.NamedTuple):
-    default: typing.Any
-    minimum: numbers.Number | None = None
-    maximum: numbers.Number | None = None
-    options: list[str] | None = None
-
-def _fix_hyper_params(function):
-    def wrapper(*args):
-        hyper_params = function(*args)
-        assert isinstance(hyper_params, dict)
-        return {
-            name.replace('_', '-'): value
-            for name, value in hyper_params.items()
-        }
-    return wrapper
 
 
 ##############################################################################
@@ -47,7 +24,7 @@ def _fix_hyper_params(function):
 ##############################################################################
 
 
-class AbstractModel(abc.ABC):
+class AbstractModel(abc.ABC, ArgumentConsumer):
 
     def __init__(self,
                  input_size: int | tuple[int],
@@ -109,28 +86,30 @@ class AbstractModel(abc.ABC):
 
     @classmethod
     @abc.abstractmethod
-    def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
+    def get_arguments(cls) -> dict[str, Argument]:
         """Return the names of all the hyper-parameters,
         possibly with a suggestion for the range of possible values.
 
         Remember to call super() when implementing
         """
         result = {
-            'optimizer': HyperParameter(default='adam',
-                                        minimum=None,
-                                        maximum=None),
-            'loss': HyperParameter(default='crossentropy',
-                                   minimum=None,
-                                   maximum=None),
-            'learning-rate': HyperParameter(default=0.01,
-                                            minimum=None,
-                                            maximum=None)
+            'optimizer': StringArgument(default='adam',
+                                        description='Optimizer to use. Special case: use sgd_XXX to specify SGD with momentum XXX',
+                                        name='optimizer'),
+            'loss': EnumArgument(default='crossentropy',
+                                 description='Loss to use in the training process',
+                                 options=['crossentropy', 'hinge'],
+                                 name='loss'),
+            'learning-rate': FloatArgument(default=0.01,
+                                           minimum=0.0,
+                                           name='learning-rate',
+                                           description='Learning rate for the learning process')
         }
         if InputEncoding.Embedding in cls.supported_input_encodings():
             result |= {
-                'use_trainable_embedding': HyperParameter(default=False,
-                                                          minimum=False,
-                                                          maximum=True)
+                'use_trainable_embedding': BoolArgument(default=False,
+                                                        name='use-trainable-embedding',
+                                                        description='Whether to make the word-embedding trainable')
             }
         return result
 
@@ -177,8 +156,7 @@ class AbstractModel(abc.ABC):
                         embedding=None,
                         embedding_size: int | None = None,
                         embedding_output_size: int | None = None,
-                        trainable_embedding: bool = False,
-                        ) -> (tf.keras.layers.Layer, tf.keras.layers.Layer):
+                        trainable_embedding: bool = False) -> (tf.keras.layers.Layer, tf.keras.layers.Layer):
         match self.__input_encoding:
             case InputEncoding.Vector:
                 if self.input_must_support_convolution():
@@ -236,11 +214,12 @@ class AbstractModel(abc.ABC):
         return lr_schedule
 
     def get_optimizer(self, **kwargs) -> tf.keras.optimizers.Optimizer:
-        try:
-            optimizer = kwargs.get('optimizer')
-        except KeyError:
-            optimizer = kwargs.get(self.__class__.__name__, None)
-        learning_rate = float(kwargs.get('learning-rate'))
+        # try:
+        #     optimizer = kwargs.get('optimizer')
+        # except KeyError:
+        #     optimizer = kwargs.get(self.__class__.__name__, None)
+        optimizer = kwargs['optimizer']
+        learning_rate = kwargs['learning-rate']
         if optimizer is None or optimizer == 'adam':
             return tf.keras.optimizers.Adam(learning_rate=learning_rate)
         elif optimizer.startswith('sgd'):
@@ -286,7 +265,7 @@ class AbstractModel(abc.ABC):
         ]
 
     def __get_loss_function(self, **kwargs):
-        loss = kwargs.get('loss', 'crossentropy')
+        loss = kwargs['loss']
         match self.__output_encoding:
             case OutputEncoding.OneHot:
                 if loss == 'crossentropy':
