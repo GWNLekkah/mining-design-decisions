@@ -4,7 +4,7 @@ This code contains the core of the training algorithms.
 Yes, it is a mess... but a relatively easy-to-oversee mess,
 and it works.
 """
-
+import collections
 ##############################################################################
 ##############################################################################
 # Imports
@@ -34,6 +34,7 @@ from . import metrics
 from . import data_splitting as splitting
 from . import model_manager
 from . import voting_util
+from . import run_identifiers
 
 
 EARLY_STOPPING_GOALS = {
@@ -72,6 +73,7 @@ def run_single(model_or_models,
                training_data,
                testing_data, *,
                conf: Config):
+    id_generator = run_identifiers.IdentifierFactory()
     max_train = conf.get('run.max-train')
     if max_train > 0:
         warnings.warn('The --max-train parameter is ignored in single runs.')
@@ -88,6 +90,8 @@ def run_single(model_or_models,
     else:
         models = model_or_models
         inputs = _separate_datasets(train, test, validation)
+    ident = None
+    version_id = None
     for model, (m_train, m_test, m_val) in zip(models, inputs):
         trained_model, metrics_, best = train_and_test_model(model,
                                                              m_train,
@@ -103,14 +107,17 @@ def run_single(model_or_models,
         # Save model can only be true if not testing separately,
         # which means the loop only runs once.
         if conf.get('run.store-model'):
-            model_manager.save_single_model(trained_model, conf)
-        ident = dump_metrics([metrics_], conf=conf)
+            version_id = model_manager.save_single_model(trained_model, conf)
+        ident = dump_metrics([metrics_],
+                             conf=conf,
+                             description=id_generator.generate_id('single-training-run'))
         comparator.add_result(metrics_)
+    assert ident is not None
     comparator.add_truth(test[1])
     comparator.finalize()
     if conf.get('run.test-separately'):
         comparator.compare()
-    return ident
+    return version_id, [ident]
 
 
 def run_cross(model_factory,
@@ -122,14 +129,7 @@ def run_cross(model_factory,
               conf: Config):
     results = []
     best_results = []
-    # if quick_cross:
-    #     stream = split_data_quick_cross(k,
-    #                                     labels,
-    #                                     *features,
-    #                                     issue_keys=issue_keys,
-    #                                     max_train=max_train)
-    # else:
-    #     stream = split_data_cross(k, labels, *features, issue_keys=issue_keys)
+    id_generator = run_identifiers.IdentifierFactory()
     if conf.get('run.quick-cross'):
         splitter = splitting.QuickCrossFoldSplitter(
             conf,
@@ -181,9 +181,13 @@ def run_cross(model_factory,
         gc.collect()
         comparator.mark_end_of_fold()
     comparator.finalize()
-    print_and_save_k_cross_results(results, best_results, conf=conf)
+    ident = print_and_save_k_cross_results(results,
+                                           best_results,
+                                           conf=conf,
+                                           description=id_generator.generate_id('kfold-run'))
     if conf.get('run.test-separately'):
         comparator.compare()
+    return None, [ident]
 
 
 def _separate_datasets(train, test, validation):
@@ -198,8 +202,9 @@ def _separate_datasets(train, test, validation):
 
 def print_and_save_k_cross_results(results,
                                    best_results, *,
-                                   conf: Config):
-    ident = dump_metrics(results, conf=conf)
+                                   conf: Config,
+                                   description: str):
+    ident = dump_metrics(results, conf=conf, description=description)
     metric_list = []
     # metric_list = ['accuracy', 'f-score']
     for key in metric_list:
@@ -345,10 +350,10 @@ def upsample(features, labels):
     return features, labels
 
 
-def dump_metrics(runs, *, conf: Config):
+def dump_metrics(runs, *, conf: Config, description: str):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
-    return model.add_test_run(runs)
+    return model.add_test_run(runs, description=description)
 
 ##############################################################################
 ##############################################################################
@@ -363,17 +368,17 @@ def run_ensemble(factory,
                  conf: Config):
     match (strategy := conf.get('run.ensemble-strategy')):
         case 'stacking':
-            run_stacking_ensemble(factory,
-                                  training_data,
-                                  testing_data,
-                                  label_mapping,
-                                  conf=conf)
+            return run_stacking_ensemble(factory,
+                                         training_data,
+                                         testing_data,
+                                         label_mapping,
+                                         conf=conf)
         case 'voting':
-            run_voting_ensemble(factory,
-                                training_data,
-                                testing_data,
-                                label_mapping,
-                                conf=conf)
+            return run_voting_ensemble(factory,
+                                       training_data,
+                                       testing_data,
+                                       label_mapping,
+                                       conf=conf)
         case _:
             raise ValueError(f'Unknown ensemble mode {strategy}')
 
@@ -386,6 +391,11 @@ def run_stacking_ensemble(factory,
                           conf: Config):
     if conf.get('run.k-cross') > 0 and not conf.get('run.quick_cross'):
         warnings.warn('Absence of --quick-cross is ignored when running with stacking')
+    if __voting_ensemble_hook is not None:
+        ensemble_mode = 'voting'
+    else:
+        ensemble_mode = 'stacking'
+    id_generator = run_identifiers.IdentifierFactory()
 
     # stream = split_data_quick_cross(conf.get('run.k-cross'),
     #                                 labels,
@@ -422,6 +432,7 @@ def run_stacking_ensemble(factory,
     best_results = []
     voting_result_data = []
     stream = splitter.split(training_data, testing_data)
+    version_id = None
     for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
         # Step 1) Train all models and get their predictions
         #           on the training and validation set.
@@ -484,7 +495,7 @@ def run_stacking_ensemble(factory,
             best_results.append(best_epoch_results)
 
             if conf.get('run.store-model'):     # only ran in single-shot mode
-                model_manager.save_stacking_model(
+                version_id = model_manager.save_stacking_model(
                     input_conversion_method.to_json(),
                     epoch_model,
                     *trained_sub_models,
@@ -492,34 +503,65 @@ def run_stacking_ensemble(factory,
                 )
 
         else:   # We're being used by the voting ensemble
-            voting_results = {
-                'test': __voting_ensemble_hook[0](test[1], predictions_test, conf=conf),
-                'train': __voting_ensemble_hook[0](train[1], predictions_train, conf=conf),
-                'val': __voting_ensemble_hook[0](validation[1], predictions_val, conf=conf)
+            voting_result = {
+                'classes': [
+                    [(list(k) if isinstance(k, tuple) else k), v]
+                    for k, v in label_mapping.items()
+                ],
+                'loss': None,
+                'predictions': collections.defaultdict(list),
+                'truth': {
+                    'training': __voting_ensemble_hook[0](train[1], predictions_train, conf=conf),
+                    'validation': __voting_ensemble_hook[0](validation[1], predictions_val, conf=conf),
+                    'testing': __voting_ensemble_hook[0](test[1], predictions_test, conf=conf)
+                },
+                # Voting does not use early stopping, so set to defaults.
+                'early_stopping_settings': {
+                    'use_early_stopping': False,
+                    'attributes': [],
+                    'min_deltas': [],
+                    'patience': -1,
+                    'stopped_early': False,
+                    'early_stopping_epoch': -1
+                }
             }
-            voting_result_data.append(voting_results)
+            voting_result_data.append(voting_result)
 
             if conf.get('run.store-model'):
-                model_manager.save_voting_model(
+                version_id = model_manager.save_voting_model(
                     *trained_sub_models,
                     conf=conf
                 )
 
+    results_ids = []
+    it = enumerate(zip(sub_results, best_sub_results))
+    for model_number, (sub_model_results, best_sub_model_results) in it:
+        print(f'Model {model_number} results:')
+        ident = print_and_save_k_cross_results(
+            sub_model_results,
+            best_sub_model_results,
+            conf=conf,
+            description=id_generator.generate_id(f'{ensemble_mode}-sub-model-{model_number}'))
+        results_ids.append(ident)
+        print('=' * 72)
+        print('=' * 72)
     if __voting_ensemble_hook is None:
-        it = enumerate(zip(sub_results, best_sub_results))
-        for model_number, (sub_model_results, best_sub_model_results) in it:
-            print(f'Model {model_number} results:')
-            print_and_save_k_cross_results(sub_model_results,
-                                           best_sub_model_results,
-                                           conf=conf)
-            print('=' * 72)
-            print('=' * 72)
         print('Total Stacking Ensemble Results:')
-        return print_and_save_k_cross_results(results,
-                                              best_results,
-                                              conf=conf)
+        ident = print_and_save_k_cross_results(
+            results,
+            best_results,
+            conf=conf,
+            description=id_generator.generate_id(f'{ensemble_mode}-final-model')
+        )
+        results_ids.append(ident)
     else:   # Voting ensemble
-        __voting_ensemble_hook[1](voting_result_data, conf=conf)
+        ident = __voting_ensemble_hook[1](
+            voting_result_data,
+            description=id_generator.generate_id(f'{ensemble_mode}-final-model'),
+            conf=conf
+        )
+        results_ids.append(ident)
+    return version_id, results_ids
 
 
 def run_voting_ensemble(factory,
@@ -527,45 +569,21 @@ def run_voting_ensemble(factory,
                         testing_data,
                         label_mapping, *,
                         conf :Config):
-    run_stacking_ensemble(factory,
-                          training_data,
-                          testing_data,
-                          label_mapping,
-                          __voting_ensemble_hook=(_get_voting_predictions, _save_voting_data),
-                          conf=conf)
+   return run_stacking_ensemble(
+       factory, training_data, testing_data, label_mapping,
+       __voting_ensemble_hook=(_get_voting_predictions, _save_voting_data),
+       conf=conf
+   )
     
 
-def _save_voting_data(data, *, conf: Config):
-    # filename = f'voting_ensemble_{time.time()}.json'
-    # with open(filename, 'w') as file:
-    #     json.dump(data, file)
-    # with open('most_recent_run.txt', 'w') as file:
-    #     file.write(filename)
+def _save_voting_data(data, description, *, conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
-    model.add_test_run(data, conf.get('system.training-start-time'))
+    return model.add_test_run(data, description=description)
 
 
 def _get_voting_predictions(truth, predictions, *, conf: Config):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     final_predictions = voting_util.get_voting_predictions(output_mode,
                                                            predictions)
-    if output_mode == OutputMode.Detection:
-        accuracy, other_metrics = metrics.compute_confusion_binary(truth,
-                                                                   final_predictions,
-                                                                   output_mode.label_encoding)
-        return {
-            'accuracy': accuracy,
-            **other_metrics.as_dictionary()
-        }
-    else:
-        reverse_mapping = {key.index(1): key for key in output_mode.label_encoding}
-        final_predictions = numpy.array([reverse_mapping[pred] for pred in final_predictions])
-        accuracy, class_metrics = metrics.compute_confusion_multi_class(truth,
-                                                                        final_predictions,
-                                                                        output_mode.label_encoding)
-        return {
-            'accuracy': accuracy,
-            **{cls: metrics_for_class.as_dictionary()
-               for cls, metrics_for_class in class_metrics.items()}
-        }
+    return final_predictions

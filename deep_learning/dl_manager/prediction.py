@@ -287,5 +287,4 @@ def _store_predictions(predictions,
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(model_id)
     version = model.get_version_by_id(model_version)
-    print(predictions_by_id)
     version.predictions = predictions_by_id

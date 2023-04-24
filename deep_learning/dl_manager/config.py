@@ -256,7 +256,8 @@ class WebApp:
 
     def _build_endpoint(self, spec):
         endpoint = _Endpoint(spec, self._config_factory, self.dispatch)
-        self._router.post('/' + endpoint.name, description=endpoint.description)(endpoint.invoke)
+        if not endpoint.private:
+            self._router.post('/' + endpoint.name, description=endpoint.description)(endpoint.invoke)
         self._endpoints[endpoint.name] = endpoint
         # self._router.add_api_route(endpoint.name, endpoint, description=endpoint.description)
 
@@ -311,6 +312,7 @@ class _Endpoint:
         log.info(f'Registering endpoint {self.name!r}')
         self.description = spec['help']
         self._args = spec['args']
+        self.private = spec['private']
         validators = [_ArgumentValidator(arg) for arg in self._args]
         self._validators = {arg.name: arg for arg in validators}
         for v in self._validators.values():
@@ -345,6 +347,9 @@ class _Endpoint:
             raise ValueError(f'[{self.name}] Cycle in if_null/unless_null declarations.')
 
     async def invoke(self, req: fastapi.Request):
+        if self.private:
+            fastapi.HTTPException(detail=f'Endpoint {self.name} is private/internal',
+                                  status_code=406)
         payload = await req.json()
         conf = self._config_factory.build_config(self.name, 'system')
         if 'auth' in payload:
@@ -759,31 +764,79 @@ class ArgumentListParser:
         #if not self._multi_valued and 'default' in values:
         #    raise fastapi.HTTPException(detail='Single-valued arglist cannot contain a default section',
         #                                status_code=400)
-        indices = collections.defaultdict(int)
         result = {}
+        defaults_by_class = collections.defaultdict(dict)
+        defaults = None
         for name, args in values.items():
-            if '[' in args:
-                cls, index = name.split('[')
-                index = int(index.removesuffix(']'))
-                result.setdefault(cls, {})[index] = self._validate(cls, args)
-            else:
-                if name in indices:
-                    raise fastapi.HTTPException(detail=f'Un-numbered occurrence of name {name!r} in arglist',
+            if '.' in name:
+                cls, index = name.split('.')
+                index = int(index)
+                if (not self._multi_valued) and index != 0:
+                    raise fastapi.HTTPException(detail='arglist index should be 0 in single-valued arglist',
                                                 status_code=400)
-                cls = name
-                result.setdefault(cls, {})[0] = self._validate(cls, args)
+                if cls in result and index in result[cls]:
+                    raise fastapi.HTTPException(detail=f'Duplicate entry for {cls}.{index} in arglist',
+                                                status_code=400)
+                result.setdefault(cls, {})[index] = self._validate(cls, args)
+            elif name != 'default':
+                #if name in indices:
+                #    raise fastapi.HTTPException(detail=f'Un-numbered occurrence of name {name!r} in arglist',
+                #                                status_code=400)
+                if not self._multi_valued:
+                    raise fastapi.HTTPException(detail=f'Class default {name!r} not allowed in single valued arglist',
+                                                status_code=400)
+                if name in defaults_by_class:
+                    raise fastapi.HTTPException(detail=f'Encountered duplicate class default for class {name!r} in arglist',
+                                                status_code=400)
+                defaults_by_class[name] = self._validate(name, args)
+            else:
+                if not self._multi_valued:
+                    raise fastapi.HTTPException(detail=f'default section not allowed in single valued arglist',
+                                                status_code=400)
+                if defaults is not None:
+                    raise fastapi.HTTPException(detail='Encountered duplicate default section in arglist',
+                                                status_code=400)
+                # Find a common base class for all classes in the map
+                classes = list(self._map.values())
+                proposal_class, *test_classes = classes
+                result = None
+                for base in reversed(proposal_class.__mro__):
+                    if all(issubclass(c, base) for c in test_classes):
+                        result = base
+                    else:
+                        break
+                if result is None or not issubclass(result, ArgumentConsumer):
+                    raise fastapi.HTTPException(detail=f'Failed to find base class for resolving global defaults for {self._name!r}',
+                                                status_code=500)
+                defaults = self._validate(result, args)
+        for cls_name, value in defaults_by_class.items():
+            if cls_name not in result:
+                raise fastapi.HTTPException(detail=f'No entries (indices) to apply default {cls_name!r} to',
+                                            status_code=400)
+            for v in result[cls_name].values():
+                v.update(value)
+        if defaults is not None:
+            if not result:
+                raise fastapi.HTTPException(detail=f'No entries (indices) to apply defaults to in arglist',
+                                            status_code=400)
+            for indices in result.values():
+                for v in indices.values():
+                    v.update(defaults)
         return result
 
-    def _validate(self, name, obj):
+    def _validate(self, name, obj, *, klass=None):
         log.info(f'Parsing argument list for {name!r}')
         log.info(f'Raw input: {obj}')
-        try:
-            cls: typing.Type[ArgumentConsumer] = self._map[name]
-        except KeyError:
-            raise fastapi.HTTPException(
-                detail=f'Cannot find class {name!r} in map (available: {", ".join(self._map)})',
-                status_code=400
-            )
+        if klass is None:
+            try:
+                cls: typing.Type[ArgumentConsumer] = self._map[name]
+            except KeyError:
+                raise fastapi.HTTPException(
+                    detail=f'Cannot find class {name!r} in map (available: {", ".join(self._map)})',
+                    status_code=400
+                )
+        else:
+            cls = klass
         args = cls.get_arguments()
         if not isinstance(obj, dict):
             raise fastapi.HTTPException(

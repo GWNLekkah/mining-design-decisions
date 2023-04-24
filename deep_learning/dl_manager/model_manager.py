@@ -84,7 +84,7 @@ def save_single_model(model, conf: Config):
     } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4, cls=QueryJSONEncoder)
-    _upload_zip_data(directory, conf)
+    return _upload_zip_data(directory, conf)
 
 
 def save_stacking_model(meta_model,
@@ -108,7 +108,7 @@ def save_stacking_model(meta_model,
     } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4, cls=QueryJSONEncoder)
-    _upload_zip_data(directory, conf)
+    return _upload_zip_data(directory, conf)
 
 
 def save_voting_model(*models, conf: Config):
@@ -124,7 +124,7 @@ def save_voting_model(*models, conf: Config):
     } | _get_cli_settings(conf)
     with open(os.path.join(directory, 'model.json'), 'w') as file:
         json.dump(metadata, file, indent=4, cls=QueryJSONEncoder)
-    _upload_zip_data(directory, conf)
+    return _upload_zip_data(directory, conf)
 
 
 def _store_model(directory, number, model):
@@ -157,7 +157,7 @@ def _upload_zip_data(path, conf: Config):
     filename = shutil.make_archive('model', 'zip', path)
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
-    model.add_version(filename)
+    return model.add_version(filename)
 
 
 ##############################################################################

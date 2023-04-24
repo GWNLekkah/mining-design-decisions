@@ -3,59 +3,9 @@
   "help": "A Deep Learning CLI utility.",
   "commands": [
     {
-      "name": "gui",
-      "help": "Start an auxiliary analysis GUI.",
-      "args": []
-    },
-    {
-      "name": "list",
-      "help": "List options for various CLI options",
-      "args": [
-        {
-          "name": "arg",
-          "help": "Possible categories to list options for.",
-          "nargs": "1",
-          "type": "enum",
-          "options": [
-            "classifiers",
-            "inputs",
-            "outputs"
-          ],
-          "required": true
-        }
-      ]
-    },
-    {
-      "name": "hyperparams",
-      "help": "View hyper-parameters for a classifier",
-      "args": [
-        {
-          "name": "classifier",
-          "help": "Classifier to view. Use `list` for options.",
-          "nargs": "1",
-          "type": "str",
-          "required": true,
-          "options": []
-        }
-      ]
-    },
-    {
-      "name": "generator-params",
-      "help": "View parameters for a feature generator",
-      "args": [
-        {
-          "name": "generator",
-          "help": "Generator to view. Use `list` for options.",
-          "nargs": "1",
-          "type": "str",
-          "required": true,
-          "options": []
-        }
-      ]
-    },
-    {
       "name": "run",
       "help": "Train a classifier and store the results",
+      "private": true,
       "args": [
         {
           "name": "input-mode",
@@ -423,6 +373,7 @@
     {
       "name": "train",
       "help": "Variant of the `run` command which loads a config from the database.",
+      "private": false,
       "args": [
         {
           "name": "database-url",
@@ -454,6 +405,7 @@
     {
       "name": "predict",
       "help": "Use an existing classifier to make predictions on new data.",
+      "private": false,
       "args": [
         {
           "name": "model",
@@ -501,6 +453,7 @@
     {
       "name": "generate-embedding",
       "help": "Generate a word or document embedding for use in a feature generator",
+      "private": false,
       "args": [
         {
           "name": "embedding-id",
@@ -529,70 +482,61 @@
       ]
     },
     {
-      "name": "embedding-parameters",
-      "help": "Show available parameters for an embedding generator",
+      "name": "generate-embedding-internal",
+      "help": "Internal implementation endpoint for generate-embedding endpoint",
+      "private": true,
       "args": [
         {
-          "name": "generator",
-          "help": "Generator to use",
+          "name": "embedding-id",
+          "help": "Embedding to train",
+          "required": true,
+          "type": "str",
           "nargs": "1",
-          "type": "enum",
-          "options": [
-            "Word2VecGenerator",
-            "Doc2VecGenerator"
-          ],
-          "required": true
-        }
-      ]
-    },
-    {
-      "name": "embedding-generators",
-      "help": "Show available embedding generators",
-      "args": []
-    },
-    {
-      "name": "combination-strategies",
-      "help": "Give a comprehensive overview of all available model combination strategies.",
-      "args": []
-    },
-    {
-      "name": "serve",
-      "help": "Run the pipeline as a web api",
-      "args": [
-        {
-          "name": "port",
-          "type": "int",
-          "default": "9011",
-          "nargs": "1",
-          "help": "Port to bind to",
-          "required": false,
           "options": []
         },
         {
-          "name": "keyfile",
-          "help": "SLL Keyfile",
-          "type": "class",
-          "options": [
-            "pathlib.Path"
-          ],
+          "name": "embedding-config",
+          "help": "Config of the embedding",
+          "type": "arglist",
           "required": true,
-          "nargs": "1"
+          "nargs": 1,
+          "options": [
+            {
+              "map-path": "dl_manager.embeddings.generators",
+              "multi-valued": false
+            }
+          ]
         },
         {
-          "name": "certfile",
-          "help": "SSL cerfile",
-          "type": "class",
-          "options": [
-            "pathlib.Path"
-          ],
+          "name": "training-data-query",
+          "help": "Query to obtain data from the database for training",
+          "type": "query",
           "required": true,
-          "nargs": "1"
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "num-threads",
+          "help": "Number of threads to use for preprocessing",
+          "required": true,
+          "type": "int",
+          "nargs": "1",
+          "options": []
         }
       ]
     },
     {
       "name": "metrics",
       "help": "Endpoint to calculate various metrics based on predictions",
+      "private": false,
       "args": [
         {
           "name": "database-url",

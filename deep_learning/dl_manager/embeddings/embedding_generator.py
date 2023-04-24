@@ -121,7 +121,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         self.generate_embedding(documents, TEMP_EMBEDDING_PATH)
 
         # Upload binary file
-        embedding_id = conf.get('generate-embedding.embedding-id')
+        embedding_id = conf.get('generate-embedding-internal.embedding-id')
         embedding = db.get_embedding_by_id(embedding_id)
         embedding.upload_binary(str(TEMP_EMBEDDING_PATH))
 

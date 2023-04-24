@@ -146,14 +146,8 @@ def setup_app_constraints(app):
 
     app.register_callback('predict', run_prediction_command)
     app.register_callback('run', run_classification_command)
-    app.register_callback('list', run_list_command)
-    app.register_callback('hyperparams', run_hyper_params_command)
-    app.register_callback('generator-params', run_generator_params_command)
-    app.register_callback('combination-strategies', show_combination_strategies)
     app.register_callback('train', run_training_session)
     app.register_callback('generate-embedding', run_embedding_generation_command)
-    app.register_callback('embedding-parameters', run_embedding_param_command)
-    app.register_callback('embedding-generators', run_show_embeddings_command)
     app.register_callback('metrics', run_metrics_calculation_command)
 
     app.register_setup_callback(setup_security)
@@ -209,6 +203,13 @@ def setup_storage(conf: Config):
         )
         conf.set('system.storage.database-api', api)
 
+    if conf.get('system.management.active-command') == 'run':
+        class IdentityDict(dict):
+            def __missing__(self, key):
+                return key
+
+        conf.set('system.storage.auxiliary_map', IdentityDict())
+
 
 def setup_resources(conf: Config):
     endpoints_with_threads = [
@@ -261,137 +262,41 @@ STRATEGIES = {
     'voting': 'Train a strong classifier using voting. Ignores the simple combination strategy.'
 }
 
-
-def show_combination_strategies(conf: Config):
-    margin = max(map(len, STRATEGIES))
-    for strategy in sorted(STRATEGIES):
-        print(f'{strategy.rjust(margin)}: {STRATEGIES[strategy]}')
-
-
-##############################################################################
-##############################################################################
-# Command Dispatch - list command
-##############################################################################
-
-
-def run_list_command(conf: Config):
-    match conf.get('list.arg'):
-        case 'classifiers':
-            _show_classifier_list()
-        case 'inputs':
-            _show_input_mode_list()
-        case 'outputs':
-            _show_enum_list('Output Mode', OutputMode)
-
-
-def _show_classifier_list():
-    print(f'Available Classifiers:')
-    _print_keys(list(classifiers.models))
-
-
-def _show_input_mode_list():
-    print(f'Available Input Modes:')
-    _print_keys(list(feature_generators.generators))
-
-
-def _show_enum_list(name: str, obj):
-    print(f'Possible values for {name} setting:')
-    keys = [key for key in vars(obj) if not key.startswith('_') and key[0].isupper()]
-    _print_keys(keys)
-
-
-def _print_keys(keys):
-    keys.sort()
-    for key in keys:
-        print(f'\t* {key}')
-
-
-##############################################################################
-##############################################################################
-# Command Dispatch - hyperparams command
-##############################################################################
-
-
-def run_hyper_params_command(conf: Config):
-    classifier = conf.get('hyperparams.classifier')
-    if classifier not in classifiers.models:
-        return print(f'Unknown classifier: {classifier}')
-    cls = classifiers.models[classifier]
-    keys = []
-    name: str
-    for name, param in cls.get_arguments().items():
-        keys.append((f'{name} -- '
-                     f'[min, max] = [{param.minimum}, {param.maximum}] -- '
-                     f'default = {param.default}'))
-    print(f'Hyper-parameters for {classifier}:')
-    _print_keys(keys)
-
-
-##############################################################################
-##############################################################################
-# Command Dispatch - generator-params command
-##############################################################################
-
-
-def run_generator_params_command(conf: Config):
-    generator = conf.get('generator-params.generator')
-    if generator not in feature_generators.generators:
-        return print(f'Unknown feature generator: {generator}')
-    cls = feature_generators.generators[generator]
-    keys = []
-    name: str
-    for name, param in cls.get_arguments().items():
-        keys.append(f'{name} -- {param.description}')
-    print(f'Parameters for {generator}:')
-    _print_keys(keys)
-
-
-##############################################################################
-##############################################################################
-# Command Dispatch - embedding command
-#############################################################################
-
-def run_show_embeddings_command(conf: Config):
-    print(','.join(embeddings.generators.keys()))
-
-##############################################################################
-##############################################################################
-# Command Dispatch - embedding params  command
-#############################################################################
-
-
-def run_embedding_param_command(conf: Config):
-    generator: typing.Type[embeddings.AbstractEmbeddingGenerator]
-    generator = conf.get('embedding-parameters.generator')
-    if generator not in embeddings.generators:
-        return print(f'Unknown embedding generator: {generator}')
-    cls = embeddings.generators[generator]
-    keys = []
-    name: str
-    for name, param in cls.get_arguments().items():
-        keys.append(f'{name} -- {param.description}')
-    print(f'Parameters for {generator}:')
-    _print_keys(keys)
-
-
 ##############################################################################
 ##############################################################################
 # Command Dispatch - Embedding Generation
 #############################################################################
 
 
+def run_embedding_generation_command_internal(conf: Config):
+    embedding_config = conf.get('generate-embedding-internal.embedding-config')
+    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[
+        embedding_config['generator']
+    ]
+    query = conf.get('generate-embedding-internal.training-data-query')
+    handling = embedding_config['formatting-handling']
+    g = generator(**embedding_config['params'])
+    g.make_embedding(query, handling, conf=conf)
+
+
 def run_embedding_generation_command(conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     embedding_id = conf.get('generate-embedding.embedding-id')
     embedding = db.get_embedding_by_id(embedding_id)
-    embedding_config = embedding.config
-    generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[
-        embedding_config['generator']
-    ]
-    query = db_util.json_to_query(embedding_config['training-data-query'])
-    handling = embedding_config['formatting-handling']
-    g = generator(**embedding_config['params'])
-    g.make_embedding(query, handling, conf=conf)
+    settings = embedding.config
+    app: WebApp = conf.get('system.management.app')
+    new_conf = app.new_config('generate-embedding-internal', 'system')
+    conf.transfer(new_conf,
+                  'system.security.db-username',
+                  'system.security.db-password')
+    payload = {
+        'embedding-id': conf.get('generate-embedding.embedding-id'),
+        'training-data-query': settings['query'],
+        'embedding-config': settings['config'],
+        'num-threads': conf.get('generate-embedding.num-threads'),
+        'database-url': conf.get('generate-embedding.database-url')
+    }
+    return app.invoke_endpoint('generate-embedding-internal', new_conf, payload)
 
 
 ##############################################################################
@@ -443,7 +348,15 @@ def generate_features_and_get_data(architectural_only: bool = False,
                 issue_db_api.Query().not_tag('needs-review'),
                 conf.get('run.test-data-query')
             )
-            generator = feature_generators.generators[imode](conf, **mode_params)
+            # Load the most recently saved generator.
+            # The auxiliary map is set to the IdentityMap
+            # class, so everything should work.
+            with open(conf.get('system.storage.generators')) as file:
+                data = json.load(file)
+            generator_class = feature_generators.generators[data['generator']]
+            generator = generator_class(
+                conf, pretrained_generator_settings=data['settings']
+            )
             dataset = generator.generate_features(testing_query, output_mode)
             if labels_test is not None:
                 assert labels_test == dataset.labels
@@ -499,16 +412,6 @@ def select_architectural_only(datasets, labels, binary_labels):
 
 
 def run_classification_command(conf: Config):
-    # classifier = conf.get('run.classifier')
-    # input_mode = conf.get('run.input_mode')
-    # output_mode = conf.get('run.output_mode')
-    # params = conf.get('run.params')
-    # epochs = conf.get('run.epochs')
-    # k_cross = conf.get('run.k_cross')
-    # regenerate_data = not conf.get('run.cache-features')
-    # architectural_only = conf.get('run.architectural_only')
-    # hyper_parameters = conf.get('run.hyper-params')
-
     datasets_train, labels_train, datasets_test, labels_test, factory = _get_model_factory(conf)
 
     training_data = (
@@ -526,31 +429,32 @@ def run_classification_command(conf: Config):
         testing_data = None
 
     if conf.get('run.ensemble-strategy') != 'none':
-        learning.run_ensemble(factory,
-                              training_data,
-                              testing_data,
-                              OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
-                              conf=conf)
-        log.info(f'Model ID: {conf.get("system.training-start-time")}')
-        return
+        version, performances = learning.run_ensemble(factory,
+                                                      training_data,
+                                                      testing_data,
+                                                      OutputMode.from_string(
+                                                          conf.get('run.output-mode')).label_encoding,
+                                                      conf=conf)
+        return {'version-id': version, 'run-ids': performances}
 
     # 5) Invoke actual DL process
     if conf.get('run.k-cross') == 0 and not conf.get('run.cross-project'):
-        learning.run_single(factory(),
-                            conf.get('run.epochs'),
-                            OutputMode.from_string(conf.get('run.output-mode')),
-                            OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
-                            training_data,
-                            testing_data,
-                            conf=conf)
+        version, performances = learning.run_single(factory(),
+                                                    conf.get('run.epochs'),
+                                                    OutputMode.from_string(conf.get('run.output-mode')),
+                                                    OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
+                                                    training_data,
+                                                    testing_data,
+                                                    conf=conf)
     else:
-        learning.run_cross(factory,
-                           conf.get('run.epochs'),
-                           OutputMode.from_string(conf.get('run.output-mode')),
-                           OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
-                           training_data,
-                           testing_data,
-                           conf=conf)
+        version, performances = learning.run_cross(factory,
+                                                   conf.get('run.epochs'),
+                                                   OutputMode.from_string(conf.get('run.output-mode')),
+                                                   OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
+                                                   training_data,
+                                                   testing_data,
+                                                   conf=conf)
+    return {'version-id': version, 'run-ids': performances}
 
 def _get_model_factory(conf: Config):
     ((datasets, labels), (datasets_test, labels_test)) = generate_features_and_get_data(
@@ -753,7 +657,8 @@ def run_metrics_calculation_command(conf: Config):
     # where foldi is list of metrics per epoch.
     result = {
         'folds': results_per_fold,
-        'aggregated': _compute_aggregate_metrics(metric_settings, results_per_fold)
+        'aggregated': [_compute_aggregate_metrics(metric_settings, [fold[e] for fold in results_per_fold])
+                       for e in range(len(results_per_fold[0]))]
     }
     return results
 
@@ -765,18 +670,10 @@ def _compute_aggregate_metrics(metric_settings, results_per_fold):
         metric_name = metric['metric']
         variant = metric['variant']
         key = f'{metric_name}[{variant}]'
-        result[mode][key] = {}
-        result[mode][key]['average'] = [
-            statistics.mean([v[mode][key] for v in values])
-            for values in zip(*results_per_fold)
-        ]
-        if len(results_per_fold) == 1:
-            result[mode][key]['standard_deviation'] = [None] * len(result[mode][key]['average'])
-        else:
-            result[mode][key]['standard_deviation'] = [
-                statistics.stdev([v[mode][key] for v in values])
-                for values in zip(*results_per_fold)
-            ]
+        result[mode][key] = {
+            'mean': statistics.mean(fold[mode][key] for fold in results_per_fold),
+            'std': statistics.stdev(fold[mode][key] for fold in results_per_fold) if len(results_per_fold) > 1 else None
+        }
     return result
 
 
