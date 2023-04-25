@@ -270,8 +270,10 @@ STRATEGIES = {
 
 def run_embedding_generation_command_internal(conf: Config):
     embedding_config = conf.get('generate-embedding-internal.embedding-config')
+    generator, index = next(embedding_config.items())
+    embedding_config = index[0]
     generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[
-        embedding_config['generator']
+        generator
     ]
     query = conf.get('generate-embedding-internal.training-data-query')
     handling = embedding_config['formatting-handling']
