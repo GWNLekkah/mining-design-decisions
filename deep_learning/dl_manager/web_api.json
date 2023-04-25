@@ -9,19 +9,26 @@
       "args": [
         {
           "name": "input-mode",
-          "help": "Generator to use. Use `list` for options.",
+          "help": "Generator to use.",
           "nargs": "+",
-          "type": "str",
+          "type": "dynamic_enum",
           "required": true,
-          "options": []
+          "options": [
+            "dl_manager.feature_generators.generators"
+          ]
         },
         {
           "name": "output-mode",
-          "help": "Output mode to use. Use `list` for options.",
+          "help": "Output mode to use.",
           "nargs": "1",
-          "type": "str",
+          "type": "enum",
           "required": true,
-          "options": []
+          "options": [
+            "Detection",
+            "Classification3Simplified",
+            "Classification3",
+            "Classification8"
+          ]
         },
         {
           "name": "params",
@@ -59,9 +66,11 @@
           "name": "classifier",
           "help": "Classifier to use. Use `list` for options",
           "nargs": "+",
-          "type": "str",
+          "type": "dynamic_enum",
           "required": true,
-          "options": []
+          "options": [
+            "dl_manager.classifier.models"
+          ]
         },
         {
           "name": "epochs",
@@ -214,11 +223,13 @@
           "name": "stacking-meta-classifier",
           "help": "Classifier to use as meta-classifier in stacking.",
           "nargs": "1",
-          "type": "str",
+          "type": "dynamic_enum",
           "required": false,
           "null-unless": {"name": "ensemble-strategy", "value": "stacking"},
           "default": null,
-          "options": []
+          "options": [
+            "dl_manager.classifiers.models"
+          ]
         },
         {
           "name": "stacking-meta-classifier-hyper-parameters",
@@ -359,14 +370,6 @@
           "nargs": "1",
           "required": false,
           "options": []
-        },
-        {
-          "name": "num-threads",
-          "help": "Number of threads to use for preprocessing",
-          "required": true,
-          "type": "int",
-          "nargs": "1",
-          "options": []
         }
       ]
     },
@@ -389,14 +392,6 @@
           "type": "str",
           "default": "",
           "required": false,
-          "nargs": "1",
-          "options": []
-        },
-        {
-          "name": "num-threads",
-          "help": "Number of threads to use for preprocessing",
-          "required": true,
-          "type": "int",
           "nargs": "1",
           "options": []
         }
@@ -439,14 +434,6 @@
           "required": true,
           "nargs": "1",
           "options": []
-        },
-        {
-          "name": "num-threads",
-          "help": "Number of threads to use for preprocessing",
-          "required": true,
-          "type": "int",
-          "nargs": "1",
-          "options": []
         }
       ]
     },
@@ -470,14 +457,6 @@
           "required": true,
           "nargs": "1",
           "options": []
-        },
-        {
-          "name": "num-threads",
-          "help": "Number of threads to use for preprocessing",
-          "required": true,
-          "type": "int",
-          "nargs": "1",
-          "options": []
         }
       ]
     },
@@ -493,6 +472,16 @@
           "type": "str",
           "nargs": "1",
           "options": []
+        },
+        {
+          "name": "embedding-generator",
+          "help": "Type of embedding to train.",
+          "required": true,
+          "type": "dynamic_enum",
+          "nargs": "1",
+          "options": [
+            "dl_manager.embeddings.generators"
+          ]
         },
         {
           "name": "embedding-config",
@@ -520,14 +509,6 @@
           "help": "URL of the database (wrapper)",
           "type": "str",
           "required": true,
-          "nargs": "1",
-          "options": []
-        },
-        {
-          "name": "num-threads",
-          "help": "Number of threads to use for preprocessing",
-          "required": true,
-          "type": "int",
           "nargs": "1",
           "options": []
         }

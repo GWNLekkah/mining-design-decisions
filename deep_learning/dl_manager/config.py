@@ -435,7 +435,7 @@ class _ArgumentValidator:
         self._options = spec['options']
         if self._nargs not in ('1', '*', '+'):
             raise ValueError(f'[{self.name}] Invalid nargs: {self._nargs}')
-        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query'):
+        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query', 'dynamic_enum'):
             raise ValueError(f'[{self.name}] Invalid type: {self._type}')
         if self._type == 'class':
             if len(self._options) != 1:
@@ -456,6 +456,12 @@ class _ArgumentValidator:
                 lookup_map=getattr(importlib.import_module(module), item),
                 multi_valued=self._options[0]['multi-valued']
             )
+        if self._type == 'dynamic_enum':
+            if len(self._options) != 1 or not isinstance(self._options[0], str):
+                raise ValueError(
+                    f'[{self.name}] Argument of type "dynamic_enum" requires exactly one option of type "str".')
+            module, item = self._options[0].rsplit('.', maxsplit=1)
+            self._options[0] = getattr(importlib.import_module(module), item)
 
     @property
     def depends(self):
@@ -553,6 +559,18 @@ class _ArgumentValidator:
                     )
             case 'arglist':
                 return self._options[0].validate(x)
+            case 'dynamic_enum':
+                if not isinstance(x, str):
+                    raise fastapi.HTTPException(
+                        detail=f'{self.name!r} dynamic_enum argument must be of type string, got {x.__class__.__name__}',
+                        status_code=400
+                    )
+                if x not in self._options:
+                    raise fastapi.HTTPException(
+                        detail=f'Invalid option for {self.name!r}: {x} (valid options: {self._options})',
+                        status_code=400
+                    )
+                return x
 
     def _raise_invalid_type(self, expected, got):
         raise fastapi.HTTPException(

@@ -212,13 +212,10 @@ def setup_storage(conf: Config):
 
 
 def setup_resources(conf: Config):
-    endpoints_with_threads = [
-        'run', 'train', 'predict', 'generate-embeddings'
-    ]
-    if (cmd := conf.get('system.management.active-command')) in endpoints_with_threads:
-        conf.clone(f'{cmd}.num-threads', 'system.resources.threads')
-        n = conf.get('system.resources.threads')
-        log.info(f'Number of available threads: {n}')
+    conf.set(
+        'system.resources.threads',
+        int(os.environ.get('DL_MANAGER_NUM_THREADS', '1'))
+    )
 
 
 ##############################################################################
@@ -270,14 +267,13 @@ STRATEGIES = {
 
 def run_embedding_generation_command_internal(conf: Config):
     embedding_config = conf.get('generate-embedding-internal.embedding-config')
-    generator, index = next(embedding_config.items())
-    embedding_config = index[0]
+    generator_name = conf.get('generate-embedding-internal.embedding-generator')
     generator: typing.Type[embeddings.AbstractEmbeddingGenerator] = embeddings.generators[
-        generator
+        generator_name
     ]
     query = conf.get('generate-embedding-internal.training-data-query')
     handling = embedding_config['formatting-handling']
-    g = generator(**embedding_config['params'])
+    g = generator(**embedding_config[generator_name][0])
     g.make_embedding(query, handling, conf=conf)
 
 
@@ -295,7 +291,7 @@ def run_embedding_generation_command(conf: Config):
         'embedding-id': conf.get('generate-embedding.embedding-id'),
         'training-data-query': settings['query'],
         'embedding-config': settings['config'],
-        'num-threads': conf.get('generate-embedding.num-threads'),
+        'embedding-generator': settings['generator'],
         'database-url': conf.get('generate-embedding.database-url')
     }
     return app.invoke_endpoint('generate-embedding-internal', new_conf, payload)
