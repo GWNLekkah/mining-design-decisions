@@ -1,7 +1,10 @@
 import collections
-import math
+import json
+import os
 
-from ..config import Argument
+import issue_db_api
+
+from ..config import Argument, StringArgument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
@@ -17,26 +20,37 @@ class TfidfGenerator(AbstractFeatureGenerator):
                          metadata,
                          args: dict[str, str]):
         if self.pretrained is None:
-            document_frequency = collections.defaultdict(int)
-            for document in tokenized_issues:
-                for word in set(document):
-                    document_frequency[word] += 1
-            inverse_document_frequency = collections.defaultdict(float)
-            inverse_document_frequency.update({
-                term: math.log10(len(tokenized_issues) / count)
-                for term, count in document_frequency.items()
-            })
-            # Layout (in words) of the resulting feature vectors
-            layout = sorted(document_frequency)
+            db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
+            embedding = db.get_embedding_by_id(self.params['embedding-id'])
+            filename = self.params['embedding-id'] + '.bin'
+            if os.path.exists(filename):
+                os.remove(filename)
+            embedding.download_binary(filename)
+
+            with open(filename) as file:
+                tfidf_data = json.load(file)
+
+            layout = tfidf_data['layout']
+            inverse_document_frequency = tfidf_data['idf']
+
             self.save_pretrained(
                 {
-                    'idf': inverse_document_frequency,
-                    'word-order': layout
-                }
+                    'idf-file': filename
+                },
+                [
+                    filename
+                ]
             )
         else:
-            inverse_document_frequency = self.pretrained['idf']
-            layout = self.pretrained['word-order']
+            aux_map = self.conf.get('system.storage.auxiliary_map')
+            filename = aux_map[self.pretrained['idf-file']]
+            with open(filename) as file:
+                tfidf_data = json.load(file)
+
+            layout = tfidf_data['layout']
+            inverse_document_frequency = tfidf_data['idf']
+
+
         feature_vectors = []
         for document in tokenized_issues:
             term_counts = collections.defaultdict(int)
@@ -51,8 +65,6 @@ class TfidfGenerator(AbstractFeatureGenerator):
             ]
             feature_vectors.append(vector)
         assert len(set(len(x) for x in feature_vectors)) == 1
-        print(len(feature_vectors))
-        print(set(len(x) for x in feature_vectors))
         return {
             'features': feature_vectors,
             'feature_shape': len(layout),
@@ -68,4 +80,9 @@ class TfidfGenerator(AbstractFeatureGenerator):
 
     @staticmethod
     def get_arguments() -> dict[str, Argument]:
-        return super(TfidfGenerator, TfidfGenerator).get_arguments()
+        return super(TfidfGenerator, TfidfGenerator).get_arguments() | {
+            'dictionary-id': StringArgument(
+                name='dictionary-id',
+                description='ID of the (pretrained) dictionary to use for BOW feature generation.'
+            )
+        }
