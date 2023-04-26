@@ -83,3 +83,33 @@ def _get_soft_voting_predictions(output_mode: OutputMode, predictions):
         return confidences
     else:
         return numpy.argmax(confidences, axis=1)
+
+
+def get_voting_confidences(output_mode: OutputMode, predictions, voting_mode):
+    if voting_mode == 'hard':
+        return _get_hard_voting_confidences(output_mode, predictions.copy())
+    else:
+        return _get_soft_voting_confidences(output_mode, predictions.copy())
+
+
+def _get_hard_voting_confidences(output_mode: OutputMode, predictions):
+    if output_mode.output_encoding == OutputEncoding.Binary:
+        n = len(predictions)
+        rounded = predictions.copy()
+        rounded[rounded < 0.5] = False
+        rounded[rounded >= 0.5] = True
+        confidences = numpy.sum(rounded, axis=0) / n
+        if output_mode.output_size == 1:
+            confidences = confidences.flatten()
+        return confidences
+    else:
+        confidences = []
+        for index, cls in enumerate(_get_hard_voting_predictions_one_hot(output_mode, predictions)):
+            confidences.append(predictions[:, index, cls].mean())
+
+
+def _get_soft_voting_confidences(output_mode: OutputMode, predictions):
+    confidences = numpy.sum(predictions, axis=0) / len(predictions)
+    if output_mode.output_size == 1:
+        confidences = confidences.flatten()
+    return confidences

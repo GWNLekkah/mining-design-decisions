@@ -163,6 +163,11 @@ def predict_voting_model(path: pathlib.Path,
                        issue_ids,
                        model_id,
                        model_version,
+                       probabilities=voting_util.get_voting_confidences(
+                           output_mode,
+                           predictions,
+                           model_metadata['model-settings']['voting_mode']
+                       ),
                        conf=conf)
 
 
