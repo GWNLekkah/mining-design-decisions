@@ -69,7 +69,7 @@
           "type": "dynamic_enum",
           "required": true,
           "options": [
-            "dl_manager.classifier.models"
+            "dl_manager.classifiers.models"
           ]
         },
         {
