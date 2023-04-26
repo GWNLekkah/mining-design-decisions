@@ -30,7 +30,7 @@ class DictionaryGenerator(AbstractEmbeddingGenerator):
 
     @staticmethod
     def get_arguments() -> dict[str, Argument]:
-        return {
+        return super(DictionaryGenerator, DictionaryGenerator).get_arguments() | {
             'min-doc-count': IntArgument(
                 name='min-doc-count',
                 description='Minimum document count for a word to be included in the dictionary',

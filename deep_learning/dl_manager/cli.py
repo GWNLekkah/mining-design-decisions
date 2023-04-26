@@ -147,6 +147,7 @@ def setup_app_constraints(app):
     app.register_callback('run', run_classification_command)
     app.register_callback('train', run_training_session)
     app.register_callback('generate-embedding', run_embedding_generation_command)
+    app.register_callback('generate-embedding-internal', run_embedding_generation_command_internal)
     app.register_callback('metrics', run_metrics_calculation_command)
 
     app.register_setup_callback(setup_security)
@@ -186,7 +187,7 @@ def setup_storage(conf: Config):
     conf.set('system.storage.file_prefix', 'dl_manager')
 
     endpoints_with_database = [
-        'run', 'train', 'predict', 'generate-embeddings'
+        'run', 'train', 'predict', 'generate-embedding', 'generate-embedding-internal'
     ]
     if (cmd := conf.get('system.management.active-command')) in endpoints_with_database:
         conf.clone(f'{cmd}.database-url', 'system.storage.database-url')
@@ -228,7 +229,6 @@ def run_training_session(conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     settings = db.get_model_by_id(config_id).config
     settings |= {
-        'num-threads': conf.get('system.resources.threads'),
         'database-url': conf.get('system.storage.database-url'),
         'model-id': conf.get('train.model-id')
     }
@@ -271,9 +271,8 @@ def run_embedding_generation_command_internal(conf: Config):
         generator_name
     ]
     query = conf.get('generate-embedding-internal.training-data-query')
-    handling = embedding_config['formatting-handling']
     g = generator(**embedding_config[generator_name][0])
-    g.make_embedding(query, handling, conf=conf)
+    g.make_embedding(query, conf=conf)
 
 
 def run_embedding_generation_command(conf: Config):
@@ -288,8 +287,8 @@ def run_embedding_generation_command(conf: Config):
                   'system.security.db-password')
     payload = {
         'embedding-id': conf.get('generate-embedding.embedding-id'),
-        'training-data-query': settings['query'],
-        'embedding-config': settings['config'],
+        'training-data-query': settings['training-data-query'],
+        'embedding-config': settings['params'],
         'embedding-generator': settings['generator'],
         'database-url': conf.get('generate-embedding.database-url')
     }

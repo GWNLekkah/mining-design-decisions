@@ -7,7 +7,7 @@ import nltk
 import issue_db_api
 
 from .. import accelerator
-from ..config import Config, BoolArgument, Argument, ArgumentConsumer
+from ..config import Config, BoolArgument, Argument, ArgumentConsumer, EnumArgument
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
 from ..logger import get_logger
@@ -46,7 +46,6 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
 
     def make_embedding(self,
                        query: issue_db_api.Query,
-                       formatting_handling: str,
                        conf: Config):
         # Loading issues from database
         # db: DatabaseAPI = conf.get('system.storage.database-api')
@@ -57,6 +56,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         log.info(f'Training embedding on {len(issues)} issues (query: {query})')
 
         # Setting up NLP stuff
+        formatting_handling = self.params['formatting-handling']
         handling = FormattingHandling.from_string(formatting_handling)
         stopwords = nltk.corpus.stopwords.words('english')
         use_lemmatization = self.params['use-lemmatization']
@@ -148,5 +148,10 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
                 name='use-pos',
                 description='Enhance words in the text with part of speech information',
                 default=False,
+            ),
+            'formatting-handling': EnumArgument(
+                name='formatting-handling',
+                description='How to handle formatting in issues.',
+                options=['markers', 'keep', 'remove']
             )
         }

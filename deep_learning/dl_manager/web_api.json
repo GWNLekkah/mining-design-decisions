@@ -268,7 +268,7 @@
           "help": "Mode for the voting ensemble. Either hard of sort voting",
           "nargs": "1",
           "type": "enum",
-          "default": "hard",
+          "default": null,
           "required": false,
           "null-unless": {"name":  "ensemble-strategy", "value":  "voting"},
           "options": [

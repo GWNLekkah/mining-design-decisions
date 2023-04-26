@@ -152,7 +152,10 @@ class Config:
         namespace = self._resolve(name, 'get', path)
         if prop not in namespace:
             raise NoSuchSetting(name, 'get')
-        return namespace[prop]
+        value = namespace[prop]
+        if value is self.NOT_SET:
+            raise NotSet(name)
+        return value
 
     def set(self, name: str, value):
         *path, prop = self._normalize_name(name)
@@ -372,6 +375,7 @@ class _Endpoint:
             raise fastapi.HTTPException(detail='Expected a JSON object',
                                         status_code=400)
         parsed = {}
+        not_handled = set(obj)
         for name in self._order:
             try:
                 value = obj[name]
@@ -390,11 +394,18 @@ class _Endpoint:
                 parsed[name] = validator.validate_conditionally(value, parsed[validator.depends])
             else:
                 parsed[name] = validator.validate(value)
+            if name in not_handled:
+                not_handled.remove(name)
         missing = self._required - set(parsed.keys())
         if missing:
             raise fastapi.HTTPException(
                 status_code=400,
                 detail=f'Endpoint {self.name!r} is missing the following required arguments: {", ".join(missing)}'
+            )
+        if not_handled:
+            raise fastapi.HTTPException(
+                status_code=400,
+                detail=f'Endpoint {self.name!r} received unknown arguments: {", ".join(not_handled)}'
             )
         #for name in set(self._defaults) - set(parsed):
         #    val = self._validators[name]
@@ -461,7 +472,7 @@ class _ArgumentValidator:
                 raise ValueError(
                     f'[{self.name}] Argument of type "dynamic_enum" requires exactly one option of type "str".')
             module, item = self._options[0].rsplit('.', maxsplit=1)
-            self._options[0] = getattr(importlib.import_module(module), item)
+            self._options[0] = set(getattr(importlib.import_module(module), item))
 
     @property
     def depends(self):
@@ -565,7 +576,7 @@ class _ArgumentValidator:
                         detail=f'{self.name!r} dynamic_enum argument must be of type string, got {x.__class__.__name__}',
                         status_code=400
                     )
-                if x not in self._options:
+                if x not in self._options[0]:
                     raise fastapi.HTTPException(
                         detail=f'Invalid option for {self.name!r}: {x} (valid options: {self._options})',
                         status_code=400

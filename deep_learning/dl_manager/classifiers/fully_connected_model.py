@@ -22,7 +22,7 @@ class FullyConnectedModel(AbstractModel):
             current = tf.keras.layers.Flatten()(next_layer)
         else:
             current = next_layer
-        n_layers = kwargs['number-of-hidden-layers', 1]
+        n_layers = kwargs['number-of-hidden-layers']
         for i in range(1, n_layers + 1):
             layer_size = kwargs[f'hidden-layer-{i}-size']
             current = tf.keras.layers.Dense(layer_size)(current)

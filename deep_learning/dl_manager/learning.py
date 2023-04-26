@@ -353,7 +353,7 @@ def upsample(features, labels):
 def dump_metrics(runs, *, conf: Config, description: str):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
-    return model.add_test_run(runs, description=description)
+    return model.add_test_run(runs, description=description).run_id
 
 ##############################################################################
 ##############################################################################
@@ -579,7 +579,7 @@ def run_voting_ensemble(factory,
 def _save_voting_data(data, description, *, conf: Config):
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
-    return model.add_test_run(data, description=description)
+    return model.add_test_run(data, description=description).run_id
 
 
 def _get_voting_predictions(truth, predictions, *, conf: Config):
