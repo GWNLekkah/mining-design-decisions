@@ -501,7 +501,7 @@
           "help": "Config of the embedding",
           "type": "arglist",
           "required": true,
-          "nargs": 1,
+          "nargs": "1",
           "options": [
             {
               "map-path": "dl_manager.embeddings.generators",
