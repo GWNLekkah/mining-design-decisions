@@ -264,6 +264,19 @@
           "options": []
         },
         {
+          "name": "voting-mode",
+          "help": "Mode for the voting ensemble. Either hard of sort voting",
+          "nargs": "1",
+          "type": "enum",
+          "default": "hard",
+          "required": false,
+          "null-unless": {"name":  "ensemble-strategy", "value":  "voting"},
+          "options": [
+            "soft",
+            "hard"
+          ]
+        },
+        {
           "name": "use-early-stopping",
           "help": "If specified, use early stopping.",
           "nargs": "1",

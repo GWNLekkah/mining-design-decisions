@@ -585,5 +585,6 @@ def _save_voting_data(data, description, *, conf: Config):
 def _get_voting_predictions(truth, predictions, *, conf: Config):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     final_predictions = voting_util.get_voting_predictions(output_mode,
-                                                           predictions)
+                                                           predictions,
+                                                           conf.get('run.voting-mode'))
     return final_predictions

@@ -28,7 +28,6 @@ from .model_io import OutputMode
 from . import data_manager
 from . import embeddings
 
-from . import db_util
 from . import learning
 from .config import WebApp, Config
 from .logger import get_logger

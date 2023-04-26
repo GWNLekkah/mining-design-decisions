@@ -150,7 +150,8 @@ def predict_voting_model(path: pathlib.Path,
                                                 model_metadata['child-models'],
                                                 features)
     voting_predictions = voting_util.get_voting_predictions(output_mode,
-                                                            predictions)
+                                                            predictions,
+                                                            model_metadata['model-settings']['voting_mode'])
     if output_mode.output_encoding == OutputEncoding.OneHot:
         converted_predictions = _predictions_to_canonical(output_mode,
                                                           voting_predictions)
