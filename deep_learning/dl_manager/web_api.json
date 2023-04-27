@@ -84,7 +84,7 @@
           "name": "split-size",
           "help": "Size of testing and validation splits. Ignored when k-cross > 0",
           "type": "float",
-          "default": "0.2",
+          "default": 0.2,
           "nargs": "1",
           "required": false,
           "options": []
@@ -102,7 +102,7 @@
           "name": "k-cross",
           "help": "Enable k-fold cross-validation.",
           "type": "int",
-          "default": "0",
+          "default": 0,
           "nargs": "1",
           "required": false,
           "options": []
@@ -290,7 +290,7 @@
           "help": "Patience used when using early stopping",
           "nargs": "1",
           "type": "int",
-          "default": "5",
+          "default": 5,
           "required": false,
           "options": []
         },
@@ -299,7 +299,7 @@
           "help": "Minimum delta used when using early stopping. One entry for every attribute used.",
           "nargs": "+",
           "type": "float",
-          "default": "0.001",
+          "default": [0.001],
           "required": false,
           "options": []
         },

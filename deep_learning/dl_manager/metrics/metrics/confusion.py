@@ -40,7 +40,7 @@ def compute_confusion_binary(y_true, y_pred) -> tuple[float, MetricSet]:
     accuracy, classes = compute_confusion_multi_class(y_true,
                                                       y_pred,
                                                       labels)
-    return accuracy, classes['Architectural']
+    return accuracy, {'Architectural': classes['Architectural']}
 
 
 def compute_confusion_multi_class(y_true,

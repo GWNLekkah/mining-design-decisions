@@ -29,7 +29,7 @@ class MetricCalculationManager:
                 )
             self._y_pred = self._convert_labels_to_binary(y_pred_classes)
             self._y_true = self._convert_labels_to_binary(y_true_converted)
-            self._global_acc = self._confusion = confusion.compute_confusion_binary(
+            self._global_acc, self._confusion = confusion.compute_confusion_binary(
                 self._y_true, self._y_pred
             )
         else:
