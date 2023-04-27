@@ -308,7 +308,7 @@
           "help": "Attribute(s) to use for early stopping (from the validation set)",
           "nargs": "+",
           "type": "str",
-          "default": "loss",
+          "default": ["loss"],
           "required": false,
           "options": []
         },
