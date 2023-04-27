@@ -17,6 +17,7 @@ from __future__ import annotations
 
 import abc
 import collections
+import copy
 import graphlib
 import importlib
 import json
@@ -196,8 +197,9 @@ class WebApp:
         self._config_factory = ConfigFactory()
         self._register_system_properties()
         with open(filename) as file:
-            spec = json.load(file)
-        self._build_endpoints(spec['commands'])
+            self._spec = json.load(file)
+        self._build_endpoints(copy.deepcopy(self._spec)['commands'])
+        self._add_static_endpoints()
 
     def _register_system_properties(self):
         self._config_factory.register_namespace('system.storage')
@@ -262,7 +264,27 @@ class WebApp:
         if not endpoint.private:
             self._router.post('/' + endpoint.name, description=endpoint.description)(endpoint.invoke)
         self._endpoints[endpoint.name] = endpoint
-        # self._router.add_api_route(endpoint.name, endpoint, description=endpoint.description)
+
+    def _add_static_endpoints(self):
+        @self._router.get('/endpoints')
+        async def get_endpoints():
+            return self._spec
+
+        for cmd in self._spec['commands']:
+            for arg in cmd['args']:
+                if arg['type'] != 'arglist':
+                    continue
+                self._add_arglist_endpoint(cmd['name'], arg)
+
+    def _add_arglist_endpoint(self, cmd_name, spec):
+        @self._router.get(f'/arglists/{cmd_name}/{spec["name"]}')
+        async def get_arglist():
+            module, item = spec['options'][0]['map-path'].rsplit('.', maxsplit=1)
+            mapping = getattr(importlib.import_module(module), item)
+            return {
+                name: [arg.get_json_spec() for arg in cls.get_arguments().values()]
+                for name, cls in mapping.items()
+            }
 
     def register_callback(self, event, func):
         self._callbacks[event] = func
@@ -644,6 +666,17 @@ class Argument(abc.ABC):
     def legal_values(self):
         pass
 
+    @abc.abstractmethod
+    def get_json_spec(self):
+        return {
+            'name': self._name,
+            'description': self._description,
+            'type': self._data_type.__name__,
+            'has-default': self.has_default,
+            'default': self._default if self.has_default else None,
+            'readable-options': self.legal_values
+        }
+
     def raise_invalid(self, msg):
         raise fastapi.HTTPException(
             detail=f'Argument {self.argument_name!r} is invalid: {msg}',
@@ -677,6 +710,12 @@ class FloatArgument(Argument):
         hi = self._max if self._max is not None else float('inf')
         return f'[{lo}, {hi}]'
 
+    def get_json_spec(self):
+        return super().get_json_spec() | {
+            'minimum': self._min,
+            'maximum': self._max
+        }
+
 
 class IntArgument(Argument):
 
@@ -706,6 +745,12 @@ class IntArgument(Argument):
             return f'[{lo}, {hi}]'
         return range(self._min, self._max + 1)
 
+    def get_json_spec(self):
+        return super().get_json_spec() | {
+            'minimum': self._min,
+            'maximum': self._max
+        }
+
 
 class EnumArgument(Argument):
 
@@ -730,6 +775,11 @@ class EnumArgument(Argument):
     def legal_values(self):
         return self._options
 
+    def get_json_spec(self):
+        return super().get_json_spec() | {
+            'options': self._options
+        }
+
 
 class BoolArgument(Argument):
 
@@ -744,6 +794,9 @@ class BoolArgument(Argument):
     def legal_values(self):
         return [False, True]
 
+    def get_json_spec(self):
+        return super().get_json_spec() | {}
+
 
 class StringArgument(Argument):
 
@@ -757,6 +810,9 @@ class StringArgument(Argument):
 
     def legal_values(self):
         return 'Any'
+
+    def get_json_spec(self):
+        return super().get_json_spec() | {}
 
 
 class QueryArgument(Argument):
@@ -774,6 +830,9 @@ class QueryArgument(Argument):
 
     def legal_values(self):
         return ''
+
+    def get_json_spec(self):
+        return super().get_json_spec() | {}
 
 
 class ArgumentListParser:

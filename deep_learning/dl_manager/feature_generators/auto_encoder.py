@@ -130,7 +130,7 @@ class AutoEncoder(AbstractAutoEncoder):
                     'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
                     'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
                 ],
-                name=f'layer-{i}-activation',
-                description='Activation to use in the hiddne layers'
+                name=f'activation-function',
+                description='Activation to use in the hidden layers'
             )
         }
