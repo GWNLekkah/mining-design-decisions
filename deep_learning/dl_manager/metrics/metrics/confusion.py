@@ -64,7 +64,7 @@ def compute_confusion_multi_label(y_true,
     matrices = multilabel_confusion_matrix(y_true, y_pred)
     class_metrics = {}
     for matrix, label in zip(matrices, labels):
-        class_metrics[label] = extract_confusion(matrix, 0, len(y_true))
+        class_metrics[label] = extract_confusion(matrix, 1, len(y_true))
     if all_negative_is_class:
         binary_y_true = (y_true == [0, 0, 0]).all(axis=0)
         binary_y_pred = (y_pred == [0, 0, 0]).all(axis=0)

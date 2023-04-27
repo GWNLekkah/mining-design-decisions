@@ -39,13 +39,6 @@ class OutputMode(enum.Enum):
             case 'Detection':
                 return cls.Detection
             case 'Classification3':
-                warnings.warn('Classification3 (Binary) is outdated. '
-                              'Using this option requires carefully re-implementing '
-                              'support for this mode in all places where we deal with '
-                              'labels. This can be done by following the code paths '
-                              'for all normal and ensemble models, both in training/evaluation mode, '
-                              'and in prediction mode. The involved code will raise exceptions '
-                              'when Classification3 is used as input mode.')
                 return cls.Classification3
             case 'Classification3Simplified':
                 return cls.Classification3Simplified
