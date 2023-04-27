@@ -93,7 +93,8 @@ class MetricCalculationManager:
                                                                self._y_pred,
                                                                labels,
                                                                all_negative_is_class=self._include_non_arch,
-                                                               all_negative_class_name='Non-Architectural')
+                                                               all_negative_class_name='Non-Architectural',
+                                                               all_negative_class_pattern=self._output_mode.non_architectural_pattern)
             case OutputMode.Classification3Simplified:
                 return confusion.compute_confusion_multi_class(self._y_true,
                                                                self._y_pred,
