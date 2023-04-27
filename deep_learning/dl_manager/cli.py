@@ -187,7 +187,12 @@ def setup_storage(conf: Config):
     conf.set('system.storage.file_prefix', 'dl_manager')
 
     endpoints_with_database = [
-        'run', 'train', 'predict', 'generate-embedding', 'generate-embedding-internal'
+        'run',
+        'train',
+        'predict',
+        'generate-embedding',
+        'generate-embedding-internal',
+        'metrics'
     ]
     if (cmd := conf.get('system.management.active-command')) in endpoints_with_database:
         conf.clone(f'{cmd}.database-url', 'system.storage.database-url')
@@ -640,7 +645,7 @@ def run_metrics_calculation_command(conf: Config):
                 results_per_fold.append(
                     [
                         _calculate_metrics(metric_settings, fold, e, model_config, conf=conf)
-                        for e in range(len(results['predictions']['training']))
+                        for e in range(len(fold['predictions']['training']))
                     ]
                 )
             case _ as x:
@@ -648,28 +653,36 @@ def run_metrics_calculation_command(conf: Config):
                 results_per_fold.append([
                     _calculate_metrics(metric_settings, fold, epoch, model_config, conf=conf)
                 ])
-    # results_per_fold has the following structure:
-    #   [ fold1, fold2, ..., foldn]
-    # where foldi is list of metrics per epoch.
     result = {
         'folds': results_per_fold,
-        'aggregated': [_compute_aggregate_metrics(metric_settings, [fold[e] for fold in results_per_fold])
-                       for e in range(len(results_per_fold[0]))]
     }
-    return results
+    if conf.get('metrics.epoch') != 'all':
+        result['aggregated'] = _compute_aggregate_metrics(metric_settings,
+                                                          [fold[0] for fold in results_per_fold])
+    return result
 
 
 def _compute_aggregate_metrics(metric_settings, results_per_fold):
     result = {'training': {}, 'validation': {}, 'testing': {}}
+    print(results_per_fold)
     for metric in metric_settings:
         mode = metric['dataset']
         metric_name = metric['metric']
         variant = metric['variant']
         key = f'{metric_name}[{variant}]'
-        result[mode][key] = {
-            'mean': statistics.mean(fold[mode][key] for fold in results_per_fold),
-            'std': statistics.stdev(fold[mode][key] for fold in results_per_fold) if len(results_per_fold) > 1 else None
-        }
+        if variant != 'class':
+            result[mode][key] = {
+                'mean': statistics.mean(fold[mode][key] for fold in results_per_fold),
+                'std': statistics.stdev(fold[mode][key] for fold in results_per_fold) if len(results_per_fold) > 1 else None
+            }
+        else:
+            result[mode][key] = {
+                cls: {
+                    'mean': statistics.mean(fold[mode][key][cls] for fold in results_per_fold),
+                    'std': statistics.stdev(fold[mode][key][cls] for fold in results_per_fold) if len(results_per_fold) > 1 else None
+                }
+                for cls in results_per_fold[0][mode][key].keys()
+            }
     return result
 
 

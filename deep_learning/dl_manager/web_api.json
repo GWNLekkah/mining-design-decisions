@@ -558,8 +558,8 @@
         },
         {
           "name": "metrics",
-          "help": "JSON string describing which metrics should be calculated",
-          "type": "str",
+          "help": "JSON describing which metrics should be calculated",
+          "type": "object",
           "required": true,
           "nargs": "1",
           "options": []

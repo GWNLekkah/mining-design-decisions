@@ -446,7 +446,7 @@ class _ArgumentValidator:
         self._options = spec['options']
         if self._nargs not in ('1', '*', '+'):
             raise ValueError(f'[{self.name}] Invalid nargs: {self._nargs}')
-        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query', 'dynamic_enum'):
+        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query', 'dynamic_enum', 'object'):
             raise ValueError(f'[{self.name}] Invalid type: {self._type}')
         if self._type == 'class':
             if len(self._options) != 1:
@@ -581,6 +581,8 @@ class _ArgumentValidator:
                         detail=f'Invalid option for {self.name!r}: {x} (valid options: {self._options})',
                         status_code=400
                     )
+                return x
+            case 'object':
                 return x
 
     def _raise_invalid_type(self, expected, got):
