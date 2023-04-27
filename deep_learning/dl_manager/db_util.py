@@ -21,7 +21,7 @@ def object_to_query(o: object) -> Query:
             return Query().lor(*(object_to_query(c) for c in children))
         case {'tags': {'$eq': tag}}:
             return Query().tag(tag)
-        case {'tags': {'$eq': tag}}:
+        case {'tags': {'$ne': tag}}:
             return Query().not_tag(tag)
         case _ as x:
             raise ValueError(f'Could not convert object to query: {x}')

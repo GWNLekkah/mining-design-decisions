@@ -36,11 +36,14 @@ def minor(matrix, i, j):
 
 
 def compute_confusion_binary(y_true, y_pred) -> tuple[float, MetricSet]:
-    labels = OutputMode.Detection.output_vector_field_names
-    accuracy, classes = compute_confusion_multi_class(y_true,
-                                                      y_pred,
-                                                      labels)
-    return accuracy, {'Architectural': classes['Architectural']}
+    # labels = OutputMode.Detection.output_vector_field_names
+    # accuracy, classes = compute_confusion_multi_class(y_true,
+    #                                                   y_pred,
+    #                                                   labels)
+    matrix = confusion_matrix(y_true, y_pred)
+    metrics = extract_confusion(matrix, 1, len(y_true))
+    accuracy = (metrics.true_positives + metrics.true_negatives) / len(y_true)
+    return accuracy, {'Architectural': metrics}
 
 
 def compute_confusion_multi_class(y_true,

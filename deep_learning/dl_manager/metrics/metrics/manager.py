@@ -71,7 +71,7 @@ class MetricCalculationManager:
             case OutputMode.Detection:
                 return y
             case OutputMode.Classification3:
-                return ~(y == self._output_mode.non_architectural_pattern).all(axis=0)
+                return ~(y == self._output_mode.non_architectural_pattern).all(axis=1)
             case OutputMode.Classification3Simplified:
                 return y != self._output_mode.non_architectural_pattern.index(1)
             case OutputMode.Classification8:
