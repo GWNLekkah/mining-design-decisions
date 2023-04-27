@@ -332,12 +332,10 @@
         },
         {
           "name": "model-id",
-          "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
+          "help": "ID of the model being trained. Must be present in the database. (passed automatically be `train` endpoint)",
           "type": "str",
-          "default": null,
-          "null-unless": {"name": "store-model", "value": true},
           "nargs": "1",
-          "required": false,
+          "required": true,
           "options": []
         },
         {
