@@ -73,8 +73,6 @@ def compute_confusion_multi_label(y_true,
         binary_y_true = ~(y_true == all_negative_class_pattern).all(axis=1)
         binary_y_pred = ~(y_pred == all_negative_class_pattern).all(axis=1)
         assert len(binary_y_true) == len(y_true)
-        print(y_true)
-        print(binary_y_true)
         # _, result = compute_confusion_binary(binary_y_true, binary_y_pred)
         # class_metrics[all_negative_class_name] = result
         matrix = confusion_matrix(binary_y_true, binary_y_pred)
