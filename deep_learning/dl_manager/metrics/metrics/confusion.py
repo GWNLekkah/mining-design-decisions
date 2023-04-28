@@ -83,7 +83,10 @@ def compute_confusion_multi_label(y_true,
         m.true_positives + m.true_negatives
         for m in class_metrics.values()
     )
-    accuracy = correct / total
+    if all_negative_is_class:
+        accuracy = correct / (total ** 2)
+    else:
+        accuracy = correct / total
     assert 0 <= accuracy <= 1
     return accuracy, class_metrics
 
