@@ -17,6 +17,7 @@ import statistics
 import typing
 import warnings
 
+import fastapi
 import numpy
 
 import issue_db_api
@@ -197,15 +198,18 @@ def setup_storage(conf: Config):
     if (cmd := conf.get('system.management.active-command')) in endpoints_with_database:
         conf.clone(f'{cmd}.database-url', 'system.storage.database-url')
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
-        api = issue_db_api.IssueRepository(
-            url=conf.get('system.storage.database-url'),
-            credentials=(
-                conf.get('system.security.db-username'),
-                conf.get('system.security.db-password')
-            ),
-            allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates'),
-            label_caching_policy='use_local_after_load'
-        )
+        try:
+            api = issue_db_api.IssueRepository(
+                url=conf.get('system.storage.database-url'),
+                credentials=(
+                    conf.get('system.security.db-username'),
+                    conf.get('system.security.db-password')
+                ),
+                allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates'),
+                label_caching_policy='use_local_after_load'
+            )
+        except issue_db_api.InvalidCredentialsException:
+            raise fastapi.HTTPException(detail='Invalid credentials for database', status_code=401)
         conf.set('system.storage.database-api', api)
 
     if conf.get('system.management.active-command') == 'run':
