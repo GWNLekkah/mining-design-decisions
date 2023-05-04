@@ -16,7 +16,7 @@ class Doc2VecGenerator(AbstractEmbeddingGenerator):
         min_count = self.params['min-count']
         vector_size = self.params['vector-size']
         doc2vec_model = GensimDoc2Vec(documents, min_count=min_count, vector_size=vector_size)
-        doc2vec_model.save(path)
+        doc2vec_model.save(str(path))
 
     @staticmethod
     def get_arguments() -> dict[str, Argument]:
