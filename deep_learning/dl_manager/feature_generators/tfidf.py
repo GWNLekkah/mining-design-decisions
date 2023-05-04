@@ -83,6 +83,6 @@ class TfidfGenerator(AbstractFeatureGenerator):
         return super(TfidfGenerator, TfidfGenerator).get_arguments() | {
             'dictionary-id': StringArgument(
                 name='dictionary-id',
-                description='ID of the (pretrained) dictionary to use for BOW feature generation.'
+                description='ID of the (pretrained) (idf) dictionary to use for TF/IDF feature generation.'
             )
         }
