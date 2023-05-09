@@ -54,6 +54,18 @@ class LinearRNNModel(AbstractModel):
                                                   description='Number of units in the i-th hidden layer.')
             for i in range(1, max_layers + 1)
         }
+        activations = {
+            f'layer-{i}-activation': EnumArgument(
+                default='linear',
+                options=[
+                    'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
+                    'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
+                ],
+                name=f'layer-{i}-activation',
+                description='Activation to use in the i-th hidden layer'
+            )
+            for i in range(1, max_layers + 1)
+        }
         return {
             'bidirectional-layer-size': IntArgument(
                 default=64, minimum=1, maximum=128,
@@ -61,4 +73,4 @@ class LinearRNNModel(AbstractModel):
                 description='Size of the bidirectional layer.'
             ),
             'number-of-hidden-layers': num_layers_param
-        } | layer_sizes | super().get_arguments()
+        } | layer_sizes | activations | super().get_arguments()

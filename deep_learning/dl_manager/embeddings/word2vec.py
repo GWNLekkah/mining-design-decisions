@@ -11,7 +11,7 @@ class Word2VecGenerator(AbstractEmbeddingGenerator):
 
     def generate_embedding(self, issues: list[str], path: pathlib.Path):
         min_count = self.params['min-count']
-        vector_size = self.params['vector-size']
+        vector_size = self.params['vector-length']
         model = GensimWord2Vec(issues, min_count=min_count, vector_size=vector_size)
         model.wv.save_word2vec_format(path, binary=True)
 

@@ -245,7 +245,7 @@ def train_and_test_model(model: tf.keras.Model,
 
     class_weight = None
     class_balancer = conf.get('run.class-balancer')
-    if class_balancer == 'class-weight':
+    if class_balancer == 'class-weights':
         _, val_y = dataset_val
         labels = []
         labels.extend(train_y)
@@ -259,10 +259,7 @@ def train_and_test_model(model: tf.keras.Model,
         for key, value in counts.items():
             class_weight[key] = (1 / value) * (len(labels) / 2.0)
     elif class_balancer == 'upsample':
-        train_x, train_y = upsample(train_x, train_y)
-        val_x, val_y = dataset_val
-        val_x, val_y = upsample(val_x, val_y)
-        dataset_val = splitting.make_dataset(val_y, val_x)
+        upsamplers = ...
 
     callbacks = []
 
@@ -337,17 +334,6 @@ def train_and_test_model(model: tf.keras.Model,
         logger.get_model_results_for_all_epochs(),
         logger.get_main_model_metrics_at_stopping_epoch()
     )
-
-
-def upsample(features, labels):
-    counts = Counter([np.argmax(label, axis=0) for label in labels])
-    upper = max(counts.values())
-    for key, value in counts.items():
-        indices = [idx for idx, label in enumerate(labels) if np.argmax(label, axis=0) == key]
-        new_samples = random.choices(indices, k=(upper - len(indices)))
-        features = numpy.concatenate([features, features[new_samples]])
-        labels = numpy.concatenate([labels, labels[new_samples]])
-    return features, labels
 
 
 def dump_metrics(runs, *, conf: Config, description: str):

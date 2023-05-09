@@ -14,7 +14,7 @@ class Doc2VecGenerator(AbstractEmbeddingGenerator):
         for idx, doc in enumerate(issues):
             documents.append(TaggedDocument(doc, [idx]))
         min_count = self.params['min-count']
-        vector_size = self.params['vector-size']
+        vector_size = self.params['vector-length']
         doc2vec_model = GensimDoc2Vec(documents, min_count=min_count, vector_size=vector_size)
         doc2vec_model.save(str(path))
 

@@ -164,10 +164,20 @@
           "default": "none",
           "required": false,
           "options": [
-            "smote",
-            "random",
-            "synonyms",
-            "none"
+            "none",
+            "upsample",
+            "class-weights"
+          ]
+        },
+        {
+          "name": "upsampler",
+          "help": "Upsampler to use",
+          "nargs": "1",
+          "type": "dynamic_enum",
+          "null-unless": {"name": "class-balancer", "value": "upsample"},
+          "required": false,
+          "options": [
+            "dl_manager.upsampling.upsamplers"
           ]
         },
         {
