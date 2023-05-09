@@ -146,7 +146,9 @@ class Config:
         return current_d
 
     def get_all(self, name: str):
-        return self._resolve(name, 'get_all', self._normalize_name(name))
+        return {key: (value if value is not self.NOT_SET else None)
+                for key, value in self._resolve(name, 'get_all', self._normalize_name(name)).items()
+        }
 
     def get(self, name: str):
         *path, prop = self._normalize_name(name)
