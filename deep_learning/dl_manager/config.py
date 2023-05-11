@@ -214,8 +214,9 @@ class WebApp:
         self._config_factory.register('system.resources.threads')
 
         # Database credentials
-        self._config_factory.register('system.security.db-username')
-        self._config_factory.register('system.security.db-password')
+        # self._config_factory.register('system.security.db-username')
+        # self._config_factory.register('system.security.db-password')
+        self._config_factory.register('system.security.db-token')
 
         # Control of self-signed certificates
         self._config_factory.register(
@@ -381,8 +382,9 @@ class _Endpoint:
         conf = self._config_factory.build_config(self.name, 'system')
         if 'auth' in payload:
             auth = payload['auth']
-            conf.set('system.security.db-username', auth['username'])
-            conf.set('system.security.db-password', auth['password'])
+            #conf.set('system.security.db-username', auth['username'])
+            #conf.set('system.security.db-password', auth['password'])
+            conf.set('system.security.db-token', auth['token'])
         return self.run(conf, payload['config'])
 
     def run(self, conf: Config, payload):

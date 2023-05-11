@@ -199,12 +199,9 @@ def setup_storage(conf: Config):
         conf.clone(f'{cmd}.database-url', 'system.storage.database-url')
         log.info(f'Registered database url: {conf.get("system.storage.database-url")}')
         try:
-            api = issue_db_api.IssueRepository(
+            api = issue_db_api.IssueRepository.from_token(
                 url=conf.get('system.storage.database-url'),
-                credentials=(
-                    conf.get('system.security.db-username'),
-                    conf.get('system.security.db-password')
-                ),
+                token=conf.get('system.security.db-token'),
                 allow_self_signed_certificates=conf.get('system.security.allow-self-signed-certificates'),
                 label_caching_policy='use_local_after_load'
             )
