@@ -240,9 +240,10 @@ def run_training_session(conf: Config):
     }
     app: WebApp = conf.get('system.management.app')
     new_conf = app.new_config('run', 'system')
-    conf.transfer(new_conf,
-                  'system.security.db-username',
-                  'system.security.db-password')
+    # conf.transfer(new_conf,
+    #               'system.security.db-username',
+    #               'system.security.db-password')
+    conf.transfer(new_conf, 'system.security.db-token')
     return app.invoke_endpoint('run', new_conf, settings)
 
 
@@ -288,9 +289,7 @@ def run_embedding_generation_command(conf: Config):
     settings = embedding.config
     app: WebApp = conf.get('system.management.app')
     new_conf = app.new_config('generate-embedding-internal', 'system')
-    conf.transfer(new_conf,
-                  'system.security.db-username',
-                  'system.security.db-password')
+    conf.transfer(new_conf, 'system.security.db-token')
     payload = {
         'embedding-id': conf.get('generate-embedding.embedding-id'),
         'training-data-query': settings['training-data-query'],
