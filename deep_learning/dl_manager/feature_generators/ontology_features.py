@@ -41,7 +41,7 @@ class OntologyFeatures(AbstractFeatureGenerator):
                          metadata,
                          args: dict[str, str]):
         if self.pretrained is None:
-            ontology_path = self.conf.get('make-features.ontology-classes')
+            ontology_path = self.conf.get('run.ontology-classes')
             if ontology_path == '':
                 raise ValueError('--ontology-classes parameter must be given')
         else:
