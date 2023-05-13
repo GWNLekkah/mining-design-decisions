@@ -1,5 +1,5 @@
 from ..config import Argument
-from .generator import AbstractFeatureGenerator
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -40,6 +40,10 @@ class Metadata(AbstractFeatureGenerator):
                 ]
             }
         }
+
+    @staticmethod
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
 
     @staticmethod
     def get_arguments() -> dict[str, Argument]:
