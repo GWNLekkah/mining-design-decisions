@@ -133,7 +133,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 return tf.keras.layers.Activation(tf.keras.activations.relu)
             case 'elu':
                 return tf.keras.layers.Activation(tf.keras.activations.elu)
-            case 'leakrelu':
+            case 'leakyrelu':
                 return tf.keras.layers.advanced_activations.LeakyReLU()
             case 'sigmoid':
                 return tf.keras.layers.Activation(tf.keras.activations.sigmoid)
