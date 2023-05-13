@@ -371,9 +371,10 @@ def generate_features_and_get_data(architectural_only: bool = False,
         datasets_train, labels_train = select_architectural_only(datasets_train,
                                                                  labels_train,
                                                                  binary_labels_train)
-        datasets_test, labels_test = select_architectural_only(datasets_test,
-                                                               labels_test,
-                                                               binary_labels_test)
+        if not conf.get('run.test-with-training-data'):
+            datasets_test, labels_test = select_architectural_only(datasets_test,
+                                                                   labels_test,
+                                                                   binary_labels_test)
 
     return (
         (datasets_train, labels_train),
