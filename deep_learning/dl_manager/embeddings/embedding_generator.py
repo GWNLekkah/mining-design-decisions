@@ -7,9 +7,10 @@ import nltk
 import issue_db_api
 
 from .. import accelerator
-from ..config import Config, BoolArgument, Argument, ArgumentConsumer, EnumArgument
+from ..config import Config, BoolArgument, Argument, ArgumentConsumer, EnumArgument, StringArgument
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
+from ..feature_generators.util.ontology import load_ontology, apply_ontologies_to_sentence
 from ..logger import get_logger
 
 log = get_logger('Embedding Generator')
@@ -62,10 +63,14 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         use_lemmatization = self.params['use-lemmatization']
         use_stemming = self.params['use-stemming']
         use_pos = self.params['use-pos']
+        use_ontologies = self.params['use-ontologies']
+        ontology_path = self.params['ontology-path']
         if use_stemming and use_lemmatization:
             raise ValueError('Cannot use both stemming and lemmatization')
         if not (use_stemming or use_lemmatization):
             log.warning('Not using stemming or lemmatization')
+        if use_ontologies and not ontology_path:
+            raise ValueError('ontology-path must be given is use-ontologies is true')
         stemmer = None
         lemmatizer = None
         if use_stemming:
@@ -99,10 +104,17 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
 
         # Per-issue processing
         documents = []
+        if use_ontologies:
+            ontology_table = load_ontology(ontology_path)
+        else:
+            ontology_table = None
         for issue in texts:
             document = []
             for words in issue:
                 words = [(word, tag) for word, tag in words if word not in stopwords]
+                if use_ontologies:
+                    assert ontology_table is not None 
+                    words = apply_ontologies_to_sentence(words, ontology_table)
                 if use_lemmatization:
                     words = [
                         (lemmatizer.lemmatize(word, pos=POS_CONVERSION.get(tag, 'n')), tag)
@@ -153,5 +165,15 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
                 name='formatting-handling',
                 description='How to handle formatting in issues.',
                 options=['markers', 'keep', 'remove']
+            ),
+            'use-ontologies': BoolArgument(
+                name='use-ontologies',
+                description='If True, apply ontology classes to the input text.',
+                default=False
+            ),
+            'ontology-path': StringArgument(
+                name='ontology-path',
+                description='Path to a file of ontology classes.',
+                default=''
             )
         }

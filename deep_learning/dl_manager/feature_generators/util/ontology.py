@@ -93,9 +93,9 @@ def _simplify_tag(tag: str) -> str:
     return tag
 
 
-def apply_ontologies_to_sentence(words: list[str],
+def apply_ontologies_to_sentence(words: list[tuple[str, str]],
                                  ontology: OntologyTable) -> list[str]:
-    words = nltk.pos_tag(words)
+    #words = nltk.pos_tag(words)
     words = [(nltk.stem.WordNetLemmatizer().lemmatize(word, pos=POS_CONVERSION.get(pos, 'n')), pos) for word, pos in words]
     result = []
     for word, tag in words:
@@ -104,5 +104,7 @@ def apply_ontologies_to_sentence(words: list[str],
         if tag == "''":
             tag = 'EMPTY'
         tag = _simplify_tag(tag)
-        result.append(ontology.get_ontology_class(word, tag))
-    return result
+        result.append(
+            (ontology.get_ontology_class(word, tag), tag)
+        )
+    return result   # Result preserves tagging
