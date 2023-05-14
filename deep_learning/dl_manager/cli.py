@@ -13,6 +13,7 @@ import json
 import os.path
 import pathlib
 import getpass
+import random
 import statistics
 import typing
 import warnings
@@ -424,6 +425,12 @@ def select_architectural_only(datasets, labels, binary_labels):
 
 
 def run_classification_command(conf: Config):
+    if (seed := conf.get('run.seed')) != -1:
+        random.seed(seed)
+        numpy.random.seed(seed)
+        import tensorflow
+        tensorflow.random.set_seed(seed)
+        
     datasets_train, labels_train, datasets_test, labels_test, factory = _get_model_factory(conf)
 
     training_data = (

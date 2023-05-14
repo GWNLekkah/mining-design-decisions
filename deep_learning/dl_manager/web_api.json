@@ -391,6 +391,15 @@
           "nargs": "1",
           "required": false,
           "options": []
+        },
+        {
+          "name": "seed",
+          "help": "Seed to use to initialize all the RNG related stuff. -1 means no seed is used",
+          "default": -1,
+          "type": "int",
+          "nargs": "1",
+          "required": false,
+          "options": []
         }
       ]
     },
