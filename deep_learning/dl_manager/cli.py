@@ -430,7 +430,7 @@ def run_classification_command(conf: Config):
         numpy.random.seed(seed)
         import tensorflow
         tensorflow.random.set_seed(seed)
-        
+
     datasets_train, labels_train, datasets_test, labels_test, factory = _get_model_factory(conf)
 
     training_data = (

@@ -381,7 +381,6 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
 
         limit = self.params['class-limit']
         if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
-            random.seed(42)
             stratified_indices = []
             for issue_type in classification_indices.keys():
                 project_labels = [label for index, label in enumerate([label.split('-')[0]
