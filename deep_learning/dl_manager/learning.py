@@ -35,6 +35,7 @@ from . import data_splitting as splitting
 from . import model_manager
 from . import voting_util
 from . import run_identifiers
+from . import upsampling
 
 
 EARLY_STOPPING_GOALS = {
@@ -259,7 +260,13 @@ def train_and_test_model(model: tf.keras.Model,
         for key, value in counts.items():
             class_weight[key] = (1 / value) * (len(labels) / 2.0)
     elif class_balancer == 'upsample':
-        upsamplers = ...
+        train_y, training_keys, train_x = upsampling.upsample(
+            conf,
+            conf.get('run.upsampler'),
+            train_y,
+            training_keys,
+            *train_x
+        )
 
     callbacks = []
 

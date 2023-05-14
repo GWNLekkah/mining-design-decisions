@@ -181,6 +181,18 @@
           ]
         },
         {
+          "name": "upsampler-params",
+          "help": "Parameters for the upsampler",
+          "nargs": "1",
+          "type": "arglist",
+          "default": null,
+          "null-unless": {"name": "class-balancer", "value": "upsample"},
+          "required": false,
+          "options": [
+
+          ]
+        },
+        {
           "name": "batch-size",
           "help": "Specify the batch size used during training",
           "type": "int",
@@ -196,7 +208,12 @@
           "default": false,
           "nargs": "1",
           "required": false,
-          "options": []
+          "options": [
+            {
+              "map-path": "dl_manager.upsampling.upsamplers",
+              "multi-valued": false
+            }
+          ]
         },
         {
           "name": "combination-strategy",
