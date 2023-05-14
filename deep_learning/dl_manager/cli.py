@@ -101,6 +101,11 @@ def setup_app_constraints(app):
         'run.k-cross', 'run.quick-cross'
     )
     app.add_constraint(
+        lambda k, cross_project: k == 0 or not cross_project,
+        'k-cross must be 0 when running with --cross-project',
+        'run.k-cross', 'run.cross-project'
+    )
+    app.add_constraint(
         lambda do_save, model_id: (not do_save) or (do_save and model_id),
         '--model-id must be given when storing a model.',
         'run.store-model', 'run.model-id'
@@ -132,6 +137,11 @@ def setup_app_constraints(app):
         lambda do_analyze, conf: (not do_analyze) or kw_analyzer.doing_one_run(conf),
         'Can not perform cross validation when extracting keywords',
         'run.analyze-keywords', '#config'
+    )
+    app.add_constraint(
+        lambda k_cross, test_with_training_data: k_cross == 0 or test_with_training_data,
+        'Must test with training data when performing cross validation!',
+        'run.k-cross', 'run.test-with-training-data'
     )
 
     # Enforced using null-if
@@ -431,6 +441,8 @@ def run_classification_command(conf: Config):
         testing_data = None
 
     if conf.get('run.ensemble-strategy') != 'none':
+        if conf.get('run.k-cross') != 0 or conf.get('run.cross-project'):
+            assert testing_data is None, 'testing_data should be None'
         version, performances = learning.run_ensemble(factory,
                                                       training_data,
                                                       testing_data,
@@ -449,6 +461,7 @@ def run_classification_command(conf: Config):
                                                     testing_data,
                                                     conf=conf)
     else:
+        assert testing_data is None, 'testing_data should be None'
         version, performances = learning.run_cross(factory,
                                                    conf.get('run.epochs'),
                                                    OutputMode.from_string(conf.get('run.output-mode')),
