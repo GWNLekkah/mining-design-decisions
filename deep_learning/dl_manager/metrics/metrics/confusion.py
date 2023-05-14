@@ -18,6 +18,12 @@ class MetricSet:
     false_positives: int
     false_negatives: int
 
+    def matrix(self):
+        return [
+            [self.true_negatives, self.false_positives],
+            [self.false_negatives, self.true_positives]
+        ]
+
 
 ##############################################################################
 ##############################################################################

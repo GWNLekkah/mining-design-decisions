@@ -1,6 +1,7 @@
 import typing
 
 import numpy
+from sklearn.metrics import confusion_matrix
 
 from ...model_io import OutputMode, OutputEncoding
 from . import confusion
@@ -142,3 +143,42 @@ class MetricCalculationManager:
                     cls: metric.calculate_class(m)
                     for cls, m in self._confusion.items()
                 }
+
+    def get_raw_confusion_matrix(self):
+        match self._output_mode:
+            case OutputMode.Detection | OutputMode.Classification3:
+                return self._metric_set_to_matrix_description(self._confusion)
+            case OutputMode.Classification3Simplified | OutputMode.Classification8:
+                labels = self._output_mode.output_vector_field_names
+                return self._compute_normal_confusion_matrix(self._y_true,
+                                                             self._y_pred,
+                                                             'Confusion Matrix',
+                                                             labels)
+            case _ as x:
+                raise NotImplementedError(x)
+
+    @staticmethod
+    def _metric_set_to_matrix_description(sets):
+        return [
+            {
+                'title': cls.capitalize(),
+                'ticks': [f'Non-{cls.capitalize()}', cls.capitalize()],
+                'xlabel': 'Predicted',
+                'ylabel': 'Ground Truth',
+                'data': s.matrix()
+            }
+            for cls, s in sets.items()
+        ]
+
+    @staticmethod
+    def _compute_normal_confusion_matrix(y_true, y_pred, title, ticks):
+        matrix = confusion_matrix(y_true, y_pred)
+        return [
+            {
+                'title': title,
+                'ticks': ticks,
+                'xlabel': 'Predicted',
+                'ylabel': 'Ground Truth',
+                'data': matrix.tolist()
+            }
+        ]

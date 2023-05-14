@@ -608,6 +608,63 @@
           "options": []
         }
       ]
+    },
+    {
+      "name": "confusion-matrix",
+      "help": "Endpoint to calculate the confusion matrix (or matrices) for a given training task.",
+      "private": false,
+      "args": [
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model from which predictions must be fetched",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "version-id",
+          "help": "ID of the model version from which predictions must be fetched",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "classification-as-detection",
+          "help": "Evaluate detection performance of a classification model",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "epoch",
+          "help": "Epoch to evaluate metrics at. Either an epoch, `last`, `stopping-point`, or `all`",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "include-non-arch",
+          "help": "Include the non-architectural class as a class in Classification3",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        }
+      ]
     }
   ]
 }

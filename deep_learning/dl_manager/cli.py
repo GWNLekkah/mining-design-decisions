@@ -651,7 +651,7 @@ def run_metrics_calculation_command(conf: Config):
                     _calculate_metrics(metric_settings, fold, epoch, model_config, conf=conf)
                 ])
             case 'stopping-point':
-                es_settings = metric_settings['early_stopping_settings']
+                es_settings = fold['early_stopping_settings']
                 if es_settings['use_early_stopping']:
                     if es_settings['stopped_early']:
                         epoch = -1 - es_settings['patience']
@@ -685,7 +685,6 @@ def run_metrics_calculation_command(conf: Config):
 
 def _compute_aggregate_metrics(metric_settings, results_per_fold):
     result = {'training': {}, 'validation': {}, 'testing': {}}
-    print(results_per_fold)
     for metric in metric_settings:
         mode = metric['dataset']
         metric_name = metric['metric']
@@ -707,15 +706,15 @@ def _compute_aggregate_metrics(metric_settings, results_per_fold):
     return result
 
 
-def _calculate_metrics(metric_settings, results, epoch, model_config, *, conf: Config):
+def _calculate_metrics(metric_settings, results, epoch, model_config, *, conf: Config, get_confusion=False, key='metrics'):
     training_manager = metrics.MetricCalculationManager(
         y_true=numpy.asarray(results['truth']['training']),
         y_pred=numpy.asarray(results['predictions']['training'][epoch]),
         output_mode=OutputMode.from_string(
             model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
         ),
-        classification_as_detection=conf.get('metrics.classification-as-detection'),
-        include_non_arch=conf.get('metrics.include-non-arch')
+        classification_as_detection=conf.get(f'{key}.classification-as-detection'),
+        include_non_arch=conf.get(f'{key}.include-non-arch')
     )
     validation_manager = metrics.MetricCalculationManager(
         y_true=numpy.asarray(results['truth']['validation']),
@@ -723,8 +722,8 @@ def _calculate_metrics(metric_settings, results, epoch, model_config, *, conf: C
         output_mode=OutputMode.from_string(
             model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
         ),
-        classification_as_detection=conf.get('metrics.classification-as-detection'),
-        include_non_arch=conf.get('metrics.include-non-arch')
+        classification_as_detection=conf.get(f'{key}.classification-as-detection'),
+        include_non_arch=conf.get(f'{key}.include-non-arch')
     )
     testing_manager = metrics.MetricCalculationManager(
         y_true=numpy.asarray(results['truth']['testing']),
@@ -732,9 +731,15 @@ def _calculate_metrics(metric_settings, results, epoch, model_config, *, conf: C
         output_mode=OutputMode.from_string(
             model_config['output_mode'] if 'output_mode' in model_config else model_config['output-mode']
         ),
-        classification_as_detection=conf.get('metrics.classification-as-detection'),
-        include_non_arch=conf.get('metrics.include-non-arch')
+        classification_as_detection=conf.get(f'{key}.classification-as-detection'),
+        include_non_arch=conf.get(f'{key}.include-non-arch')
     )
+    if get_confusion:
+        return {
+            'training': training_manager.get_raw_confusion_matrix(),
+            'validation': validation_manager.get_raw_confusion_matrix(),
+            'testing': testing_manager.get_raw_confusion_matrix(),
+        }
     managers = {
         'training': training_manager,
         'validation': validation_manager,
@@ -752,3 +757,51 @@ def _calculate_metrics(metric_settings, results, epoch, model_config, *, conf: C
         else:
             result[mode][f'loss[{variant}]'] = results['loss'][mode][epoch]
     return result
+
+
+##############################################################################
+##############################################################################
+# Command Dispatch - Confusion Matrix Calculation
+##############################################################################
+
+
+def compute_confusion_matrix(conf: Config):
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model_id = conf.get('confusion-matrix.model-id')
+    model = db.get_model_by_id(model_id)
+    model_config = model.config
+    version_id = conf.get('confusion-matrix.version-id')
+    results = model.get_run_by_id(version_id).data
+    total_results = []
+    for fold in results:
+        fold_result = []
+        total_results.append(fold_result)
+        match conf.get('confusion-matrix.epoch'):
+            case 'last':
+                epoch = -1
+                fold_result.append([
+                    _calculate_metrics({}, fold, epoch, model_config, conf=conf, get_confusion =True, key='confusion-matrix')
+                ])
+            case 'stopping-point':
+                es_settings = fold['early_stopping_settings']
+                if es_settings['use_early_stopping']:
+                    if es_settings['stopped_early']:
+                        epoch = -1 - es_settings['patience']
+                    else:
+                        epoch = -1
+                else:
+                    epoch = -1
+                fold_result.append([
+                    _calculate_metrics({}, fold, epoch, model_config, conf=conf, get_confusion=True, key='confusion-matrix')
+                ])
+            case 'all':
+                fold_result.append([
+                    _calculate_metrics({}, fold, e, model_config, conf=conf, get_confusion=True, key='confusion-matrix')
+                    for e in range(len(fold['predictions']['training']))
+                ])
+            case _ as x:
+                epoch = int(x) - 1
+                fold_result.append([
+                    _calculate_metrics({}, fold, epoch, model_config, conf=conf, get_confusion=True, key='confusion-matrix')
+                ])
+    return total_results
