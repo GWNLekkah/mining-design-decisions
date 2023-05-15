@@ -64,7 +64,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         use_stemming = self.params['use-stemming']
         use_pos = self.params['use-pos']
         use_ontologies = self.params['use-ontologies']
-        ontology_id = self.params['ontology-path']
+        ontology_id = self.params['ontology-id']
         if use_stemming and use_lemmatization:
             raise ValueError('Cannot use both stemming and lemmatization')
         if not (use_stemming or use_lemmatization):
