@@ -45,7 +45,7 @@
         },
         {
           "name": "ontology-classes",
-          "help": "Path to a file containing ontology classes.",
+          "help": "ID of the DB-file containing ontology classes.",
           "nargs": "1",
           "type": "str",
           "default": null,

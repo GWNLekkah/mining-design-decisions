@@ -64,13 +64,16 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         use_stemming = self.params['use-stemming']
         use_pos = self.params['use-pos']
         use_ontologies = self.params['use-ontologies']
-        ontology_path = self.params['ontology-path']
+        ontology_id = self.params['ontology-path']
         if use_stemming and use_lemmatization:
             raise ValueError('Cannot use both stemming and lemmatization')
         if not (use_stemming or use_lemmatization):
             log.warning('Not using stemming or lemmatization')
-        if use_ontologies and not ontology_path:
-            raise ValueError('ontology-path must be given is use-ontologies is true')
+        if use_ontologies and not ontology_id:
+            raise ValueError('ontology-id must be given is use-ontologies is true')
+        ontology_file = db.get_file_by_id(ontology_id)
+        ontology_filename = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
+        ontology_file.download(ontology_filename)
         stemmer = None
         lemmatizer = None
         if use_stemming:
@@ -105,7 +108,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         # Per-issue processing
         documents = []
         if use_ontologies:
-            ontology_table = load_ontology(ontology_path)
+            ontology_table = load_ontology(ontology_filename)
         else:
             ontology_table = None
         for issue in texts:
@@ -171,9 +174,9 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
                 description='If True, apply ontology classes to the input text.',
                 default=False
             ),
-            'ontology-path': StringArgument(
-                name='ontology-path',
-                description='Path to a file of ontology classes.',
+            'ontology-id': StringArgument(
+                name='ontology-id',
+                description='ID to a file containing ontology classes.',
                 default=''
             )
         }

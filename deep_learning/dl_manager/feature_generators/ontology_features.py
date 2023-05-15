@@ -1,5 +1,7 @@
 import collections
 
+import issue_db_api
+
 from ..config import Argument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
@@ -41,9 +43,10 @@ class OntologyFeatures(AbstractFeatureGenerator):
                          metadata,
                          args: dict[str, str]):
         if self.pretrained is None:
-            ontology_path = self.conf.get('run.ontology-classes')
+            # Ontologies are downloaded in __init__
+            ontology_path = f'{self.conf.get("system.storage.file-prefix")}_ontologies.json'
             if ontology_path == '':
-                raise ValueError('--ontology-classes parameter must be given')
+               raise ValueError('--ontology-classes parameter must be given')
         else:
             aux_map = self.conf.get('system.storage.auxiliary_map')
             ontology_path = aux_map[self.pretrained['ontologies']]

@@ -161,8 +161,12 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 self.__ontology_classes = aux[self.__pretrained['ontology-classes']]
                 self.__apply_ontologies = self.__pretrained['use-ontology-classes']
         else:
-            self.__ontology_classes = conf.get('run.ontology-classes')
-            self.__apply_ontologies = conf.get('run.apply-ontology-classes')
+            self.__ontology_classes = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
+            if conf.get('system.storage.database-api'):
+                repo: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+                ontology_file = repo.get_file_by_id(conf.get('run.ontology-classes'))
+                ontology_file.download(self.__ontology_classes)
+                self.__apply_ontologies = conf.get('run.apply-ontology-classes')
 
     @property
     def params(self) -> dict[str, str]:
