@@ -342,12 +342,12 @@ def train_and_test_model(model: tf.keras.Model,
     if kw_analyzer.model_is_convolution(conf) and kw_analyzer.doing_one_run(conf) and kw_analyzer.enabled(conf):
         keyword_data = {
             'training': kw_analyzer.analyze_keywords(
-                model, train_x, train_y, training_keys, 'train', conf
+                model, train_x, train_y, train_ids, 'train', conf
             ),
             'validation': kw_analyzer.analyze_keywords(
-                model, dataset_val[0], dataset_val[1], validation_keys, 'validation', conf),
+                model, dataset_val[0], dataset_val[1], val_ids, 'validation', conf),
             'testing': kw_analyzer.analyze_keywords(
-                model, test_x, test_y, test_issue_keys, 'test', conf
+                model, test_x, test_y, test_ids, 'test', conf
             )
         }
     else:

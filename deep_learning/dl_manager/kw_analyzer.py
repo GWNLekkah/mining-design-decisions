@@ -51,19 +51,19 @@ def enabled(conf: Config) -> bool:
 def analyze_keywords(model,
                      test_x,
                      test_y,
-                     issue_keys,
+                     issue_ids,
                      suffix,
                      conf: Config):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     print('Analyzing Keywords...')
     if output_mode.output_encoding == OutputEncoding.Binary:
         analyzer = BinaryConvolutionKeywordAnalyzer(model, conf)
-        with alive_progress.alive_bar(len(issue_keys)) as bar:
-            keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
+        with alive_progress.alive_bar(len(issue_ids)) as bar:
+            keywords_per_class = analyzer.get_keywords(test_x, issue_ids, test_y, bar)
     else:
         analyzer = OneHotConvolutionKeywordAnalyzer(model, conf)
-        with alive_progress.alive_bar(len(issue_keys)) as bar:
-            keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
+        with alive_progress.alive_bar(len(issue_ids)) as bar:
+            keywords_per_class = analyzer.get_keywords(test_x, issue_ids, test_y, bar)
 
     return keywords_per_class
 
@@ -131,7 +131,7 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
     def get_minimum_strength(self) -> float:
         return 0.0
 
-    def get_keywords(self, vectors, keys, truths, bar):
+    def get_keywords(self, vectors, ids, truths, bar):
         output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
 
         # Compute all predictions and features.
@@ -152,12 +152,12 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
         # Map for the outputs
         output = {}
 
-        for j, (truth, issue_key) in enumerate(zip(truths, keys)):
+        for j, (truth, issue_id) in enumerate(zip(truths, ids)):
             pre_predictions_for_sample = pre_predictions[j, :]
             list_tuple_prob = self.get_candidates(pre_predictions_for_sample, truth, dense_weights=self.__dense_layer_weights)
 
             # Get text of the original issue
-            word_text = self.__original_text_lookup[issue_key]
+            word_text = self.__original_text_lookup[issue_id]
 
             votes_per_convolution = collections.defaultdict(
                 lambda: collections.defaultdict(
@@ -201,7 +201,7 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
                  for (keyword, prob) in keywords])
             for label, entry in kw:
                 output.setdefault(output_mode.label_encoding[label], []).append(
-                    entry.as_dict() | {'ground_truth': output_mode.label_encoding[label], 'key': issue_key}
+                    entry.as_dict() | {'ground_truth': output_mode.label_encoding[label], 'key': issue_id}
                 )
 
             bar()

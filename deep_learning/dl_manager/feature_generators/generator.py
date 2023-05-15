@@ -413,7 +413,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         if 'original' in output and not self.pretrained:    # Only dump original text when not pre-trained.
             with open(get_raw_text_file_name(self.conf), 'w') as file:
                 mapping = {key: text
-                           for key, text in zip(labels['issue_keys'], output['original'])}
+                           for key, text in zip(labels['issue_ids'], output['original'])}
                 json.dump(mapping, file)
             del output['original']
         elif 'original' in output:
