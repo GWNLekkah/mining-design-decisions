@@ -22,6 +22,9 @@ class PredictionLogger(keras.callbacks.Callback):
                  training_data,
                  validation_data,
                  testing_data,
+                 train_ids,
+                 val_ids,
+                 test_ids,
                  label_mapping,
                  max_epochs: int,
                  use_early_stopping: bool = False,
@@ -46,6 +49,11 @@ class PredictionLogger(keras.callbacks.Callback):
                 'training': self._train_y.tolist(),
                 'validation': self._val_y.tolist(),
                 'testing': self._test_y.tolist()
+            },
+            'datasets': {
+                'training': train_ids,
+                'validation': val_ids,
+                'testing': test_ids
             },
             'early_stopping_settings': {
                 'use_early_stopping': use_early_stopping,

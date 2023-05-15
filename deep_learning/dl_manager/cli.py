@@ -436,13 +436,15 @@ def run_classification_command(conf: Config):
     training_data = (
         [ds.features for ds in datasets_train],
         labels_train,
-        datasets_train[0].issue_keys
+        datasets_train[0].issue_keys,
+        datasets_train[0].ids
     )
     if datasets_test:
         testing_data = (
             [ds.features for ds in datasets_test],
             labels_test,
-            datasets_test[0].issue_keys
+            datasets_test[0].issue_keys,
+            datasets_test[0].ids
         )
     else:
         testing_data = None
@@ -450,33 +452,35 @@ def run_classification_command(conf: Config):
     if conf.get('run.ensemble-strategy') != 'none':
         if conf.get('run.k-cross') != 0 or conf.get('run.cross-project'):
             assert testing_data is None, 'testing_data should be None'
-        version, performances = learning.run_ensemble(factory,
-                                                      training_data,
-                                                      testing_data,
-                                                      OutputMode.from_string(
-                                                          conf.get('run.output-mode')).label_encoding,
-                                                      conf=conf)
-        return {'version-id': version, 'run-ids': performances}
+        version, performances, kw_files = learning.run_ensemble(factory,
+                                                                training_data,
+                                                                testing_data,
+                                                                OutputMode.from_string(
+                                                                    conf.get('run.output-mode')).label_encoding,
+                                                                conf=conf)
+        return {'version-id': version, 'run-ids': performances, 'keyword-ids': kw_files}
 
     # 5) Invoke actual DL process
     if conf.get('run.k-cross') == 0 and not conf.get('run.cross-project'):
-        version, performances = learning.run_single(factory(),
-                                                    conf.get('run.epochs'),
-                                                    OutputMode.from_string(conf.get('run.output-mode')),
-                                                    OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
-                                                    training_data,
-                                                    testing_data,
-                                                    conf=conf)
+        version, performances, kw_files = learning.run_single(factory(),
+                                                              conf.get('run.epochs'),
+                                                              OutputMode.from_string(conf.get('run.output-mode')),
+                                                              OutputMode.from_string(
+                                                                  conf.get('run.output-mode')).label_encoding,
+                                                              training_data,
+                                                              testing_data,
+                                                              conf=conf)
     else:
         assert testing_data is None, 'testing_data should be None'
-        version, performances = learning.run_cross(factory,
-                                                   conf.get('run.epochs'),
-                                                   OutputMode.from_string(conf.get('run.output-mode')),
-                                                   OutputMode.from_string(conf.get('run.output-mode')).label_encoding,
-                                                   training_data,
-                                                   testing_data,
-                                                   conf=conf)
-    return {'version-id': version, 'run-ids': performances}
+        version, performances, kw_files = learning.run_cross(factory,
+                                                             conf.get('run.epochs'),
+                                                             OutputMode.from_string(conf.get('run.output-mode')),
+                                                             OutputMode.from_string(
+                                                                 conf.get('run.output-mode')).label_encoding,
+                                                             training_data,
+                                                             testing_data,
+                                                             conf=conf)
+    return {'version-id': version, 'run-ids': performances, 'keyword-ids': kw_files}
 
 def _get_model_factory(conf: Config):
     ((datasets, labels), (datasets_test, labels_test)) = generate_features_and_get_data(

@@ -4,13 +4,16 @@ This code contains the core of the training algorithms.
 Yes, it is a mess... but a relatively easy-to-oversee mess,
 and it works.
 """
-import collections
+
 ##############################################################################
 ##############################################################################
 # Imports
 ##############################################################################
 
+import collections
 import gc
+import json
+import os
 import random
 import statistics
 import warnings
@@ -83,7 +86,7 @@ def run_single(model_or_models,
                                        test_split_size=conf.get('run.split-size'),
                                        max_train=conf.get('run.max-train'))
     # Split returns an iterator; call next() to get data splits
-    train, test, validation, train_keys, val_keys, test_issue_keys = next(spitter.split(training_data, testing_data))
+    train, test, validation, train_keys, val_keys, test_issue_keys, train_ids, val_ids, test_ids = next(spitter.split(training_data, testing_data))
     comparator = metrics.ComparisonManager()
     if not conf.get('run.test-separately'):
         models = [model_or_models]
@@ -93,18 +96,31 @@ def run_single(model_or_models,
         inputs = _separate_datasets(train, test, validation)
     ident = None
     version_id = None
+    kw_id = None
     for model, (m_train, m_test, m_val) in zip(models, inputs):
-        trained_model, metrics_, best = train_and_test_model(model,
-                                                             m_train,
-                                                             m_val,
-                                                             m_test,
-                                                             epochs,
-                                                             output_mode,
-                                                             label_mapping,
-                                                             test_issue_keys,
-                                                             training_keys=train_keys,
-                                                             validation_keys=val_keys,
-                                                             conf=conf)
+        trained_model, metrics_, best, kw_data = train_and_test_model(model,
+                                                                      m_train,
+                                                                      m_val,
+                                                                      m_test,
+                                                                      epochs,
+                                                                      output_mode,
+                                                                      label_mapping,
+                                                                      test_issue_keys,
+                                                                      training_keys=train_keys,
+                                                                      validation_keys=val_keys,
+                                                                      train_ids=train_ids,
+                                                                      val_ids=val_ids,
+                                                                      test_ids=test_ids,
+                                                                      conf=conf)
+        if kw_data is not None:
+            db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+            filename = str(random.randint(0, 1 << 63)).zfill(64) + '.json'
+            with open(filename, 'w') as file:
+                json.dump(kw_data, file)
+            db.upload_file(filename,
+                           description=id_generator.generate_id('keyword-data'),
+                           category='keyword-data')
+            os.remove(filename)
         # Save model can only be true if not testing separately,
         # which means the loop only runs once.
         if conf.get('run.store-model'):
@@ -118,7 +134,7 @@ def run_single(model_or_models,
     comparator.finalize()
     if conf.get('run.test-separately'):
         comparator.compare()
-    return version_id, [ident]
+    return version_id, [ident], [] if kw_id is None else [kw_id]
 
 
 def run_cross(model_factory,
@@ -151,7 +167,7 @@ def run_cross(model_factory,
         )
     comparator = metrics.ComparisonManager()
     stream = splitter.split(training_data, testing_data)
-    for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
+    for train, test, validation, training_keys, validation_keys, test_issue_keys, train_ids, val_ids, test_ids in stream:
         model_or_models = model_factory()
         if conf.get('run.test-separately'):
             models = model_or_models
@@ -160,17 +176,21 @@ def run_cross(model_factory,
             models = [model_or_models]
             inputs = [(train, test, validation)]
         for model, (m_train, m_test, m_val) in zip(models, inputs):
-            _, metrics_, best_metrics = train_and_test_model(model,
-                                                             m_train,
-                                                             m_val,
-                                                             m_test,
-                                                             epochs,
-                                                             output_mode,
-                                                             label_mapping,
-                                                             test_issue_keys,
-                                                             training_keys=training_keys,
-                                                             validation_keys=validation_keys,
-                                                             conf=conf)
+            _, metrics_, best_metrics, kw_data = train_and_test_model(model,
+                                                                      m_train,
+                                                                      m_val,
+                                                                      m_test,
+                                                                      epochs,
+                                                                      output_mode,
+                                                                      label_mapping,
+                                                                      test_issue_keys,
+                                                                      training_keys=training_keys,
+                                                                      validation_keys=validation_keys,
+                                                                      train_ids=train_ids,
+                                                                      val_ids=val_ids,
+                                                                      test_ids=test_ids,
+                                                                      conf=conf)
+            assert kw_data is None
             results.append(metrics_)
             best_results.append(best_metrics)
             comparator.add_result(metrics_)
@@ -188,7 +208,7 @@ def run_cross(model_factory,
                                            description=id_generator.generate_id('kfold-run'))
     if conf.get('run.test-separately'):
         comparator.compare()
-    return None, [ident]
+    return None, [ident], []
 
 
 def _separate_datasets(train, test, validation):
@@ -237,6 +257,9 @@ def train_and_test_model(model: tf.keras.Model,
                          *,
                          validation_keys=None,
                          training_keys=None,
+                         train_ids,
+                         val_ids,
+                         test_ids,
                          conf: Config):
     train_x, train_y = dataset_train
     test_x, test_y = dataset_test
@@ -293,6 +316,9 @@ def train_and_test_model(model: tf.keras.Model,
         training_data=(train_x, train_y),
         validation_data=dataset_val,
         testing_data=(test_x, test_y),
+        train_ids=train_ids,
+        val_ids=val_ids,
+        test_ids=test_ids,
         label_mapping=output_mode.label_encoding,
         max_epochs=epochs,
         use_early_stopping=conf.get('run.use-early-stopping'),
@@ -314,32 +340,25 @@ def train_and_test_model(model: tf.keras.Model,
 
     from . import kw_analyzer
     if kw_analyzer.model_is_convolution(conf) and kw_analyzer.doing_one_run(conf) and kw_analyzer.enabled(conf):
-        print('Analyzing keywords', logger.get_main_model_metrics_at_stopping_epoch())
-        kw_analyzer.analyze_keywords(model,
-                                     test_x,
-                                     test_y,
-                                     test_issue_keys,
-                                     'test',
-                                     conf)
-        kw_analyzer.analyze_keywords(model,
-                                     dataset_val[0],
-                                     dataset_test[1],
-                                     validation_keys,
-                                     'validation',
-                                     conf)
-        kw_analyzer.analyze_keywords(model,
-                                     train_x,
-                                     train_y,
-                                     training_keys,
-                                     'train',
-                                     conf)
-
+        keyword_data = {
+            'training': kw_analyzer.analyze_keywords(
+                model, train_x, train_y, training_keys, 'train', conf
+            ),
+            'validation': kw_analyzer.analyze_keywords(
+                model, dataset_val[0], dataset_val[1], validation_keys, 'validation', conf),
+            'testing': kw_analyzer.analyze_keywords(
+                model, test_x, test_y, test_issue_keys, 'test', conf
+            )
+        }
+    else:
+        keyword_data = None
 
     # logger.rollback_model_results(monitor.get_best_model_offset())
     return (
         model,
         logger.get_model_results_for_all_epochs(),
-        logger.get_main_model_metrics_at_stopping_epoch()
+        logger.get_main_model_metrics_at_stopping_epoch(),
+        keyword_data
     )
 
 
@@ -426,7 +445,7 @@ def run_stacking_ensemble(factory,
     voting_result_data = []
     stream = splitter.split(training_data, testing_data)
     version_id = None
-    for train, test, validation, training_keys, validation_keys, test_issue_keys in stream:
+    for train, test, validation, training_keys, validation_keys, test_issue_keys, train_ids, val_ids, test_ids in stream:
         # Step 1) Train all models and get their predictions
         #           on the training and validation set.
         models = factory()
@@ -436,7 +455,7 @@ def run_stacking_ensemble(factory,
         model_number = 0
         trained_sub_models = []
         for model, model_train, model_test, model_validation in zip(models, train[0], test[0], validation[0], strict=True):
-            trained_sub_model, sub_model_results, best_sub_model_results = train_and_test_model(
+            trained_sub_model, sub_model_results, best_sub_model_results, kw_data = train_and_test_model(
                 model,
                 dataset_train=(model_train, train[1]),
                 dataset_val=(model_validation, validation[1]),
@@ -447,8 +466,12 @@ def run_stacking_ensemble(factory,
                 test_issue_keys=test_issue_keys,
                 training_keys=training_keys,
                 validation_keys=validation_keys,
+                train_ids=train_ids,
+                val_ids=val_ids,
+                test_ids=test_ids,
                 conf=conf
             )
+            assert kw_data is None
             sub_results[model_number].append(sub_model_results)
             best_sub_results[model_number].append(best_sub_model_results)
             model_number += 1
@@ -470,7 +493,7 @@ def run_stacking_ensemble(factory,
                                                                              input_conversion_method)
             # Step 3) Train and test the meta-classifier.
             meta_model = meta_factory()
-            epoch_model, epoch_results, best_epoch_results = train_and_test_model(
+            epoch_model, epoch_results, best_epoch_results, kw_data = train_and_test_model(
                 meta_model,
                 dataset_train=(train_features, train[1]),
                 dataset_val=(val_features, validation[1]),
@@ -482,8 +505,12 @@ def run_stacking_ensemble(factory,
                 test_issue_keys=test_issue_keys,
                 training_keys=training_keys,
                 validation_keys=validation_keys,
+                train_ids=train_ids,
+                val_ids=val_ids,
+                test_ids=test_ids,
                 conf=conf
             )
+            assert kw_data is None
             results.append(epoch_results)
             best_results.append(best_epoch_results)
 
@@ -554,7 +581,7 @@ def run_stacking_ensemble(factory,
             conf=conf
         )
         results_ids.append(ident)
-    return version_id, results_ids
+    return version_id, results_ids, []
 
 
 def run_voting_ensemble(factory,

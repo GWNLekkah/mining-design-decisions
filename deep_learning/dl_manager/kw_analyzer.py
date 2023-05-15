@@ -54,20 +54,6 @@ def analyze_keywords(model,
                      issue_keys,
                      suffix,
                      conf: Config):
-    def _to_str(y):
-        return OutputMode.Classification3Simplified.label_encoding[y]
-
-    def _pop(x):
-        y = x.copy()
-        del y['key']
-        return y
-
-    def _trim(z):
-        if z.count('-') == 1:
-            return z
-        p = z.split('-')
-        return f'{p[0]}-{p[1]}'
-
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     print('Analyzing Keywords...')
     if output_mode.output_encoding == OutputEncoding.Binary:
@@ -79,53 +65,7 @@ def analyze_keywords(model,
         with alive_progress.alive_bar(len(issue_keys)) as bar:
             keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
 
-
-    with open('../datasets/labels/bottom-up.csv') as file:
-        bottom_up = [line.strip() for line in file]
-    with open('../datasets/labels/maven.csv') as file:
-        maven = [line.strip() for line in file]
-    with open('../datasets/labels/top-down.csv') as file:
-        top_down = [line.strip() for line in file]
-    with open('../datasets/labels/BHAT_labels.json') as file:
-        bhat = [item['key'] for item in json.load(file)]
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_maven-keywords-{suffix}.json', 'w') as file:
-        print(keywords_per_class)
-        maven_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in maven
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(maven_keywords, file)
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_bottom-up-keywords-{suffix}.json', 'w') as file:
-        bottom_up_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in bottom_up
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(bottom_up_keywords, file)
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_top-down-keywords-{suffix}.json', 'w') as file:
-        top_down_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in top_down
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(top_down_keywords, file)
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_bhat-keywords-{suffix}.json', 'w') as file:
-        bhat_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in bhat
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(bhat_keywords, file)
-
+    return keywords_per_class
 
 
 def sigmoid(x):
