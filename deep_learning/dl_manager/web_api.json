@@ -189,7 +189,10 @@
           "null-unless": {"name": "class-balancer", "value": "upsample"},
           "required": false,
           "options": [
-
+            {
+              "map-path": "dl_manager.upsampling.upsamplers",
+              "multi-valued": false
+            }
           ]
         },
         {
@@ -208,12 +211,7 @@
           "default": false,
           "nargs": "1",
           "required": false,
-          "options": [
-            {
-              "map-path": "dl_manager.upsampling.upsamplers",
-              "multi-valued": false
-            }
-          ]
+          "options": []
         },
         {
           "name": "combination-strategy",
