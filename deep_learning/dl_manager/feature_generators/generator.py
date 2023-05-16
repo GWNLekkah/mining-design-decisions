@@ -162,7 +162,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 self.__apply_ontologies = self.__pretrained['use-ontology-classes']
         else:
             self.__ontology_classes = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
-            if conf.get('system.storage.database-api'):
+            if conf.get('run.apply-ontology-classes'):
                 repo: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
                 ontology_file = repo.get_file_by_id(conf.get('run.ontology-classes'))
                 ontology_file.download(self.__ontology_classes)
@@ -434,7 +434,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
     def preprocess(self, issues):
         log.info('Preprocessing Features')
         with timer('Feature Preprocessing'):
-            if self.__ontology_classes is not None:
+            if self.conf.get('run.apply-ontology-classes'):
                 ontology_table = ontology.load_ontology(self.__ontology_classes)
             else:
                 ontology_table = None
@@ -446,7 +446,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
             use_lowercase = self.__params['disable-lowercase']
-            use_ontologies = self.__apply_ontologies
+            use_ontologies = self.conf.get('run.apply-ontology-classes')
             handling_string = self.__params['formatting-handling']
             handling = FormattingHandling.from_string(handling_string)
             weights, tagdict, classes = nltk.load(
