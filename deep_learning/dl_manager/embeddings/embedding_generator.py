@@ -71,9 +71,12 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             log.warning('Not using stemming or lemmatization')
         if use_ontologies and not ontology_id:
             raise ValueError('ontology-id must be given is use-ontologies is true')
-        ontology_file = db.get_file_by_id(ontology_id)
-        ontology_filename = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
-        ontology_file.download(ontology_filename)
+        if use_ontologies:
+            ontology_file = db.get_file_by_id(ontology_id)
+            ontology_filename = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
+            ontology_file.download(ontology_filename)
+        else:
+            ontology_filename = None 
         stemmer = None
         lemmatizer = None
         if use_stemming:
