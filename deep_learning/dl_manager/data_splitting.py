@@ -215,7 +215,7 @@ class SimpleSplitter(DataSplitter):
         # labels, issue_keys, *features = shuffle_raw_data(labels,
         #                                                  issue_keys,
         #                                                  *features)
-        data = DeepLearningData(labels, issue_keys, generators, *features).shuffle()
+        data = DeepLearningData(labels, issue_keys, issue_ids, generators, *features).shuffle()
         if testing_data is None:
             size = self.val_split + self.test_split
             training_data, remainder = data.split_fraction(1 - size)
