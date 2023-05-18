@@ -144,6 +144,11 @@ def setup_app_constraints(app):
         'Must test with training data when performing cross validation!',
         'run.k-cross', 'run.test-with-training-data'
     )
+    app.add_constraint(
+        lambda ontology_id, apply_ontology, models: ('OntologyFeatures' not in models and not apply_ontology) or ontology_id != '',
+        'Ontology class file must be given when applying ontology classes or using ontology features',
+        'run.ontology-classes', 'run.apply-ontology-classes', 'run.classifiers'
+    )
 
     # Enforced using null-if
     # app.add_constraint(
