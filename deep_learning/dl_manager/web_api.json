@@ -48,8 +48,7 @@
           "help": "ID of the DB-file containing ontology classes.",
           "nargs": "1",
           "type": "str",
-          "default": null,
-          "null-if": {"name": "apply-ontology-classes", "value": false},
+          "default": "",
           "required": false,
           "options": []
         },
