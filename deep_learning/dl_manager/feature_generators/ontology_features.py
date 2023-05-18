@@ -44,6 +44,7 @@ class OntologyFeatures(AbstractFeatureGenerator):
                          args: dict[str, str]):
         if self.pretrained is None:
             # Ontologies are downloaded in __init__
+            # self.__ontology_classes = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
             ontology_path = f'{self.conf.get("system.storage.file-prefix")}_ontologies.json'
             if ontology_path == '':
                raise ValueError('--ontology-classes parameter must be given')
