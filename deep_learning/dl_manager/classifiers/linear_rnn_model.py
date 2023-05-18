@@ -58,7 +58,7 @@ class LinearRNNModel(AbstractModel):
             f'layer-{i}-activation': EnumArgument(
                 default='linear',
                 options=[
-                    'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
+                    'linear', 'relu', 'elu', 'leakyrelu', 'sigmoid',
                     'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
                 ],
                 name=f'layer-{i}-activation',

@@ -12,6 +12,13 @@ CATEGORICAL_ATTRIBUTES = {
 }
 
 
+def concat(stream):
+    result = []
+    for item in stream:
+        result.extend(item)
+    return result
+
+
 class Metadata(AbstractFeatureGenerator):
 
     @staticmethod
@@ -31,7 +38,9 @@ class Metadata(AbstractFeatureGenerator):
         attrs = self.params.get('metadata-attributes', '').split(',')
 
         return {
-            'features': metadata,
+            'features': [
+                concat(m[a] for a in attrs) for m in metadata
+            ],
             'feature_shape': len(metadata[0]),
             'feature_encoding': {
                 'encoding': self.feature_encoding(),

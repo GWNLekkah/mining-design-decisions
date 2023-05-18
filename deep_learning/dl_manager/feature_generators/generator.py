@@ -201,7 +201,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         for name in AbstractFeatureGenerator.get_arguments():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
-        ontologies = self.conf.get('run.ontology-classes')
+        ontologies = self.__ontology_classes
         if ontologies:
             pretrained_settings['ontology-classes'] = ontologies
             self.conf.get('system.storage.auxiliary').append(ontologies)
@@ -328,7 +328,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             texts.append((issue.summary, issue.description))
         metadata = []
         for issue in issues:
-            metadata.append({getattr(issue, attr) for attr in metadata_attributes})
+            metadata.append({attr: getattr(issue, attr) for attr in metadata_attributes})
         return texts, metadata, labels, classification_indices
 
     def update_labels(self,

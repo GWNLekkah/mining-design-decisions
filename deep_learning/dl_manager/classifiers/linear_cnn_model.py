@@ -93,7 +93,7 @@ class LinearConv1Model(AbstractModel):
             'fnn-layer-activation': EnumArgument(
                 default='linear',
                 options=[
-                    'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
+                    'linear', 'relu', 'elu', 'leakyrelu', 'sigmoid',
                     'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
                 ],
                 name='fnn-layer-activation',
