@@ -147,7 +147,7 @@ def setup_app_constraints(app):
     app.add_constraint(
         lambda ontology_id, apply_ontology, models: ('OntologyFeatures' not in models and not apply_ontology) or ontology_id != '',
         'Ontology class file must be given when applying ontology classes or using ontology features',
-        'run.ontology-classes', 'run.apply-ontology-classes', 'run.classifiers'
+        'run.ontology-classes', 'run.apply-ontology-classes', 'run.classifier'
     )
 
     # Enforced using null-if
