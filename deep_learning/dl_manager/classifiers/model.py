@@ -134,7 +134,8 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
             case 'elu':
                 return tf.keras.layers.Activation(tf.keras.activations.elu)
             case 'leakyrelu':
-                return tf.keras.layers.advanced_activations.LeakyReLU()
+                #return tf.keras.layers.advanced_activations.LeakyReLU()
+                return tf.keras.layers.LeakyReLU()
             case 'sigmoid':
                 return tf.keras.layers.Activation(tf.keras.activations.sigmoid)
             case 'tanh':
@@ -148,7 +149,8 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
             case 'exp':
                 return tf.keras.layers.Activation(tf.keras.activations.exp)
             case 'prelu':
-                return tf.keras.layers.advanced_activations.PReLU()
+                #return tf.keras.layers.advanced_activations.PReLU()
+                return tf.keras.layers.PReLU()
             case _ as x:
                 raise ValueError(f'Invalid activation {x}')
 
