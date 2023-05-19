@@ -193,10 +193,15 @@ def setup_os(conf: Config):
     )
     if conf.get('system.os.peregrine'):
         conf.set('system.os.home-directory', os.path.expanduser('~'))
-        conf.set('system.os.data-directory', f'/data/{getpass.getuser()}')
+        conf.set('system.os.data-directory', f'/projects/{getpass.getuser()}')
+        conf.set('system.os.scratch-directory', f'/scratch/{getpass.getuser()}')
+        # We assume these exist
     else:
         conf.set('system.os.home-directory', os.path.expanduser('~'))
-        conf.set('system.os.data-directory', f'')
+        conf.set('system.os.data-directory', f'./data')
+        conf.set('system.os.scratch-directory', f'./temp')
+        os.makedirs(conf.get('system.os.data-directory'), exist_ok=True)
+        os.makedirs(conf.get('system.os.scratch-directory'), exist_ok=True)
 
 
 def setup_storage(conf: Config):
@@ -371,7 +376,7 @@ def generate_features_and_get_data(architectural_only: bool = False,
             # Load the most recently saved generator.
             # The auxiliary map is set to the IdentityMap
             # class, so everything should work.
-            with open(conf.get('system.storage.generators')) as file:
+            with open(conf.get('system.storage.generators')[-1]) as file:
                 data = json.load(file)
             generator_class = feature_generators.generators[data['generator']]
             generator = generator_class(
@@ -571,10 +576,12 @@ def run_prediction_command(conf: Config):
         model_version = trained_model.version_id
     else:
         trained_model = model.get_version_by_id(model_version)
-    trained_model.download(model_manager.MODEL_FILE)
-    model_manager.load_model_from_zip(model_manager.MODEL_FILE)
+    trained_model.download(
+        os.path.join(conf.get('system.os.scratch-directory'), model_manager.MODEL_FILE)
+    )
+    model_manager.load_model_from_zip(model_manager.MODEL_FILE, conf)
     # Load model from file
-    model = pathlib.Path(model_manager.MODEL_DIR)
+    model = pathlib.Path(os.path.join(conf.get('system.os.scratch-directory'))) / model_manager.MODEL_DIR
     with open(model / 'model.json') as file:
         model_metadata = json.load(file)
     output_mode = OutputMode.from_string(

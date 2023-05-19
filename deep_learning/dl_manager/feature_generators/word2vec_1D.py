@@ -1,3 +1,4 @@
+import os.path
 from ..model_io import InputEncoding
 from .word2vec import AbstractWord2Vec
 
@@ -49,7 +50,10 @@ class Word2Vec(AbstractWord2Vec):
                     'embedding-weights': embedding_weights,
                     'feature-shape': feature_shape,
                     'word-vector-length': word_vector_length,
-                    'model': self.params['embedding-id'] + '.bin',
+                    'model': os.path.join(
+                        self.conf.get('system.os.scratch-directory'),
+                        self.params['embedding-id'] + '.bin'
+                    ),
                     #'model-binary': args['pretrained-binary'].lower() == 'true'
                 },
                 [

@@ -73,7 +73,7 @@ def _get_and_copy_auxiliary_files(directory: str, conf: Config):
 
 
 def save_single_model(model, conf: Config):
-    directory = MODEL_DIR
+    directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
     _prepare_directory(directory)
     _store_model(directory, 0, model)
     metadata = {
@@ -91,7 +91,7 @@ def save_stacking_model(meta_model,
                         conversion_strategy: str,
                         *child_models,
                         conf: Config):
-    directory = MODEL_DIR
+    directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
     _prepare_directory(directory)
     _store_model(directory, 0, meta_model)
     for nr, model in enumerate(child_models, start=1):
@@ -112,7 +112,7 @@ def save_stacking_model(meta_model,
 
 
 def save_voting_model(*models, conf: Config):
-    directory = MODEL_DIR
+    directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
     _prepare_directory(directory)
     for nr, model in enumerate(models):
         _store_model(directory, nr, model)
@@ -166,8 +166,8 @@ def _upload_zip_data(path, conf: Config):
 ##############################################################################
 
 
-def load_model_from_zip(filename: str):
+def load_model_from_zip(filename: str, conf: Config):
     zip_file = zipfile.ZipFile(filename, 'r')
-    zip_file.extractall(MODEL_DIR)
+    zip_file.extractall(os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR))
     zip_file.close()
 

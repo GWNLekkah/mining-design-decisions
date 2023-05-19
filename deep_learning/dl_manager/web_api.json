@@ -204,15 +204,6 @@
           "options": []
         },
         {
-          "name": "peregrine",
-          "help": "Specify to enable running on peregrine",
-          "type": "bool",
-          "default": false,
-          "nargs": "1",
-          "required": false,
-          "options": []
-        },
-        {
           "name": "combination-strategy",
           "help": "Strategy used to combine models. Use `combination-strategies` for more information.",
           "nargs": "1",

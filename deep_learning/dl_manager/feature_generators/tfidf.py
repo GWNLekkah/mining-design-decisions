@@ -22,7 +22,10 @@ class TfidfGenerator(AbstractFeatureGenerator):
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
             embedding = db.get_embedding_by_id(self.params['dictionary-id'])
-            filename = self.params['dictionary-id'] + '.bin'
+            filename = os.path.join(
+                self.conf.get('system.os.patch-directory'),
+                self.params['dictionary-id'] + '.bin'
+            )
             if os.path.exists(filename):
                 os.remove(filename)
             embedding.download_binary(filename)

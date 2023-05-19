@@ -36,10 +36,13 @@ class SynonymUpSampler(AbstractUpSampler):
         db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
         embedding_id = self.hyper_params['word-embedding']
         embedding = db.get_embedding_by_id(embedding_id)
-        filename = embedding_id + '.bin'
-        if os.path.exists(filename):
-            os.remove(filename)
-        embedding.download_binary(filename)
+        embedding_filename = os.path.join(
+            self.conf.get('system.os.scratch-directory'),
+            embedding_id + '.bin'
+        )
+        if os.path.exists(embedding_filename):
+            os.remove(embedding_filename)
+        embedding.download_binary(embedding_filename)
 
         #
         with open(data_manager_bootstrap.get_raw_text_file_name(self.conf)) as file:
@@ -70,7 +73,7 @@ class SynonymUpSampler(AbstractUpSampler):
                     )
                 case _ as x:
                     raise ValueError(f'Unsupported feature generator: {x}')
-        synonym_wv = models.KeyedVectors.load_word2vec_format(embedding_id + '.bin', binary=True)
+        synonym_wv = models.KeyedVectors.load_word2vec_format(embedding_filename, binary=True)
         min_replace = self.hyper_params['min-replace']
         max_replace = self.hyper_params['max-replace']
         if min_replace > max_replace:

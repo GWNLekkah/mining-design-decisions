@@ -1,5 +1,6 @@
 import abc
 import itertools
+import os.path
 import pathlib
 
 import nltk
@@ -136,12 +137,16 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             documents.append(document)
 
         # Embedding generation
-        self.generate_embedding(documents, TEMP_EMBEDDING_PATH)
+        embedding_path = os.path.join(
+            conf.get('system.os.scratch-directory'),
+            TEMP_EMBEDDING_PATH
+        )
+        self.generate_embedding(documents, embedding_path)
 
         # Upload binary file
         embedding_id = conf.get('generate-embedding-internal.embedding-id')
         embedding = db.get_embedding_by_id(embedding_id)
-        embedding.upload_binary(str(TEMP_EMBEDDING_PATH))
+        embedding.upload_binary(embedding_path)
 
 
     @abc.abstractmethod

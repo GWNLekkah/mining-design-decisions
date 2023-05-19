@@ -11,6 +11,7 @@ import enum
 import hashlib
 import itertools
 import json
+import os.path
 import random
 import string
 
@@ -141,7 +142,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         self.__params = params
         self.__pretrained = pretrained_generator_settings
         self.__colors = None
-        self.__keys=  None
+        self.__keys =  None
         self.conf = conf
         self.__ontology_classes = None
         self.__apply_ontologies = False
@@ -162,11 +163,18 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 self.__apply_ontologies = self.__pretrained['use-ontology-classes']
         else:
             self.__ontology_classes = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
+            self.__have_ontology_classes = False
             if ident := conf.get('run.ontology-classes'):
                 repo: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
                 ontology_file = repo.get_file_by_id(ident)
                 ontology_file.download(self.__ontology_classes)
                 self.__apply_ontologies = conf.get('run.apply-ontology-classes')
+                self.__have_ontology_classes = True
+
+    def require_ontology_classes(self):
+        if not self.__have_ontology_classes:
+            raise ValueError('Need ontology classes')
+        return self.__ontology_classes
 
     @property
     def params(self) -> dict[str, str]:
@@ -198,6 +206,10 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         filename = f'{self.__class__.__name__}__{settings}'
         prefix = self.conf.get('system.storage.file-prefix')
         filename = f'{prefix}_{hashlib.sha512(filename.encode()).hexdigest()}.json'
+        filename = os.path.join(
+            self.conf.get('system.os.scratch-directory'),
+            filename
+        )
         for name in AbstractFeatureGenerator.get_arguments():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]

@@ -19,7 +19,10 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
             embedding = db.get_embedding_by_id(self.params['embedding-id'])
-            filename = self.params['embedding-id'] + '.bin'
+            filename = os.path.join(
+                self.conf.get('os.system.scratch-directory'),
+                self.params['embedding-id'] + '.bin'
+            )
             if os.path.exists(filename):
                 os.remove(filename)
             embedding.download_binary(filename)
