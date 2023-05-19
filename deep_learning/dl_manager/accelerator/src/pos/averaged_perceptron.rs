@@ -53,7 +53,9 @@ impl AveragedPerceptron {
                 |a, b| {
                     let x = scores.get(*a).expect("!");
                     let y = scores.get(*b).expect("!");
-                    match x.total_cmp(y) {
+                    // For backwards compatability with habrok,
+                    // we copy the implementation for f64::total_cmp
+                    match total_cmp_floats(*x, *y) {
                         Ordering::Less => Ordering::Less,
                         Ordering::Greater => Ordering::Greater,
                         Ordering::Equal => a.cmp(b)
@@ -79,4 +81,13 @@ impl AveragedPerceptron {
             .fold(f64::NEG_INFINITY, f64::max);
         (cls, best_score)
     }
+}
+
+
+fn total_cmp_floats(x: f64, y: f64) -> Ordering {
+    let mut left = x.to_bits() as i64;
+    let mut right = y.to_bits() as i64;
+    left ^= (((left >> 63) as u64) >> 1) as i64;
+    right ^= (((right >> 63) as u64) >> 1) as i64;
+    left.cmp(&right)
 }
