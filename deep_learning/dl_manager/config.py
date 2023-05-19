@@ -308,6 +308,14 @@ class WebApp:
             ssl_certfile=certfile
         )
 
+    def execute_script(self, filename):
+        with open(filename) as file:
+            script = json.load(file)
+        for command in script:
+            endpoint = command['cmd']
+            payload = command['args']
+            self._endpoints[endpoint].invoke_with_json(payload)
+
     def invoke_endpoint(self, name: str, conf: Config, payload):
         return self._endpoints[name].run(conf, payload)
 
@@ -379,6 +387,9 @@ class _Endpoint:
             fastapi.HTTPException(detail=f'Endpoint {self.name} is private/internal',
                                   status_code=406)
         payload = await req.json()
+        return self.invoke_with_json(payload)
+
+    def invoke_with_json(self, payload):
         conf = self._config_factory.build_config(self.name, 'system')
         if 'auth' in payload:
             auth = payload['auth']

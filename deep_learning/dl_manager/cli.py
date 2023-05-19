@@ -45,9 +45,12 @@ from . import prediction
 ##############################################################################
 
 
-def main(port, keyfile, certfile):
+def main(port, keyfile, certfile, script):
     app = build_app()
-    app.deploy(port, keyfile,  certfile)
+    if not script:
+        app.deploy(port, keyfile,  certfile)
+    else:
+        app.execute_script(script)
 
 
 def get_arg_spec():
