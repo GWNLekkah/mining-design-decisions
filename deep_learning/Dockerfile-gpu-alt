@@ -1,11 +1,7 @@
-# Start from a nice and fresh Ubuntu installation
-#FROM ubuntu:20.04
-FROM nvidia/cuda:11.2.0-cudnn8-runtime AS CUDA
-#FROM nvidia/cuda:11.7.0-cudnn8-runtime-ubuntu20.04
+# WARNING; THIS FILE CURRENTLY DOES NOT WORK (OR, AT LEAST, IS NOT TESTED)
 
-# Remove NVIDIA repositories because they mess with apt-get update
-RUN rm /etc/apt/sources.list.d/nvidia-ml.list
-RUN rm /etc/apt/sources.list.d/cuda.list
+# Start from a nice and fresh Ubuntu installation
+FROM ubuntu:20.04
 
 # Install Python3.10
 RUN apt-get update
@@ -40,6 +36,9 @@ RUN apt-get -y install --reinstall build-essential
 # Install OpenSSL dependencies
 RUN apt install pkg-config
 RUN apt-get -y install libssl-dev
+
+# GPU Support
+RUN python3.10 -m pip install tensorflow-directml-plugin
 
 # Get list of dependencies and install them
 RUN python3.10 setup.py sdist
