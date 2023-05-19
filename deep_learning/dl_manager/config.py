@@ -257,6 +257,7 @@ class WebApp:
         self._config_factory.register('system.os.peregrine')
         self._config_factory.register('system.os.home-directory')
         self._config_factory.register('system.os.data-directory')
+        self._config_factory.register('system.os.scratch-directory')
 
     def _build_endpoints(self, commands):
         for command in commands:
