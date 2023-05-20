@@ -23,7 +23,8 @@ class DictionaryGenerator(AbstractEmbeddingGenerator):
         # Let's make the dictionary sorted
         dictionary.sort()
         # Convert to a word -> index mapping
-        dictionary = dict(enumerate(dictionary))
+        #dictionary = {v: k for k, v in dict(enumerate(dictionary)).items()}
+        dictionary = {w: i for i, w in enumerate(dictionary)}
         # Save dictionary
         with open(path, 'w') as file:
             json.dump(dictionary, file)
