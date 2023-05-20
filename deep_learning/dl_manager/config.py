@@ -26,6 +26,7 @@ import typing
 
 import fastapi
 import issue_db_api
+import requests
 import uvicorn
 
 from . import db_util
@@ -312,9 +313,25 @@ class WebApp:
     def execute_script(self, filename):
         with open(filename) as file:
             script = json.load(file)
-        for command in script:
+        token = script['auth']['token']
+        for command in script['script']:
+            # Refresh the token
+            response = requests.post(
+                url=script['auth']['token-endpoint'],
+                headers={
+                    'Authorization': 'Bearer ' + token
+                }
+            )
+            response.raise_for_status()
+            token = response.json()['access_token']
+            # Call the endpoint internally
             endpoint = command['cmd']
-            payload = command['args']
+            payload = {
+                'auth': {
+                    'token': token
+                },
+                'config': command['args']
+            }
             self._endpoints[endpoint].invoke_with_json(payload)
 
     def invoke_endpoint(self, name: str, conf: Config, payload):

@@ -1,0 +1,15 @@
+{
+    "auth": {
+        "token": "...",
+        "token-endpoint": "https://issues-db.nl:8000/refresh-token"
+    },
+    "script": [
+        {
+            "cmd": "train",
+            "args": {
+                "model-id": "6468e4d33613911624e8c2d3",
+                "database-url": "https://issues-db.nl:8000"
+            }
+        }
+    ]
+}
