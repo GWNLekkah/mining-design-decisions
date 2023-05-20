@@ -213,10 +213,9 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         for name in AbstractFeatureGenerator.get_arguments():
             if name in self.__params:
                 pretrained_settings[name] = self.__params[name]
-        ontologies = self.__ontology_classes
-        if ontologies:
-            pretrained_settings['ontology-classes'] = ontologies
-            self.conf.get('system.storage.auxiliary').append(ontologies)
+        if self.__have_ontology_classes:
+            pretrained_settings['ontology-classes'] = self.__ontology_classes
+            self.conf.get('system.storage.auxiliary').append(self.__ontology_classes)
         pretrained_settings['use-ontology-classes'] = self.conf.get('run.apply-ontology-classes')
         self.conf.get('system.storage.generators').append(filename)
         self.conf.get('system.storage.auxiliary').extend(auxiliary_files)

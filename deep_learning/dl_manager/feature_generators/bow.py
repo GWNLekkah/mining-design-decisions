@@ -57,7 +57,6 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
                         token_idx = word_to_idx[token]
                         bag[token_idx] += self.get_word_value(len(tokenized_issue))
                 bags.append(bag)
-                print(bag)
 
         return {
             'features': bags,

@@ -44,11 +44,18 @@ def _prepare_directory(path: str):
     os.makedirs(path, exist_ok=True)
 
 
+def _transform(file: str, directory: str):
+    base_path, filename = os.path.split(file)
+    infix = os.path.relpath(directory, base_path)
+    return os.path.join(base_path, infix, filename)
+
+
 def _get_and_copy_feature_generators(directory: str, conf: Config):
     filenames = conf.get('system.storage.generators')
     for filename in filenames:
-        suffix = os.path.relpath(filename, directory)
-        full_path = os.path.join(directory, suffix)
+        # suffix = os.path.relpath(filename, directory)
+        # full_path = os.path.join(directory, suffix)
+        full_path = _transform(filename, directory)
         shutil.copy(filename, full_path)
     return filenames
 
@@ -58,8 +65,9 @@ def _get_and_copy_auxiliary_files(directory: str, conf: Config):
     os.makedirs(os.path.join(directory, 'auxiliary'), exist_ok=True)
     result = {}
     for filename in filenames:
-        suffix = os.path.relpath(filename, directory)
-        full_path = os.path.join(directory, 'auxiliary', suffix)
+        # suffix = os.path.relpath(filename, directory)
+        # full_path = os.path.join(directory, 'auxiliary', suffix)
+        full_path = _transform(filename, directory)
         result[filename] = os.path.join('auxiliary', filename)
         stem = os.path.split(full_path)[0]
         os.makedirs(stem, exist_ok=True)
