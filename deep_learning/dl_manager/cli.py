@@ -566,6 +566,7 @@ def _get_model_factory(conf: Config):
 def run_prediction_command(conf: Config):
     # Step 1: Load model data
     data_query = conf.get('predict.data-query')
+    log.info(f'Prediction query: {data_query}')
     model_id: str = conf.get('predict.model')
     model_version = conf.get('predict.version')
     # Load model from DB
@@ -579,7 +580,13 @@ def run_prediction_command(conf: Config):
     trained_model.download(
         os.path.join(conf.get('system.os.scratch-directory'), model_manager.MODEL_FILE)
     )
-    model_manager.load_model_from_zip(model_manager.MODEL_FILE, conf)
+    model_manager.load_model_from_zip(
+        os.path.join(
+            conf.get('system.os.scratch-directory'),
+            model_manager.MODEL_FILE
+        ),
+        conf
+    )
     # Load model from file
     model = pathlib.Path(os.path.join(conf.get('system.os.scratch-directory'))) / model_manager.MODEL_DIR
     with open(model / 'model.json') as file:

@@ -14,6 +14,8 @@ import zipfile
 import issue_db_api
 
 from .config import Config
+from .logger import get_logger
+log = get_logger('Model Saver')
 
 MODEL_DIR = 'model'
 MODEL_FILE = 'pretrained_model.zip'
@@ -39,15 +41,24 @@ class QueryJSONEncoder(json.JSONEncoder):
 
 
 def _prepare_directory(path: str):
+    log.debug(f'Preparing directory: {path}')
     if os.path.exists(path):
+        log.info(f'Removing existing directory: {path}')
         shutil.rmtree(path)
     os.makedirs(path, exist_ok=True)
 
 
-def _transform(file: str, directory: str):
+def _transform(file: str, directory: str, *, aux=False):
     base_path, filename = os.path.split(file)
     infix = os.path.relpath(directory, base_path)
-    return os.path.join(base_path, infix, filename)
+    if not aux:
+        return os.path.join(base_path, infix, filename)
+    return os.path.join(base_path, infix, 'auxiliary', filename)
+
+
+def _strip_path(filename: str, conf: Config):
+    return os.path.relpath(filename,
+                           conf.get('system.os.scratch-directory'))
 
 
 def _get_and_copy_feature_generators(directory: str, conf: Config):
@@ -56,8 +67,9 @@ def _get_and_copy_feature_generators(directory: str, conf: Config):
         # suffix = os.path.relpath(filename, directory)
         # full_path = os.path.join(directory, suffix)
         full_path = _transform(filename, directory)
+        log.info(f'Copying feature generator: {filename} -> {full_path}')
         shutil.copy(filename, full_path)
-    return filenames
+    return [_strip_path(filename, conf) for filename in filenames]
 
 
 def _get_and_copy_auxiliary_files(directory: str, conf: Config):
@@ -67,10 +79,18 @@ def _get_and_copy_auxiliary_files(directory: str, conf: Config):
     for filename in filenames:
         # suffix = os.path.relpath(filename, directory)
         # full_path = os.path.join(directory, 'auxiliary', suffix)
-        full_path = _transform(filename, directory)
-        result[filename] = os.path.join('auxiliary', filename)
+        full_path = _transform(filename, directory, aux=True)
+        #result[filename] = _strip_path(full_path, conf)
+        result[filename] = os.path.relpath(
+            full_path,
+            os.path.join(
+                conf.get('system.os.scratch-directory'),
+                'model'
+            )
+        )
         stem = os.path.split(full_path)[0]
         os.makedirs(stem, exist_ok=True)
+        log.info(f'Copying auxiliary file: {filename} -> {full_path}')
         shutil.copy(filename, full_path)
     return result
 
@@ -83,6 +103,7 @@ def _get_and_copy_auxiliary_files(directory: str, conf: Config):
 
 
 def save_single_model(model, conf: Config):
+    log.info('Storing single model')
     directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
     _prepare_directory(directory)
     _store_model(directory, 0, model)
@@ -101,6 +122,7 @@ def save_stacking_model(meta_model,
                         conversion_strategy: str,
                         *child_models,
                         conf: Config):
+    log.info('Storing stacking ensemble')
     directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
     _prepare_directory(directory)
     _store_model(directory, 0, meta_model)
@@ -122,6 +144,7 @@ def save_stacking_model(meta_model,
 
 
 def save_voting_model(*models, conf: Config):
+    log.info('Storing voting ensemble')
     directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
     _prepare_directory(directory)
     for nr, model in enumerate(models):

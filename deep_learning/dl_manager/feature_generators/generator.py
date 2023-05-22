@@ -457,7 +457,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
             use_lowercase = self.__params['disable-lowercase']
-            use_ontologies = self.conf.get('run.apply-ontology-classes')
+            use_ontologies = self.__apply_ontologies
             handling_string = self.__params['formatting-handling']
             handling = FormattingHandling.from_string(handling_string)
             weights, tagdict, classes = nltk.load(
