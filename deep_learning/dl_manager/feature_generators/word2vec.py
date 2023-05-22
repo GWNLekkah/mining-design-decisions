@@ -20,7 +20,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
             embedding = db.get_embedding_by_id(self.params['embedding-id'])
             filename = os.path.join(
-                self.conf.get('os.system.scratch-directory'),
+                self.conf.get('system.os.scratch-directory'),
                 self.params['embedding-id'] + '.bin'
             )
             if os.path.exists(filename):
