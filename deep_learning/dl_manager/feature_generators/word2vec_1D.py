@@ -57,7 +57,10 @@ class Word2Vec(AbstractWord2Vec):
                     #'model-binary': args['pretrained-binary'].lower() == 'true'
                 },
                 [
-                    self.params['embedding-id'] + '.bin'
+                    os.path.join(
+                        self.conf.get('system.os.scratch-directory'),
+                        self.params['embedding-id'] + '.bin'
+                    )
                 ]
             )
 
