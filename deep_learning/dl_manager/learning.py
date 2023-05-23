@@ -607,4 +607,4 @@ def _get_voting_predictions(truth, predictions, *, conf: Config):
     final_predictions = voting_util.get_voting_predictions(output_mode,
                                                            predictions,
                                                            conf.get('run.voting-mode'))
-    return final_predictions
+    return final_predictions.tolist()
