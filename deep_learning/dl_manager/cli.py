@@ -546,6 +546,7 @@ def _get_model_factory(conf: Config):
         if len(models) == 1:
             final_model = keras_models[0]
         elif conf.get('run.ensemble-strategy') not in ('stacking', 'voting') and not conf.get('run.test-separately'):
+            assert conf.get('run.ensemble-strategy') == 'combination'
             final_model = classifiers.combine_models(
                 models[0], *keras_models, fully_connected_layers=(None, None), conf=conf
             )
