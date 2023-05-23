@@ -462,7 +462,7 @@ def run_classification_command(conf: Config):
     else:
         testing_data = None
 
-    if conf.get('run.ensemble-strategy') != 'none':
+    if conf.get('run.ensemble-strategy') in ('stacking', 'voting'):
         if conf.get('run.k-cross') != 0 or conf.get('run.cross-project'):
             assert testing_data is None, 'testing_data should be None'
         version, performances, kw_files = learning.run_ensemble(factory,
