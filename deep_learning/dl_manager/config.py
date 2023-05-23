@@ -501,7 +501,7 @@ class _ArgumentValidator:
         self._options = spec['options']
         if self._nargs not in ('1', '*', '+'):
             raise ValueError(f'[{self.name}] Invalid nargs: {self._nargs}')
-        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query', 'dynamic_enum', 'object'):
+        if self._type not in ('str', 'int', 'bool', 'enum', 'class', 'arglist', 'float', 'query', 'dynamic_enum', 'object', 'hyper_arglist'):
             raise ValueError(f'[{self.name}] Invalid type: {self._type}')
         if self._type == 'class':
             if len(self._options) != 1:
@@ -518,6 +518,19 @@ class _ArgumentValidator:
                 raise ValueError(f'[{self.name}] Option of "arglist" argument must contain "map-path" and "multi-valued".')
             module, item = self._options[0]['map-path'].rsplit('.', maxsplit=1)
             self._options[0] = ArgumentListParser(
+                name=self.name,
+                lookup_map=getattr(importlib.import_module(module), item),
+                multi_valued=self._options[0]['multi-valued']
+            )
+        if self._type == 'hyper_arglist':
+            if len(self._options) != 1 or not isinstance(self._options[0], dict):
+                raise ValueError(
+                    f'[{self.name}] Argument of type "hyper_arglist" requires exactly one option of type "dict".')
+            if 'map-path' not in self._options[0] or 'multi-valued' not in self._options[0]:
+                raise ValueError(
+                    f'[{self.name}] Option of "hyper_arglist" argument must contain "map-path" and "multi-valued".')
+            module, item = self._options[0]['map-path'].rsplit('.', maxsplit=1)
+            self._options[0] = HyperArgumentListParser(
                 name=self.name,
                 lookup_map=getattr(importlib.import_module(module), item),
                 multi_valued=self._options[0]['multi-valued']
@@ -625,6 +638,8 @@ class _ArgumentValidator:
                     )
             case 'arglist':
                 return self._options[0].validate(x)
+            case 'hyper_arglist':
+                return self._options[0].validate(x)
             case 'dynamic_enum':
                 if not isinstance(x, str):
                     raise fastapi.HTTPException(
@@ -710,6 +725,11 @@ class Argument(abc.ABC):
             'readable-options': self.legal_values
         }
 
+    @staticmethod
+    @abc.abstractmethod
+    def supported_hyper_param_specs():
+        return []
+
     def raise_invalid(self, msg):
         raise fastapi.HTTPException(
             detail=f'Argument {self.argument_name!r} is invalid: {msg}',
@@ -749,6 +769,10 @@ class FloatArgument(Argument):
             'maximum': self._max
         }
 
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['values']
+
 
 class IntArgument(Argument):
 
@@ -784,6 +808,10 @@ class IntArgument(Argument):
             'maximum': self._max
         }
 
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['values', 'range']
+
 
 class EnumArgument(Argument):
 
@@ -813,6 +841,10 @@ class EnumArgument(Argument):
             'options': self._options
         }
 
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['values']
+
 
 class BoolArgument(Argument):
 
@@ -830,6 +862,10 @@ class BoolArgument(Argument):
     def get_json_spec(self):
         return super().get_json_spec() | {}
 
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['values']
+
 
 class StringArgument(Argument):
 
@@ -846,6 +882,10 @@ class StringArgument(Argument):
 
     def get_json_spec(self):
         return super().get_json_spec() | {}
+
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['values']
 
 
 class QueryArgument(Argument):
@@ -866,6 +906,10 @@ class QueryArgument(Argument):
 
     def get_json_spec(self):
         return super().get_json_spec() | {}
+
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['values']
 
 
 class ArgumentListParser:
@@ -974,12 +1018,14 @@ class ArgumentListParser:
             if key not in args:
                 raise fastapi.HTTPException(detail=f'Unknown argument {key} for {name}',
                                             status_code=400)
-            result[key] = args[key].validate(value)
+            #result[key] = args[key].validate(value)
+            result[key] = self.validate_value(args[key], value)
             log.info(f'Parsed argument {key!r}: {result[key]}')
 
         for arg in args.values():
             if arg.argument_name not in result and arg.has_default:
-                result[arg.argument_name] = arg.validate(arg.default)
+                #result[arg.argument_name] = arg.validate(arg.default)
+                result[arg.argument_name] = self.validate_default(arg, arg.default)
                 log.info(f'Applied default: {arg.argument_name!r}: {result[arg.argument_name]}')
         missing = required - set(result)
         if missing:
@@ -988,4 +1034,91 @@ class ArgumentListParser:
                 status_code=400
             )
         return result
+
+    def validate_value(self, validator: Argument, value: typing.Any) ->  typing.Any:
+        return validator.validate(value)
+
+    def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
+        return validator.validate(value)
+
+
+class HyperArgumentListParser(ArgumentListParser):
+
+    def validate_value(self, validator: Argument, value: typing.Any) ->  typing.Any:
+        if not isinstance(value, dict):
+            raise fastapi.HTTPException(detail='hyper param arglist entry must be a dict',
+                                        status_code=400)
+        if 'type' not in value:
+            raise fastapi.HTTPException(detail='hyper param arglist entry must contain a field "type"',
+                                        status_code=400)
+        if 'options' not in value:
+            raise fastapi.HTTPException(detail='hyper param arglist entry must contain a field "options"',
+                                        status_code=400)
+        if not isinstance(value['options'], dict):
+            raise fastapi.HTTPException(detail='hyper param arglist "options" must be a dict',
+                                        status_code=400)
+        match value['type']:
+            case 'range':
+                return {'type': 'range', 'options': self._validate_range(validator, value['options'])}
+            case 'values':
+                return {'type': 'values', 'options': self._validate_values(validator, value['options'])}
+            case _ as x:
+                raise fastapi.HTTPException(detail=f'Invalid hyper param arglist type: {x}',
+                                            status_code=400)
+
+    def _validate_range(self, validator: Argument, options: dict):
+        if 'range' not in validator.supported_hyper_param_specs():
+            raise fastapi.HTTPException(
+                detail=f'Hyper param arglist item of type {validator.__class__.__name__} does not support range.',
+                status_code=400
+            )
+        self._check_opt_key(options, {'start', 'stop', 'stop'})
+        self._check_opt_type(options['start'], int, 'start')
+        self._check_opt_type(options['stop'], int, 'stop')
+        self._check_opt_type(options['step'], int, 'step')
+
+    def _validate_values(self, validator: Argument, options: dict):
+        if 'values' not in validator.supported_hyper_param_specs():
+            raise fastapi.HTTPException(
+                detail=f'Hyper param arglist item of type {validator.__class__.__name__} does not support "values".',
+                status_code=400
+            )
+        self._check_opt_key(options, {'values'})
+        self._check_opt_type(options['values'], list, 'options')
+        return {
+            'values': [validator.validate(value) for value in options['values']]
+        }
+
+    def _require_opt_field(self, options, type_name, key):
+        if key not in options:
+            raise fastapi.HTTPException(
+                detail=f'Hyper param arglist of type {type_name!r} must have options field {key}',
+                status_code=400
+            )
+
+    def _check_opt_type(self, obj, typ, name):
+        if not isinstance(obj, typ):
+            raise fastapi.HTTPException(
+                detail=f'Hyper param arglist item option {name} be of type {typ}',
+                status_code=400
+            )
+
+    def _check_opt_key(self, options, keys):
+        for key in keys:
+            self._require_opt_field(options, key)
+        if rem := set(options) - keys:
+            raise fastapi.HTTPException(
+                detail=f'Superfluous option keys: {rem}', status_code=400
+            )
+
+    def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
+        return self.validate_value(
+            validator,
+            {
+                'type': 'values',
+                'options': {
+                    'values': [validator.validate(value)]
+                }
+            }
+        )
 
