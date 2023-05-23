@@ -516,8 +516,8 @@ def run_stacking_ensemble(factory,
 
             if conf.get('run.store-model'):     # only ran in single-shot mode
                 version_id = model_manager.save_stacking_model(
-                    input_conversion_method.to_json(),
-                    epoch_model,
+                    meta_model=epoch_model,
+                    conversion_strategy=input_conversion_method.to_json(),
                     *trained_sub_models,
                     conf=conf
                 )
