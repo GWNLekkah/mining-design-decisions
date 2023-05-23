@@ -118,9 +118,9 @@ def save_single_model(model, conf: Config):
     return _upload_zip_data(directory, conf)
 
 
-def save_stacking_model(meta_model,
+def save_stacking_model(*child_models,
+                        meta_model,
                         conversion_strategy: str,
-                        *child_models,
                         conf: Config):
     log.info('Storing stacking ensemble')
     directory = os.path.join(conf.get('system.os.scratch-directory'), MODEL_DIR)
