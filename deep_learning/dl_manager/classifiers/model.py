@@ -266,6 +266,9 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
             )   # one_hot=self.__output_encoding == OutputEncoding.OneHot
         ]
 
+    def get_loss(self, **kwargs):
+        return self.__get_loss_function(**kwargs)
+
     def __get_loss_function(self, **kwargs):
         loss = kwargs['loss']
         match self.__output_encoding:

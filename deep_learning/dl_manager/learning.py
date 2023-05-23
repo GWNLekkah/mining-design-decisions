@@ -531,9 +531,9 @@ def run_stacking_ensemble(factory,
                 'loss': None,
                 'predictions': collections.defaultdict(list),
                 'truth': {
-                    'training': __voting_ensemble_hook[0](train[1], predictions_train, conf=conf),
-                    'validation': __voting_ensemble_hook[0](validation[1], predictions_val, conf=conf),
-                    'testing': __voting_ensemble_hook[0](test[1], predictions_test, conf=conf)
+                    'training': __voting_ensemble_hook[0](train[1], numpy.array(predictions_train), conf=conf),
+                    'validation': __voting_ensemble_hook[0](validation[1], numpy.array(predictions_val), conf=conf),
+                    'testing': __voting_ensemble_hook[0](test[1], numpy.array(predictions_test), conf=conf)
                 },
                 # Voting does not use early stopping, so set to defaults.
                 'early_stopping_settings': {
