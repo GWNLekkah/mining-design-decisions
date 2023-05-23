@@ -213,6 +213,7 @@
           "options": [
             "add",
             "subtract",
+            "average",
             "min",
             "max",
             "multiply",
@@ -220,6 +221,21 @@
             "concat"
           ],
           "required": false
+        },
+        {
+          "name": "combination-model-hyper-params",
+          "help": "Hyper-parameters for the creation of a combined model",
+          "nargs": "1",
+          "default": null,
+          "type": "arglist",
+          "null-unless": {"name": "ensemble-strategy", "value":  "combination"},
+          "required": false,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.combined_model.combined_models",
+              "multi-valued": false
+            }
+          ]
         },
         {
           "name": "ensemble-strategy",
