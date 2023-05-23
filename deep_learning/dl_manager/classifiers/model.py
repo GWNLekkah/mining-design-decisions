@@ -105,12 +105,11 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                                            name='learning-rate',
                                            description='Learning rate for the learning process')
         }
-        if InputEncoding.Embedding in cls.supported_input_encodings():
-            result |= {
-                'use-trainable-embedding': BoolArgument(default=False,
-                                                        name='use-trainable-embedding',
-                                                        description='Whether to make the word-embedding trainable')
-            }
+        result |= {
+            'use-trainable-embedding': BoolArgument(default=False,
+                                                    name='use-trainable-embedding',
+                                                    description='Whether to make the word-embedding trainable.')
+        }    
         return result
 
     @staticmethod
@@ -294,5 +293,4 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
             case OutputEncoding.Binary:
                 return tf.keras.metrics.BinaryAccuracy(name='accuracy')
 
-    get_loss = __get_loss_function
     get_accuracy = __get_accuracy
