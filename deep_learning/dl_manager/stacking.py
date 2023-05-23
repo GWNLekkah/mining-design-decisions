@@ -53,7 +53,12 @@ class InputConversion(enum.Enum):
 def build_stacking_classifier(conf: Config):
     # First, we load the settings
     model_name = conf.get('run.stacking-meta-classifier')
-    model_params = conf.get('run.stacking-meta-classifier-hyper-parameters')
+    # Load hyper params
+    model_params_raw = conf.get('run.stacking-meta-classifier-hyper-parameters')
+    assert len(model_params_raw) == 1
+    key = list(model_params_raw)[0]
+    model_params = model_params_raw[key][0]
+
     must_concat = conf.get('run.stacking-use-concat')
     no_matrix = conf.get('run.stacking-no-matrix')
     model_factory = classifiers.models[model_name]

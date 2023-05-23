@@ -109,7 +109,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
             'use-trainable-embedding': BoolArgument(default=False,
                                                     name='use-trainable-embedding',
                                                     description='Whether to make the word-embedding trainable.')
-        }    
+        }
         return result
 
     @staticmethod

@@ -46,7 +46,7 @@ class FullyConnectedModel(AbstractModel):
     def get_arguments(cls) -> dict[str, Argument]:
         max_layers = 11
         num_layers_param = IntArgument(default=1, minimum=0, maximum=max_layers,
-                                       name='number-of-hidden-layer',
+                                       name='number-of-hidden-layers',
                                        description='number of hidden layers in the model.')
         layer_sizes = {
             f'hidden-layer-{i}-size': IntArgument(minimum=2, default=32, maximum=16384,
