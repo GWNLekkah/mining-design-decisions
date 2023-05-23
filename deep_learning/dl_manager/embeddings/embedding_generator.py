@@ -141,7 +141,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             conf.get('system.os.scratch-directory'),
             TEMP_EMBEDDING_PATH
         )
-        self.generate_embedding(documents, embedding_path)
+        self.generate_embedding(documents, pathlib.Path(embedding_path))
 
         # Upload binary file
         embedding_id = conf.get('generate-embedding-internal.embedding-id')
