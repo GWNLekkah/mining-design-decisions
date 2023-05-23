@@ -230,6 +230,7 @@
           "options": [
             "stacking",
             "voting",
+            "combination",
             "none"
           ],
           "required": false
