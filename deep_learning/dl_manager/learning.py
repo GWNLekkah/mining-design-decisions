@@ -572,17 +572,7 @@ def run_stacking_ensemble(
     voting_result_data = []
     stream = splitter.split(training_data, testing_data)
     version_id = None
-    for (
-        train,
-        test,
-        validation,
-        training_keys,
-        validation_keys,
-        test_issue_keys,
-        train_ids,
-        val_ids,
-        test_ids,
-    ) in stream:
+    for (train, test, validation, training_keys, validation_keys, test_issue_keys, train_ids, val_ids, test_ids) in stream:
         # Step 1) Train all models and get their predictions
         #           on the training and validation set.
         models = factory()
@@ -591,15 +581,8 @@ def run_stacking_ensemble(
         predictions_test = []
         model_number = 0
         trained_sub_models = []
-        for model, model_train, model_test, model_validation in zip(
-            models, train[0], test[0], validation[0], strict=True
-        ):
-            (
-                trained_sub_model,
-                sub_model_results,
-                best_sub_model_results,
-                kw_data,
-            ) = train_and_test_model(
+        for model, model_train, model_test, model_validation in zip(models, train[0], test[0], validation[0], strict=True):
+            trained_sub_model, sub_model_results, best_sub_model_results, kw_data = train_and_test_model(
                 model,
                 dataset_train=(model_train, train[1]),
                 dataset_val=(model_validation, validation[1]),
@@ -683,17 +666,21 @@ def run_stacking_ensemble(
                     for k, v in label_mapping.items()
                 ],
                 "loss": None,
-                "predictions": collections.defaultdict(list),
                 "truth": {
-                    "training": __voting_ensemble_hook[0](
+                    'training': train[1],
+                    'validation': validation[1],
+                    'testing': test[1]
+                },
+                "predictions": {
+                    "training": [__voting_ensemble_hook[0](
                         train[1], numpy.array(predictions_train), conf=conf
-                    ),
-                    "validation": __voting_ensemble_hook[0](
+                    )],
+                    "validation": [__voting_ensemble_hook[0](
                         validation[1], numpy.array(predictions_val), conf=conf
-                    ),
-                    "testing": __voting_ensemble_hook[0](
+                    )],
+                    "testing": [__voting_ensemble_hook[0](
                         test[1], numpy.array(predictions_test), conf=conf
-                    ),
+                    )],
                 },
                 # Voting does not use early stopping, so set to defaults.
                 "early_stopping_settings": {
