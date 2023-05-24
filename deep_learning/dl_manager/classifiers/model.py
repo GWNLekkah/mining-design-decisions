@@ -13,7 +13,7 @@ import numpy
 import tensorflow as tf
 import tensorflow_addons as tfa
 
-from ..config import Argument, BoolArgument, StringArgument, EnumArgument, FloatArgument, ArgumentConsumer
+from ..config import Argument, BoolArgument, StringArgument, EnumArgument, FloatArgument, ArgumentConsumer, IntArgument
 from  ..model_io import InputEncoding, OutputEncoding
 
 
@@ -100,10 +100,22 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                                  description='Loss to use in the training process',
                                  options=['crossentropy', 'hinge'],
                                  name='loss'),
-            'learning-rate': FloatArgument(default=0.01,
-                                           minimum=0.0,
-                                           name='learning-rate',
-                                           description='Learning rate for the learning process')
+            'learning-rate-start': FloatArgument(default=0.005,
+                                                 minimum=0.0,
+                                                 name='learning-rate-start',
+                                                 description='Initial learning rate for the learning process'),
+            'learning-rate-stop': FloatArgument(default=0.0005,
+                                                minimum=0.0,
+                                                name='learning-rate-stop',
+                                                description='Learnign rate after "learning-rate-steps" steps'),
+            'learning-rate-steps': IntArgument(default=470,
+                                               minimum=1,
+                                               name='learning-rate-steps',
+                                               description='Amount of decay steps requierd to go from start to stop LR'),
+            'learning-rate-power': FloatArgument(default=1.0,
+                                                 minimum=0.0,
+                                                 name='learning-rate-power',
+                                                 description='Degree of the polynomial to use for the learning rate.')
         }
         result |= {
             'use-trainable-embedding': BoolArgument(default=False,
@@ -202,13 +214,22 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
     # ================================================================
     # Optimizer Configuration
 
-    def get_learning_rate_scheduler(
-            self) -> tf.keras.optimizers.schedules.LearningRateSchedule | None:
+    def get_learning_rate_scheduler(self, **kwargs):
+        # lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+        #     initial_learning_rate=0.005,
+        #     decay_steps=470,
+        #     end_learning_rate=0.0005,
+        #     power=1.0,
+        #     cycle=False,
+        #     name=None
+        # )
+        if abs(kwargs['learning-rate-start'] - kwargs['learning-rate-stop']) <= 1e-10:
+            return kwargs['learning-rate-start']
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
-            initial_learning_rate=0.005,
-            decay_steps=470,
-            end_learning_rate=0.0005,
-            power=1.0,
+            initial_learning_rate=kwargs['learning-rate-start'],
+            decay_steps=kwargs['learning-rate-steps'],
+            end_learning_rate=kwargs['learning-rate-stop'],
+            power=kwargs['learning-rate-power'],
             cycle=False,
             name=None
         )
@@ -220,7 +241,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         # except KeyError:
         #     optimizer = kwargs.get(self.__class__.__name__, None)
         optimizer = kwargs['optimizer']
-        learning_rate = kwargs['learning-rate']
+        learning_rate = self.get_learning_rate_scheduler(**kwargs)
         if optimizer is None or optimizer == 'adam':
             return tf.keras.optimizers.Adam(learning_rate=learning_rate)
         elif optimizer.startswith('sgd'):
