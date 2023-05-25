@@ -308,6 +308,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         issues = api.search(query,
                             attributes=metadata_attributes + ['key', 'summary', 'description'],
                             load_labels=True)
+        issues.sort(key=lambda i: i.identifier)
         labels = {
             'detection': [],
             'classification3': [],
