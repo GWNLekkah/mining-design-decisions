@@ -667,9 +667,9 @@ def run_stacking_ensemble(
                 ],
                 "loss": None,
                 "truth": {
-                    'training': train[1],
-                    'validation': validation[1],
-                    'testing': test[1]
+                    'training': train[1].tolist(),
+                    'validation': validation[1].tolist(),
+                    'testing': test[1].tolist()
                 },
                 "predictions": {
                     "training": [__voting_ensemble_hook[0](
