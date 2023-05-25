@@ -260,32 +260,32 @@ def run_keras_tuner(
     project_name = "project_name"
 
     # Get the tuner
-    if conf.get("keras-tuner.tuner-type") == "RandomSearch":
+    if conf.get("run.tuner-type") == "RandomSearch":
         tuner = keras_tuner.RandomSearch(
-            hypermodel=model.get_keras_tuner_model,
-            objective=f"val_{conf.get('keras-tuner.objective')}",
-            max_trials=conf.get("keras-tuner.max-trials"),
-            executions_per_trial=conf.get("keras-tuner.executions-per-trial"),
+            hypermodel=model,
+            objective=f"val_{conf.get('run.tuner-objective')}",
+            max_trials=conf.get("run.tuner-max-trials"),
+            executions_per_trial=conf.get("run.tuner-executions-per-trial"),
             overwrite=True,
             directory=directory,
             project_name=project_name,
         )
-    elif conf.get("keras-tuner.tuner-type") == "BayesianOptimization":
+    elif conf.get("run.tuner-type") == "BayesianOptimization":
         tuner = keras_tuner.BayesianOptimization(
-            hypermodel=model.get_keras_tuner_model,
-            objective=f"val_{conf.get('keras-tuner.objective')}",
-            max_trials=conf.get("keras-tuner.max-trials"),
-            executions_per_trial=conf.get("keras-tuner.executions-per-trial"),
+            hypermodel=model,
+            objective=f"val_{conf.get('run.tuner-objective')}",
+            max_trials=conf.get("run.tuner-max-trials"),
+            executions_per_trial=conf.get("run.tuner-executions-per-trial"),
             overwrite=True,
             directory=directory,
             project_name=project_name,
         )
-    elif conf.get("keras-tuner.tuner-type") == "Hyperband":
+    elif conf.get("run.tuner-type") == "Hyperband":
         tuner = keras_tuner.Hyperband(
-            hypermodel=model.get_keras_tuner_model,
-            objective=f"val_{conf.get('keras-tuner.objective')}",
-            max_trials=conf.get("keras-tuner.max-trials"),
-            executions_per_trial=conf.get("keras-tuner.executions-per-trial"),
+            hypermodel=model,
+            objective=f"val_{conf.get('run.tuner-objective')}",
+            max_trials=conf.get("run.tuner-max-trials"),
+            executions_per_trial=conf.get("run.tuner-executions-per-trial"),
             overwrite=True,
             directory=directory,
             project_name=project_name,
@@ -293,8 +293,8 @@ def run_keras_tuner(
     print(tuner.search_space_summary())  # TODO: this should be output
     splitter = splitting.SimpleSplitter(
         conf,
-        val_split_size=conf.get("keras-tuner.split-size"),
-        test_split_size=conf.get("keras-tuner.split-size"),
+        val_split_size=conf.get("run.split-size"),
+        test_split_size=conf.get("run.split-size"),
         max_train=None,
     )
     # Split returns an iterator; call next() to get data splits
@@ -310,28 +310,30 @@ def run_keras_tuner(
         test_ids,
     ) = next(splitter.split(data))
 
+    # Create callbacks
+    callbacks = []
+    attributes = conf.get("run.early-stopping-attribute")
+    min_deltas = conf.get("run.early-stopping-min-delta")
+    for attribute, min_delta in zip(attributes, min_deltas):
+        monitor = keras.callbacks.EarlyStopping(
+            monitor=f"val_{attribute}",
+            patience=conf.get("run.early-stopping-patience"),
+            min_delta=min_delta,
+            mode=EARLY_STOPPING_GOALS[attribute],
+        )
+        callbacks.append(monitor)
+
     # Find best hyperparams
     tuner.search(
         train[0],
         train[1],
-        epochs=conf.get("keras-tuner.epochs"),
+        epochs=conf.get("run.epochs"),
         validation_data=(validation[0], validation[1]),
-        callbacks=[
-            tf.keras.callbacks.EarlyStopping(
-                monitor=f"val_{conf.get('keras-tuner.early-stopping-attribute')}",
-                patience=conf.get("keras-tuner.early-stopping-patience"),
-                min_delta=conf.get("keras-tuner.early-stopping-min-delta"),
-                mode=EARLY_STOPPING_GOALS[
-                    conf.get("keras-tuner.early-stopping-attribute")
-                ],
-            )
-        ],
+        callbacks=callbacks,
     )
     # TODO: decide what to output
     models = tuner.get_best_models(num_models=2)
     best_model = models[0]
-    best_model.build()
-    print(best_model.summary())
     print(tuner.results_summary())
 
 
@@ -572,7 +574,17 @@ def run_stacking_ensemble(
     voting_result_data = []
     stream = splitter.split(training_data, testing_data)
     version_id = None
-    for (train, test, validation, training_keys, validation_keys, test_issue_keys, train_ids, val_ids, test_ids) in stream:
+    for (
+        train,
+        test,
+        validation,
+        training_keys,
+        validation_keys,
+        test_issue_keys,
+        train_ids,
+        val_ids,
+        test_ids,
+    ) in stream:
         # Step 1) Train all models and get their predictions
         #           on the training and validation set.
         models = factory()
@@ -581,8 +593,15 @@ def run_stacking_ensemble(
         predictions_test = []
         model_number = 0
         trained_sub_models = []
-        for model, model_train, model_test, model_validation in zip(models, train[0], test[0], validation[0], strict=True):
-            trained_sub_model, sub_model_results, best_sub_model_results, kw_data = train_and_test_model(
+        for model, model_train, model_test, model_validation in zip(
+            models, train[0], test[0], validation[0], strict=True
+        ):
+            (
+                trained_sub_model,
+                sub_model_results,
+                best_sub_model_results,
+                kw_data,
+            ) = train_and_test_model(
                 model,
                 dataset_train=(model_train, train[1]),
                 dataset_val=(model_validation, validation[1]),
@@ -667,20 +686,26 @@ def run_stacking_ensemble(
                 ],
                 "loss": None,
                 "truth": {
-                    'training': train[1].tolist(),
-                    'validation': validation[1].tolist(),
-                    'testing': test[1].tolist()
+                    "training": train[1].tolist(),
+                    "validation": validation[1].tolist(),
+                    "testing": test[1].tolist(),
                 },
                 "predictions": {
-                    "training": [__voting_ensemble_hook[0](
-                        train[1], numpy.array(predictions_train), conf=conf
-                    )],
-                    "validation": [__voting_ensemble_hook[0](
-                        validation[1], numpy.array(predictions_val), conf=conf
-                    )],
-                    "testing": [__voting_ensemble_hook[0](
-                        test[1], numpy.array(predictions_test), conf=conf
-                    )],
+                    "training": [
+                        __voting_ensemble_hook[0](
+                            train[1], numpy.array(predictions_train), conf=conf
+                        )
+                    ],
+                    "validation": [
+                        __voting_ensemble_hook[0](
+                            validation[1], numpy.array(predictions_val), conf=conf
+                        )
+                    ],
+                    "testing": [
+                        __voting_ensemble_hook[0](
+                            test[1], numpy.array(predictions_test), conf=conf
+                        )
+                    ],
                 },
                 # Voting does not use early stopping, so set to defaults.
                 "early_stopping_settings": {

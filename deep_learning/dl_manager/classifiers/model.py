@@ -13,9 +13,16 @@ import numpy
 import tensorflow as tf
 import tensorflow_addons as tfa
 
-from ..config import Argument, BoolArgument, StringArgument, EnumArgument, FloatArgument, ArgumentConsumer, IntArgument
-from  ..model_io import InputEncoding, OutputEncoding
-
+from ..config import (
+    Argument,
+    BoolArgument,
+    StringArgument,
+    EnumArgument,
+    FloatArgument,
+    ArgumentConsumer,
+    IntArgument,
+)
+from ..model_io import InputEncoding, OutputEncoding
 
 
 ##############################################################################
@@ -25,17 +32,18 @@ from  ..model_io import InputEncoding, OutputEncoding
 
 
 class AbstractModel(abc.ABC, ArgumentConsumer):
-
-    def __init__(self,
-                 input_size: int | tuple[int],
-                 input_encoding: InputEncoding,
-                 number_of_outputs: int,
-                 output_encoding: OutputEncoding):
+    def __init__(
+        self,
+        input_size: int | tuple[int],
+        input_encoding: InputEncoding,
+        number_of_outputs: int,
+        output_encoding: OutputEncoding,
+    ):
         self.__n_inputs = input_size
         self.__input_encoding = input_encoding
         self.__n_outputs = number_of_outputs
         self.__output_encoding = output_encoding
-        #match self.__input_encoding:
+        # match self.__input_encoding:
         #    case InputEncoding.Matrix:
         #        self.__check_input_size_type(tuple)
         #    case _:
@@ -43,9 +51,11 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
 
     def __check_input_size_type(self, expected_type):
         if not isinstance(self.input_size, expected_type):
-            message = (f'Invalid input size type for input encoding ' 
-                       f'{self.input_encoding}: ' 
-                       f'{self.input_size.__class__.__name__}')
+            message = (
+                f"Invalid input size type for input encoding "
+                f"{self.input_encoding}: "
+                f"{self.input_size.__class__.__name__}"
+            )
             raise ValueError(message)
 
     # ================================================================
@@ -71,11 +81,14 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
     # Abstract Methods
 
     @abc.abstractmethod
-    def get_model(self, *,
-                  embedding=None,
-                  embedding_size: int | None = None,
-                  embedding_output_size: int | None = None,
-                  **kwargs) -> tf.keras.Model:
+    def get_model(
+        self,
+        *,
+        embedding=None,
+        embedding_size: int | None = None,
+        embedding_output_size: int | None = None,
+        **kwargs,
+    ) -> tf.keras.Model:
         """Build and return the (not compiled) model.
 
         Note that input and output layers must also be
@@ -93,42 +106,55 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         Remember to call super() when implementing
         """
         result = {
-            'optimizer': StringArgument(default='adam',
-                                        description='Optimizer to use. Special case: use sgd_XXX to specify SGD with momentum XXX',
-                                        name='optimizer'),
-            'loss': EnumArgument(default='crossentropy',
-                                 description='Loss to use in the training process',
-                                 options=['crossentropy', 'hinge'],
-                                 name='loss'),
-            'learning-rate-start': FloatArgument(default=0.005,
-                                                 minimum=0.0,
-                                                 name='learning-rate-start',
-                                                 description='Initial learning rate for the learning process'),
-            'learning-rate-stop': FloatArgument(default=0.0005,
-                                                minimum=0.0,
-                                                name='learning-rate-stop',
-                                                description='Learnign rate after "learning-rate-steps" steps'),
-            'learning-rate-steps': IntArgument(default=470,
-                                               minimum=1,
-                                               name='learning-rate-steps',
-                                               description='Amount of decay steps requierd to go from start to stop LR'),
-            'learning-rate-power': FloatArgument(default=1.0,
-                                                 minimum=0.0,
-                                                 name='learning-rate-power',
-                                                 description='Degree of the polynomial to use for the learning rate.')
+            "optimizer": StringArgument(
+                default="adam",
+                description="Optimizer to use. Special case: use sgd_XXX to specify SGD with momentum XXX",
+                name="optimizer",
+            ),
+            "loss": EnumArgument(
+                default="crossentropy",
+                description="Loss to use in the training process",
+                options=["crossentropy", "hinge"],
+                name="loss",
+            ),
+            "learning-rate-start": FloatArgument(
+                default=0.005,
+                minimum=0.0,
+                name="learning-rate-start",
+                description="Initial learning rate for the learning process",
+            ),
+            "learning-rate-stop": FloatArgument(
+                default=0.0005,
+                minimum=0.0,
+                name="learning-rate-stop",
+                description='Learnign rate after "learning-rate-steps" steps',
+            ),
+            "learning-rate-steps": IntArgument(
+                default=470,
+                minimum=1,
+                name="learning-rate-steps",
+                description="Amount of decay steps requierd to go from start to stop LR",
+            ),
+            "learning-rate-power": FloatArgument(
+                default=1.0,
+                minimum=0.0,
+                name="learning-rate-power",
+                description="Degree of the polynomial to use for the learning rate.",
+            ),
         }
         result |= {
-            'use-trainable-embedding': BoolArgument(default=False,
-                                                    name='use-trainable-embedding',
-                                                    description='Whether to make the word-embedding trainable.')
+            "use-trainable-embedding": BoolArgument(
+                default=False,
+                name="use-trainable-embedding",
+                description="Whether to make the word-embedding trainable.",
+            )
         }
         return result
 
     @staticmethod
     @abc.abstractmethod
     def supported_input_encodings() -> list[InputEncoding]:
-        """List of supported input encodings.
-        """
+        """List of supported input encodings."""
 
     @staticmethod
     @abc.abstractmethod
@@ -140,36 +166,39 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
 
     def get_activation(self, act: str):
         match act:
-            case 'relu':
+            case "relu":
                 return tf.keras.layers.Activation(tf.keras.activations.relu)
-            case 'elu':
+            case "elu":
                 return tf.keras.layers.Activation(tf.keras.activations.elu)
-            case 'leakyrelu':
-                #return tf.keras.layers.advanced_activations.LeakyReLU()
+            case "leakyrelu":
+                # return tf.keras.layers.advanced_activations.LeakyReLU()
                 return tf.keras.layers.LeakyReLU()
-            case 'sigmoid':
+            case "sigmoid":
                 return tf.keras.layers.Activation(tf.keras.activations.sigmoid)
-            case 'tanh':
+            case "tanh":
                 return tf.keras.layers.Activation(tf.keras.activations.tanh)
-            case 'softmax':
+            case "softmax":
                 return tf.keras.layers.Activation(tf.keras.activations.softmax)
-            case 'softsign':
+            case "softsign":
                 return tf.keras.layers.Activation(tf.keras.activations.softsign)
-            case 'selu':
+            case "selu":
                 return tf.keras.layers.Activation(tf.keras.activations.selu)
-            case 'exp':
+            case "exp":
                 return tf.keras.layers.Activation(tf.keras.activations.exp)
-            case 'prelu':
-                #return tf.keras.layers.advanced_activations.PReLU()
+            case "prelu":
+                # return tf.keras.layers.advanced_activations.PReLU()
                 return tf.keras.layers.PReLU()
             case _ as x:
-                raise ValueError(f'Invalid activation {x}')
+                raise ValueError(f"Invalid activation {x}")
 
-    def get_input_layer(self, *,
-                        embedding=None,
-                        embedding_size: int | None = None,
-                        embedding_output_size: int | None = None,
-                        trainable_embedding: bool = False) -> (tf.keras.layers.Layer, tf.keras.layers.Layer):
+    def get_input_layer(
+        self,
+        *,
+        embedding=None,
+        embedding_size: int | None = None,
+        embedding_output_size: int | None = None,
+        trainable_embedding: bool = False,
+    ) -> (tf.keras.layers.Layer, tf.keras.layers.Layer):
         match self.__input_encoding:
             case InputEncoding.Vector:
                 if self.input_must_support_convolution():
@@ -197,19 +226,18 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                     embedding_output_size,
                     weights=[numpy.asarray(embedding)],
                     input_shape=shape,
-                    trainable=trainable_embedding)(inputs)
+                    trainable=trainable_embedding,
+                )(inputs)
             case InputEncoding.Text:
-                inputs = tf.keras.layers.Input(shape=(), dtype=tf.string, name='text')
+                inputs = tf.keras.layers.Input(shape=(), dtype=tf.string, name="text")
                 return inputs, inputs
 
     def get_output_layer(self) -> tf.keras.layers.Layer:
         match self.__output_encoding:
             case OutputEncoding.Binary:
-                return tf.keras.layers.Dense(self.__n_outputs,
-                                             activation='sigmoid')
+                return tf.keras.layers.Dense(self.__n_outputs, activation="sigmoid")
             case OutputEncoding.OneHot:
-                return tf.keras.layers.Dense(self.__n_outputs,
-                                             activation='softmax')
+                return tf.keras.layers.Dense(self.__n_outputs, activation="softmax")
 
     # ================================================================
     # Optimizer Configuration
@@ -223,15 +251,15 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         #     cycle=False,
         #     name=None
         # )
-        if abs(kwargs['learning-rate-start'] - kwargs['learning-rate-stop']) <= 1e-10:
-            return kwargs['learning-rate-start']
+        if abs(kwargs["learning-rate-start"] - kwargs["learning-rate-stop"]) <= 1e-10:
+            return kwargs["learning-rate-start"]
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
-            initial_learning_rate=kwargs['learning-rate-start'],
-            decay_steps=kwargs['learning-rate-steps'],
-            end_learning_rate=kwargs['learning-rate-stop'],
-            power=kwargs['learning-rate-power'],
+            initial_learning_rate=kwargs["learning-rate-start"],
+            decay_steps=kwargs["learning-rate-steps"],
+            end_learning_rate=kwargs["learning-rate-stop"],
+            power=kwargs["learning-rate-power"],
             cycle=False,
-            name=None
+            name=None,
         )
         return lr_schedule
 
@@ -240,78 +268,105 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         #     optimizer = kwargs.get('optimizer')
         # except KeyError:
         #     optimizer = kwargs.get(self.__class__.__name__, None)
-        optimizer = kwargs['optimizer']
+        optimizer = kwargs["optimizer"]
         learning_rate = self.get_learning_rate_scheduler(**kwargs)
-        if optimizer is None or optimizer == 'adam':
+        if optimizer is None or optimizer == "adam":
             return tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        elif optimizer.startswith('sgd'):
-            momentum = float(optimizer[optimizer.find('_')+1:])
-            return tf.keras.optimizers.SGD(learning_rate=learning_rate, momentum=momentum)
+        elif optimizer.startswith("sgd"):
+            momentum = float(optimizer[optimizer.find("_") + 1 :])
+            return tf.keras.optimizers.SGD(
+                learning_rate=learning_rate, momentum=momentum
+            )
         else:
-            raise ValueError('Invalid Optimizer Specified')
-
+            raise ValueError("Invalid Optimizer Specified")
 
     # ================================================================
     # Model Building Functionality
 
-    def get_compiled_model(self, *,
-                           embedding=None,
-                           embedding_size: int | None = None,
-                           embedding_output_size: int | None = None,
-                           **kwargs):
-        model = self.get_model(embedding=embedding,
-                               embedding_size=embedding_size,
-                               embedding_output_size=embedding_output_size,
-                               **kwargs)
-        model.compile(optimizer=self.get_optimizer(**kwargs),
-                      loss=self.__get_loss_function(**kwargs),
-                      metrics=self.get_metric_list())
+    def get_compiled_model(
+        self,
+        *,
+        embedding=None,
+        embedding_size: int | None = None,
+        embedding_output_size: int | None = None,
+        **kwargs,
+    ):
+        model = self.get_model(
+            embedding=embedding,
+            embedding_size=embedding_size,
+            embedding_output_size=embedding_output_size,
+            **kwargs,
+        )
+        model.compile(
+            optimizer=self.get_optimizer(**kwargs),
+            loss=self.__get_loss_function(**kwargs),
+            metrics=self.get_metric_list(),
+        )
         return model
 
     def get_metric_list(self):
         return [
-            tf.keras.metrics.TruePositives(thresholds=0.5, name='true_positives'),
-            tf.keras.metrics.TrueNegatives(thresholds=0.5, name='true_negatives'),
-            tf.keras.metrics.FalsePositives(thresholds=0.5, name='false_positives'),
-            tf.keras.metrics.FalseNegatives(thresholds=0.5, name='false_negatives'),
+            tf.keras.metrics.TruePositives(thresholds=0.5, name="true_positives"),
+            tf.keras.metrics.TrueNegatives(thresholds=0.5, name="true_negatives"),
+            tf.keras.metrics.FalsePositives(thresholds=0.5, name="false_positives"),
+            tf.keras.metrics.FalseNegatives(thresholds=0.5, name="false_negatives"),
             self.__get_accuracy(),
             # Precision and recall use thresholds=0.5 by default
-            tf.keras.metrics.Precision(name='precision'),
-            tf.keras.metrics.Recall(name='recall'),
+            tf.keras.metrics.Precision(name="precision"),
+            tf.keras.metrics.Recall(name="recall"),
             tfa.metrics.F1Score(
                 num_classes=self.__n_outputs,
-                threshold=0.5 if self.__output_encoding != OutputEncoding.OneHot else None,
-                name='f_score_tf_macro',
-                average='macro',
-            )   # one_hot=self.__output_encoding == OutputEncoding.OneHot
+                threshold=0.5
+                if self.__output_encoding != OutputEncoding.OneHot
+                else None,
+                name="f_score_tf_macro",
+                average="macro",
+            ),  # one_hot=self.__output_encoding == OutputEncoding.OneHot
         ]
 
     def get_loss(self, **kwargs):
         return self.__get_loss_function(**kwargs)
 
     def __get_loss_function(self, **kwargs):
-        loss = kwargs['loss']
+        loss = kwargs["loss"]
         match self.__output_encoding:
             case OutputEncoding.OneHot:
-                if loss == 'crossentropy':
+                if loss == "crossentropy":
                     return tf.keras.losses.CategoricalCrossentropy()
-                elif loss == 'hinge':
+                elif loss == "hinge":
                     return tf.keras.losses.CategoricalHinge()
                 else:
-                    raise ValueError(f'Invalid loss: {loss}')
+                    raise ValueError(f"Invalid loss: {loss}")
             case OutputEncoding.Binary:
-                if loss == 'crossentropy':
+                if loss == "crossentropy":
                     return tf.keras.losses.BinaryCrossentropy()
-                elif loss == 'hinge':
+                elif loss == "hinge":
                     return tf.keras.losses.Hinge()
                 else:
-                    raise ValueError(f'Invalid loss: {loss}')
+                    raise ValueError(f"Invalid loss: {loss}")
+
+    def _get_tuner_loss_function(self, loss):
+        match self.__output_encoding:
+            case OutputEncoding.OneHot:
+                if loss == "crossentropy":
+                    return tf.keras.losses.CategoricalCrossentropy()
+                elif loss == "hinge":
+                    return tf.keras.losses.CategoricalHinge()
+                else:
+                    raise ValueError(f"Invalid loss: {loss}")
+            case OutputEncoding.Binary:
+                if loss == "crossentropy":
+                    return tf.keras.losses.BinaryCrossentropy()
+                elif loss == "hinge":
+                    return tf.keras.losses.Hinge()
+                else:
+                    raise ValueError(f"Invalid loss: {loss}")
 
     def __get_accuracy(self):
         match self.__output_encoding:
             case OutputEncoding.OneHot:
-                return tf.keras.metrics.CategoricalAccuracy(name='accuracy')
+                return tf.keras.metrics.CategoricalAccuracy(name="accuracy")
             case OutputEncoding.Binary:
-                return tf.keras.metrics.BinaryAccuracy(name='accuracy')
+                return tf.keras.metrics.BinaryAccuracy(name="accuracy")
 
     get_accuracy = __get_accuracy
