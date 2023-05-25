@@ -1089,10 +1089,10 @@ class HyperArgumentListParser(ArgumentListParser):
             'values': [validator.validate(value) for value in options['values']]
         }
 
-    def _require_opt_field(self, options, type_name, key):
+    def _require_opt_field(self, options, key):
         if key not in options:
             raise fastapi.HTTPException(
-                detail=f'Hyper param arglist of type {type_name!r} must have options field {key}',
+                detail=f'Hyper param arglist must have options field {key}',
                 status_code=400
             )
 
