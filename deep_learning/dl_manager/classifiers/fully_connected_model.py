@@ -3,6 +3,7 @@ import tensorflow as tf
 from ..config import Argument, IntArgument, EnumArgument
 from .model import AbstractModel
 from ..model_io import InputEncoding
+from ..model_io import OutputEncoding
 
 
 class FullyConnectedModel(AbstractModel):
@@ -44,12 +45,17 @@ class FullyConnectedModel(AbstractModel):
         def get_values(hp, arg, hp_name):
             arg_values = kwargs[arg]
             if arg_values["type"] == "range":
-                start = arg_values["values"]["start"]
-                stop = arg_values["values"]["stop"]
-                step = arg_values["values"]["step"]
+                start = arg_values["options"]["start"]
+                stop = arg_values["options"]["stop"]
+                step = arg_values["options"]["step"]
                 return hp.Int(hp_name, min_value=start, max_value=stop, step=step)
             elif arg_values["type"] == "values":
-                return hp.Choice("num_layers", arg_values["values"])
+                return hp.Choice(hp_name, arg_values["options"]["values"])
+            elif arg_values["type"] == "floats":
+                start = arg_values["options"]["start"]
+                stop = arg_values["options"]["stop"]
+                step = arg_values["options"]["step"]
+                return hp.Float(hp_name, min_value=start, max_value=stop, step=step)
 
         def get_model(hp):
             inputs, next_layer = self.get_input_layer(
@@ -62,16 +68,41 @@ class FullyConnectedModel(AbstractModel):
                 current = tf.keras.layers.Flatten()(next_layer)
             else:
                 current = next_layer
-            for i in range(get_values(hp, "number-of-hidden-layers", "num_layers")):
+            for i in range(
+                get_values(hp, "number-of-hidden-layers", "number-of-hidden-layers")
+            ):
                 current = tf.keras.layers.Dense(
-                    units=get_values(hp, f"hidden-layer-{i}-size", "units"),
-                    activation=get_values(hp, f"layer-{i}-activation", "activation"),
+                    units=get_values(
+                        hp, f"hidden-layer-{i + 1}-size", f"hidden-layer-{i + 1}-size"
+                    ),
+                    activation=get_values(
+                        hp, f"layer-{i + 1}-activation", f"layer-{i + 1}-activation"
+                    ),
                 )(current)
             outputs = self.get_output_layer()(current)
             model = tf.keras.Model(inputs=[inputs], outputs=outputs)
+
+            # Select optimizer
+            optimizer = get_values(hp, "optimizer", "optimizer")
+            if optimizer == "adam":
+                optimizer = tf.keras.optimizers.Adam(
+                    learning_rate=get_values(hp, "learning-rate-start", "lr")
+                )
+            elif optimizer == "sgd":
+                optimizer = tf.keras.optimizers.SGD(
+                    learning_rate=get_values(hp, "learning-rate-start", "lr"),
+                    momentum=hp.Float(
+                        "momentum", min_value=0.0, max_value=1.0, step=0.05
+                    ),
+                )
+
+            # Select loss
+            loss = get_values(hp, "loss", "loss")
+
+            # Compile model
             model.compile(
-                optimizer=self.get_optimizer(**kwargs),
-                loss=self.__get_loss_function(**kwargs),
+                optimizer=optimizer,
+                loss=self._get_tuner_loss_function(loss),
                 metrics=self.get_metric_list(),
             )
             return model
