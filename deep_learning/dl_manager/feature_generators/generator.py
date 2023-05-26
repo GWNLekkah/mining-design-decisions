@@ -396,7 +396,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         )
 
         limit = self.params['class-limit']
-        if limit != -1 and self.pretrained is None:     # Only execute if not pretrained
+        if limit != -1 and self.pretrained is None and False:     # Only execute if not pretrained
             stratified_indices = []
             for issue_type in classification_indices.keys():
                 project_labels = [label for index, label in enumerate([label.split('-')[0]
@@ -457,7 +457,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             use_pos = self.__params['use-pos']
             stemmer = nltk.stem.PorterStemmer()
             lemmatizer = nltk.stem.WordNetLemmatizer()
-            use_lowercase = self.__params['disable-lowercase']
+            use_lowercase = not self.__params['disable-lowercase']
             use_ontologies = self.__apply_ontologies
             handling_string = self.__params['formatting-handling']
             handling = FormattingHandling.from_string(handling_string)
@@ -497,7 +497,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                         words = ontology.apply_ontologies_to_sentence(words, ontology_table)
 
                     # Remove stopwords
-                    if self.__params['disable-stopwords']:
+                    if not self.__params['disable-stopwords']:
                         words = [(word, tag) for word, tag in words if word not in stopwords]
 
                     if use_stemming and use_lemmatization:
