@@ -68,7 +68,7 @@ class LinearRNNModel(AbstractModel):
         }
         return {
             'bidirectional-layer-size': IntArgument(
-                default=64, minimum=1, maximum=128,
+                default=64, minimum=1, maximum=4096,
                 name='bidirectional-layer-size',
                 description='Size of the bidirectional layer.'
             ),
