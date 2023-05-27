@@ -89,13 +89,7 @@ class DeepLearningData:
 
     def split_fraction_stratified(self, size: float):
         indices = list(range(len(self.labels)))
-        left, right, _, _ = sklearn.model_selection.train_test_split(
-            indices,
-            self.extended_labels,
-            train_size=size,
-            shuffle=True,
-            stratify=True
-        )
+        left, right = kfold.StratifiedSplit(size).split(indices, self.extended_labels)
         return self.sample_indices(left), self.sample_indices(right)
 
     def split_k_cross(self, k: int):
