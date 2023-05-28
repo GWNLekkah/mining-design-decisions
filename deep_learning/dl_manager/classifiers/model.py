@@ -345,7 +345,36 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 else:
                     raise ValueError(f"Invalid loss: {loss}")
 
-    def _get_tuner_loss_function(self, loss):
+    def __get_accuracy(self):
+        match self.__output_encoding:
+            case OutputEncoding.OneHot:
+                return tf.keras.metrics.CategoricalAccuracy(name="accuracy")
+            case OutputEncoding.Binary:
+                return tf.keras.metrics.BinaryAccuracy(name="accuracy")
+
+    get_accuracy = __get_accuracy
+
+    ##############################################################################
+    ##############################################################################
+    # Tuner functions
+    ##############################################################################
+    def _get_values(self, hp, arg, **kwargs):
+        arg_values = kwargs[arg]
+        if arg_values["type"] == "range":
+            start = arg_values["options"]["start"]
+            stop = arg_values["options"]["stop"]
+            step = arg_values["options"]["step"]
+            return hp.Int(arg, min_value=start, max_value=stop, step=step)
+        elif arg_values["type"] == "values":
+            return hp.Choice(arg, arg_values["options"]["values"])
+        elif arg_values["type"] == "floats":
+            start = arg_values["options"]["start"]
+            stop = arg_values["options"]["stop"]
+            step = arg_values["options"]["step"]
+            return hp.Float(arg, min_value=start, max_value=stop, step=step)
+
+    def _get_tuner_loss_function(self, hp, **kwargs):
+        loss = self._get_values(hp, "loss", **kwargs)
         match self.__output_encoding:
             case OutputEncoding.OneHot:
                 if loss == "crossentropy":
@@ -362,11 +391,14 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 else:
                     raise ValueError(f"Invalid loss: {loss}")
 
-    def __get_accuracy(self):
-        match self.__output_encoding:
-            case OutputEncoding.OneHot:
-                return tf.keras.metrics.CategoricalAccuracy(name="accuracy")
-            case OutputEncoding.Binary:
-                return tf.keras.metrics.BinaryAccuracy(name="accuracy")
-
-    get_accuracy = __get_accuracy
+    def _get_tuner_optimizer(self, hp, **kwargs):
+        optimizer = self._get_values(hp, "optimizer", **kwargs)
+        if optimizer == "adam":
+            return tf.keras.optimizers.Adam(
+                learning_rate=self._get_values(hp, "learning-rate-start", **kwargs)
+            )
+        elif optimizer == "sgd":
+            return tf.keras.optimizers.SGD(
+                learning_rate=self._get_values(hp, "learning-rate-start", **kwargs),
+                momentum=hp.Float("momentum", min_value=0.0, max_value=1.0, step=0.05),
+            )

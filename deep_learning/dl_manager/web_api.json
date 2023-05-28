@@ -477,7 +477,7 @@
           "help": "Hyper-parameters params for the Keras Tuner. Items in the name=value format.",
           "nargs": "1",
           "type": "hyper_arglist",
-          "required": true,
+          "required": false,
           "options": [
             {
               "map-path": "dl_manager.classifiers.models",

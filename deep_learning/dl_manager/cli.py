@@ -509,6 +509,7 @@ def run_classification_command(conf: Config):
 
     if conf.get("run.perform-tuning"):
         learning.run_keras_tuner(factory(), training_data, conf)
+        return
 
     if conf.get("run.ensemble-strategy") in ("stacking", "voting"):
         if conf.get("run.k-cross") != 0 or conf.get("run.cross-project"):
@@ -587,15 +588,6 @@ def _get_model_factory(conf: Config):
             model_counts[name] += 1
             hyper_parameters = conf.get("run.hyper-params")
             hyperparams = hyper_parameters[name][model_number]
-            if conf.get("run.perform-tuning"):
-                tuner_hyper_parameters = conf.get("run.tuner-hyper-params")
-                tuner_hyperparams = tuner_hyper_parameters[name][model_number]
-                return model.get_keras_tuner_model(
-                    embedding=data.embedding_weights,
-                    embedding_size=data.vocab_size,
-                    embedding_output_size=data.weight_vector_length,
-                    **tuner_hyperparams,
-                )
             if data.is_embedding():
                 keras_model = model.get_compiled_model(
                     embedding=data.embedding_weights,
@@ -605,6 +597,18 @@ def _get_model_factory(conf: Config):
                 )
             else:
                 keras_model = model.get_compiled_model(**hyperparams)
+            if conf.get("run.perform-tuning"):
+                tuner_hyper_parameters = conf.get("run.tuner-hyper-params")
+                tuner_hyperparams = tuner_hyper_parameters[name][model_number]
+                return (
+                    model.get_keras_tuner_model(
+                        embedding=data.embedding_weights,
+                        embedding_size=data.vocab_size,
+                        embedding_output_size=data.weight_vector_length,
+                        **tuner_hyperparams,
+                    ),
+                    keras_model.layers[0],
+                )
             keras_models.append(keras_model)
         # 4) If necessary, combine models
         if len(models) == 1:

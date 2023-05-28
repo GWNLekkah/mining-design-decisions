@@ -251,10 +251,12 @@ def run_cross(
 
 
 def run_keras_tuner(
-    model,
+    model_and_input_layer,
     data,
     conf: Config,
 ):
+    model, input_layer = model_and_input_layer
+
     # Things to configure
     directory = "tmp/dir_for_storing_results"
     project_name = "project_name"
@@ -284,7 +286,9 @@ def run_keras_tuner(
         tuner = keras_tuner.Hyperband(
             hypermodel=model,
             objective=f"val_{conf.get('run.tuner-objective')}",
-            max_trials=conf.get("run.tuner-max-trials"),
+            max_epochs=50,
+            factor=10,
+            hyperband_iterations=3,
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
             overwrite=True,
             directory=directory,
@@ -334,6 +338,11 @@ def run_keras_tuner(
     # TODO: decide what to output
     models = tuner.get_best_models(num_models=2)
     best_model = models[0]
+    best_model.build(input_shape=input_layer.output_shape)
+    print("---------------------------------------------")
+    print("Evaluation on test set")
+    best_model.evaluate(test[0], test[1])
+    print("---------------------------------------------")
     print(tuner.results_summary())
 
 
