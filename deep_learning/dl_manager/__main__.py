@@ -1,5 +1,7 @@
 import argparse
 
+import fastapi
+
 from . import run_cli_app
 
 def main():
@@ -9,7 +11,10 @@ def main():
     parser.add_argument('--keyfile', type=str, help='Key file for HTTPS', default='')
     parser.add_argument('--script', type=str, help='Path to a JSON file describing a set of endpoints to be called.', default='')
     args = parser.parse_args()
-    run_cli_app(args.keyfile, args.certfile, args.port, args.script)
+    try:
+        run_cli_app(args.keyfile, args.certfile, args.port, args.script)
+    except fastapi.HTTPException as e:
+        raise ValueError(e.detail)
 
 if __name__ == '__main__':
     main()

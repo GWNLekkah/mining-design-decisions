@@ -538,10 +538,8 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                         )
 
                     # Remove stopwords
-                    if self.__params["disable-stopwords"]:
-                        words = [
-                            (word, tag) for word, tag in words if word not in stopwords
-                        ]
+                    if not self.__params['disable-stopwords']:
+                        words = [(word, tag) for word, tag in words if word not in stopwords]
 
                     if use_stemming and use_lemmatization:
                         raise ValueError("Cannot use both stemming and lemmatization")

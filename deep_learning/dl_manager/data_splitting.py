@@ -9,6 +9,8 @@ import functools
 import random
 
 import numpy
+import sklearn.model_selection
+from sklearn.model_selection import train_test_split
 
 from . import kfold
 from . import custom_kfold
@@ -84,6 +86,11 @@ class DeepLearningData:
         left = self.sample_indices(range(0, size_left))
         right = self.sample_indices(range(size_left, self.size))
         return left, right
+
+    def split_fraction_stratified(self, size: float):
+        indices = list(range(len(self.labels)))
+        left, right = kfold.StratifiedSplit(size).split(indices, self.extended_labels)
+        return self.sample_indices(left), self.sample_indices(right)
 
     def split_k_cross(self, k: int):
         splitter = kfold.StratifiedKFold(k)
@@ -218,11 +225,14 @@ class SimpleSplitter(DataSplitter):
         data = DeepLearningData(labels, issue_keys, issue_ids, generators, *features).shuffle()
         if testing_data is None:
             size = self.val_split + self.test_split
-            training_data, remainder = data.split_fraction(1 - size)
+            #training_data, remainder = data.split_fraction(1 - size)
+            training_data, remainder = data.split_fraction_stratified(1 - size)
             size = self.val_split / (self.val_split + self.test_split)
-            val_data, test_data = remainder.split_fraction(size)
+            #val_data, test_data = remainder.split_fraction(size)
+            val_data, test_data = remainder.split_fraction_stratified(size)
         else:
-            training_data, val_data = data.split_fraction(1 - self.val_split)
+            #training_data, val_data = data.split_fraction(1 - self.val_split)
+            training_data, val_data = data.split_fraction_stratified(1 - self.val_split)
             assert (
                 (self.val_split < 0.5 and training_data.labels.size > val_data.labels.size) or
                 (self.val_split > 0.5 and training_data.labels.size < val_data.labels.size)
