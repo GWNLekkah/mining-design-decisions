@@ -1,4 +1,5 @@
 import issue_db_api
+import requests
 
 
 def update_embedding(repo: issue_db_api.IssueRepository, embedding_id, *, all_data):
@@ -107,16 +108,55 @@ def main():
         '646c80f03613911624e8cdb0',     # voting ensemble
         '646c80f03613911624e8cdb1',     # stacking ensemble
     ]
-    new_embeddings = {}
-    new_ids = []
+    # new_embeddings = {}
+    # new_ids = []
+    # for ident in identifiers:
+    #     old_model = repo.get_model_by_id(ident)
+    #     new_config = compute_updated_config(repo, old_model, new_embeddings)
+    #     print(f'New model: ', old_model.name + ' - New Dataset')
+    #     new_ids.append(
+    #        repo.add_model(old_model.name + ' - New Dataset', new_config)
+    #     )
+    # print(new_ids)
     for ident in identifiers:
-        old_model = repo.get_model_by_id(ident)
-        new_config = compute_updated_config(repo, old_model, new_embeddings)
-        print(f'New model: ', old_model.name + ' - New Dataset')
-        new_ids.append(
-           repo.add_model(old_model.name + ' - New Dataset', new_config)
+        model = repo.get_model_by_id(ident)
+        response = requests.post(
+            'https://192.168.2.255:9011/metrics',
+            json={
+                'auth': {
+                    'token': 'eyJhbGciOiJIUzI1NiIsInR5cCI6IkpXVCJ9.eyJ1c2VybmFtZSI6Implc3NlIiwiZXhwIjoxNjg0OTM0Mzg5fQ.gAWAzSHaHWJ8i-knKlAE7BuBrnKAFjal0b8r_sMKexU'
+                },
+                'config': {
+                    'database-url': 'https://issues-db.nl:8000',
+                    'model-id': ident,
+                    'version-id': model.test_runs[-1].run_id,
+                    'epoch': 'stopping-point',
+                    'metrics': [
+                        {
+                            'dataset': 'testing',
+                            'metric': 'f1_score',
+                            'variant': 'macro'
+                        },
+                        {
+                            'dataset': 'testing',
+                            'metric': 'precision',
+                            'variant': 'macro'
+                        },
+                        {
+                            'dataset': 'testing',
+                            'metric': 'recall',
+                            'variant': 'macro'
+                        }
+                    ]
+                }
+            }
         )
-    print(new_ids)
+        response.raise_for_status()
+        metrics = response.json()
+        prec = metrics['testing']['precision[macro]'][-1]
+        recall = metrics['testing']['recall[macro]'][-1]
+        f1 = metrics['testing']['f1_score[macro]'][-1]
+        print(model.name, ' -- precision / recall / F1 --', f'{prec:.4f} / {recall:.4f} / {f1:.4f}')
 
 if __name__ == '__main__':
     main()
