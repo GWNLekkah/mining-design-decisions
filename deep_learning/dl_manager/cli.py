@@ -559,6 +559,7 @@ def _get_model_factory(conf: Config):
 
     def factory():
         models = []
+        tuner_models = []
         keras_models = []
         output_encoding = OutputMode.from_string(
             conf.get("run.output-mode")
@@ -597,22 +598,26 @@ def _get_model_factory(conf: Config):
                 )
             else:
                 keras_model = model.get_compiled_model(**hyperparams)
-            if conf.get("run.perform-tuning"):
+            if (
+                conf.get("run.perform-tuning")
+                and conf.get("run.ensemble-strategy") != "combination"
+            ):
                 tuner_hyper_parameters = conf.get("run.tuner-hyper-params")
                 tuner_hyperparams = tuner_hyper_parameters[name][model_number]
-                return (
+                tuner_models.append(
                     model.get_keras_tuner_model(
                         embedding=data.embedding_weights,
                         embedding_size=data.vocab_size,
                         embedding_output_size=data.weight_vector_length,
                         **tuner_hyperparams,
-                    ),
-                    keras_model.layers[0],
+                    )
                 )
             keras_models.append(keras_model)
         # 4) If necessary, combine models
-        if len(models) == 1:
+        if len(models) == 1 and not conf.get("run.perform-tuning"):
             final_model = keras_models[0]
+        elif len(tuner_models) == 1 and conf.get("run.perform-tuning"):
+            return tuner_models[0]
         elif conf.get("run.ensemble-strategy") not in (
             "stacking",
             "voting",
@@ -626,6 +631,14 @@ def _get_model_factory(conf: Config):
                 conf,
                 **conf.get("run.combination-model-hyper-params")["CombinedModel"][0],
             )
+            if conf.get("run.perform-tuning"):
+                return classifiers.tuner_combine_models(
+                    keras_models,
+                    conf,
+                    **conf.get("run.tuner-combination-model-hyper-params")[
+                        "CombinedModel"
+                    ][0],
+                )
         else:
             return keras_models  # Return all models separately, required for stacking or separate testing
         final_model.summary()

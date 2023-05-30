@@ -120,7 +120,16 @@ class LinearConv1Model(AbstractModel):
             )
             return model
 
-        return get_model
+        input_layer, _ = self.get_input_layer(
+            embedding=embedding,
+            embedding_size=embedding_size,
+            embedding_output_size=embedding_output_size,
+            trainable_embedding=kwargs["use-trainable-embedding"]["options"]["values"][
+                0
+            ],
+        )
+
+        return get_model, input_layer.shape
 
     @staticmethod
     def supported_input_encodings() -> list[InputEncoding]:

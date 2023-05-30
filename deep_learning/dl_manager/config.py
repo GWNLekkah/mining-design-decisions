@@ -1132,7 +1132,7 @@ class HyperArgumentListParser(ArgumentListParser):
                 detail=f"Hyper param arglist item of type {validator.__class__.__name__} does not support range.",
                 status_code=400,
             )
-        self._check_opt_key(options, {"start", "stop", "stop"})
+        self._check_opt_key(options, {"start", "stop", "step"})
         self._check_opt_type(options["start"], int, "start")
         self._check_opt_type(options["stop"], int, "stop")
         self._check_opt_type(options["step"], int, "step")

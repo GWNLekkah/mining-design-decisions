@@ -251,11 +251,11 @@ def run_cross(
 
 
 def run_keras_tuner(
-    model_and_input_layer,
+    model_and_input_shape,
     data,
     conf: Config,
 ):
-    model, input_layer = model_and_input_layer
+    model, input_shape = model_and_input_shape
 
     # Things to configure
     directory = "tmp/dir_for_storing_results"
@@ -338,7 +338,7 @@ def run_keras_tuner(
     # TODO: decide what to output
     models = tuner.get_best_models(num_models=2)
     best_model = models[0]
-    best_model.build(input_shape=input_layer.output_shape)
+    best_model.build(input_shape=input_shape)
     print("---------------------------------------------")
     print("Evaluation on test set")
     best_model.evaluate(test[0], test[1])

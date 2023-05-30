@@ -486,6 +486,21 @@
               "multi-valued": true
             }
           ]
+        },
+        {
+          "name": "tuner-combination-model-hyper-params",
+          "help": "Hyper-parameters for the creation of a combined model for keras tuner",
+          "nargs": "1",
+          "default": {"CombinedModel.0":  {}},
+          "null-unless": {"name": "perform-tuning", "value":  true},
+          "type": "hyper_arglist",
+          "required": false,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.combined_model.combined_models",
+              "multi-valued": false
+            }
+          ]
         }
       ]
     },

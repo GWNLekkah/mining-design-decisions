@@ -6,15 +6,9 @@ from .bert import Bert
 
 from ..model_io import InputEncoding, OutputEncoding
 
-from .combined_model import combine_models
+from .combined_model import combine_models, tuner_combine_models
 
 
-_models = (
-    FullyConnectedModel,
-    LinearConv1Model,
-    LinearRNNModel,
-    Bert
-)
+_models = (FullyConnectedModel, LinearConv1Model, LinearRNNModel, Bert)
 models = {cls.__name__: cls for cls in _models}
 del _models
-
