@@ -53,7 +53,7 @@ class FullyConnectedModel(AbstractModel):
             else:
                 current = next_layer
             n_hidden_layers = self._get_values(hp, "number-of-hidden-layers", **kwargs)
-            for i in range(1, n_hidden_layers):
+            for i in range(1, n_hidden_layers + 1):
                 current = tf.keras.layers.Dense(
                     units=self._get_values(hp, f"hidden-layer-{i}-size", **kwargs),
                     activation=self._get_values(hp, f"layer-{i}-activation", **kwargs),

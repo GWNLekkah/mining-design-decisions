@@ -52,6 +52,7 @@ EARLY_STOPPING_GOALS = {
     "true_negatives": "max",
     "false_positives": "min",
     "false_negatives": "min",
+    "f_score_tf_macro": "max",
 }
 
 
@@ -265,7 +266,10 @@ def run_keras_tuner(
     if conf.get("run.tuner-type") == "RandomSearch":
         tuner = keras_tuner.RandomSearch(
             hypermodel=model,
-            objective=f"val_{conf.get('run.tuner-objective')}",
+            objective=keras_tuner.Objective(
+                f"val_{conf.get('run.tuner-objective')}",
+                direction=EARLY_STOPPING_GOALS[conf.get("run.tuner-objective")],
+            ),
             max_trials=conf.get("run.tuner-max-trials"),
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
             overwrite=True,
@@ -275,7 +279,10 @@ def run_keras_tuner(
     elif conf.get("run.tuner-type") == "BayesianOptimization":
         tuner = keras_tuner.BayesianOptimization(
             hypermodel=model,
-            objective=f"val_{conf.get('run.tuner-objective')}",
+            objective=keras_tuner.Objective(
+                f"val_{conf.get('run.tuner-objective')}",
+                direction=EARLY_STOPPING_GOALS[conf.get("run.tuner-objective")],
+            ),
             max_trials=conf.get("run.tuner-max-trials"),
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
             overwrite=True,
@@ -285,7 +292,10 @@ def run_keras_tuner(
     elif conf.get("run.tuner-type") == "Hyperband":
         tuner = keras_tuner.Hyperband(
             hypermodel=model,
-            objective=f"val_{conf.get('run.tuner-objective')}",
+            objective=keras_tuner.Objective(
+                f"val_{conf.get('run.tuner-objective')}",
+                direction=EARLY_STOPPING_GOALS[conf.get("run.tuner-objective")],
+            ),
             max_epochs=50,
             factor=10,
             hyperband_iterations=3,
