@@ -1,3 +1,5 @@
+# WARNING; THIS FILE CURRENTLY DOES NOT WORK (OR, AT LEAST, IS NOT TESTED)
+
 # Start from a nice and fresh Ubuntu installation
 FROM ubuntu:20.04
 
@@ -35,6 +37,9 @@ RUN apt-get -y install --reinstall build-essential
 RUN apt install pkg-config
 RUN apt-get -y install libssl-dev
 
+# GPU Support
+RUN python3.10 -m pip install tensorflow-directml-plugin
+
 # Get list of dependencies and install them
 RUN python3.10 setup.py sdist
 RUN python3.10 -m pip install -r dl_manager.egg-info/requires.txt
@@ -48,4 +53,4 @@ RUN python3.10 setup.py build_ext --inplace --verbose
 COPY ./dl_manager /app/dl_manager
 
 # Setup start-up command
-CMD ["python3.10", "-m", "dl_manager", "--keyfile", "server.key", "--certfile", "server.crt"]
+CMD ["python3.10", "-m", "dl_manager",  "--keyfile", "server.key", "--certfile", "server.crt"]

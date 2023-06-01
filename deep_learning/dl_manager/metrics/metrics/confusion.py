@@ -18,6 +18,12 @@ class MetricSet:
     false_positives: int
     false_negatives: int
 
+    def matrix(self):
+        return [
+            [self.true_negatives, self.false_positives],
+            [self.false_negatives, self.true_positives]
+        ]
+
 
 ##############################################################################
 ##############################################################################
@@ -36,11 +42,14 @@ def minor(matrix, i, j):
 
 
 def compute_confusion_binary(y_true, y_pred) -> tuple[float, MetricSet]:
-    labels = OutputMode.Detection.output_vector_field_names
-    accuracy, classes = compute_confusion_multi_class(y_true,
-                                                      y_pred,
-                                                      labels)
-    return accuracy, classes['Architectural']
+    # labels = OutputMode.Detection.output_vector_field_names
+    # accuracy, classes = compute_confusion_multi_class(y_true,
+    #                                                   y_pred,
+    #                                                   labels)
+    matrix = confusion_matrix(y_true, y_pred)
+    metrics = extract_confusion(matrix, 1, len(y_true))
+    accuracy = (metrics.true_positives + metrics.true_negatives) / len(y_true)
+    return accuracy, {'Architectural': metrics}
 
 
 def compute_confusion_multi_class(y_true,
@@ -60,23 +69,30 @@ def compute_confusion_multi_label(y_true,
                                   y_pred,
                                   labels, *,
                                   all_negative_is_class=False,
-                                  all_negative_class_name='negative') -> tuple[float, dict[str, MetricSet]]:
+                                  all_negative_class_name='negative',
+                                  all_negative_class_pattern=None) -> tuple[float, dict[str, MetricSet]]:
     matrices = multilabel_confusion_matrix(y_true, y_pred)
     class_metrics = {}
     for matrix, label in zip(matrices, labels):
-        class_metrics[label] = extract_confusion(matrix, 0, len(y_true))
+        class_metrics[label] = extract_confusion(matrix, 1, len(y_true))
     if all_negative_is_class:
-        binary_y_true = (y_true == [0, 0, 0]).all(axis=0)
-        binary_y_pred = (y_pred == [0, 0, 0]).all(axis=0)
-        _, result = compute_confusion_binary(binary_y_true, binary_y_pred)
-        class_metrics[all_negative_class_name] = result
+        binary_y_true = ~(y_true == all_negative_class_pattern).all(axis=1)
+        binary_y_pred = ~(y_pred == all_negative_class_pattern).all(axis=1)
+        assert len(binary_y_true) == len(y_true)
+        # _, result = compute_confusion_binary(binary_y_true, binary_y_pred)
+        # class_metrics[all_negative_class_name] = result
+        matrix = confusion_matrix(binary_y_true, binary_y_pred)
+        class_metrics[all_negative_class_name] = extract_confusion(matrix, 0, len(binary_y_true))
     x, y = y_pred.shape
     total = x * y
     correct = sum(
         m.true_positives + m.true_negatives
         for m in class_metrics.values()
     )
-    accuracy = correct / total
+    if all_negative_is_class:
+        accuracy = correct / (total ** 2)
+    else:
+        accuracy = correct / total
     assert 0 <= accuracy <= 1
     return accuracy, class_metrics
 

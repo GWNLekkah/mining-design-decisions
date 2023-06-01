@@ -1,11 +1,11 @@
 import collections
-import os
 
-from . import ParameterSpec
+import issue_db_api
+
+from ..config import Argument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
-from ..config import conf
 
 from .util.ontology import load_ontology, OntologyTable
 
@@ -43,11 +43,9 @@ class OntologyFeatures(AbstractFeatureGenerator):
                          metadata,
                          args: dict[str, str]):
         if self.pretrained is None:
-            ontology_path = conf.get('make-features.ontology-classes')
-            if ontology_path == '':
-                raise ValueError('--ontology-classes parameter must be given')
+            ontology_path = self.require_ontology_classes()
         else:
-            aux_map = conf.get('system.storage.auxiliary_map')
+            aux_map = self.conf.get('system.storage.auxiliary_map')
             ontology_path = aux_map[self.pretrained['ontologies']]
         table = load_ontology(ontology_path)
         order = tuple(table.classes)
@@ -95,5 +93,5 @@ class OntologyFeatures(AbstractFeatureGenerator):
         return FeatureEncoding.Numerical
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
-        return super(OntologyFeatures, OntologyFeatures).get_parameters()
+    def get_arguments() -> dict[str, Argument]:
+        return super(OntologyFeatures, OntologyFeatures).get_arguments()

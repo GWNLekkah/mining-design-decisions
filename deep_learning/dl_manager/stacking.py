@@ -3,11 +3,10 @@ import warnings
 
 import numpy
 
-from . import classifiers, model_io
-from . import feature_generators as generators
+from .config import Config
+from . import classifiers
 from .model_io import OutputMode, InputEncoding
 
-from .config import conf
 
 
 class InputConversion(enum.Enum):
@@ -51,10 +50,15 @@ class InputConversion(enum.Enum):
                 return cls.ComposeAsMatrix
 
 
-def build_stacking_classifier():
+def build_stacking_classifier(conf: Config):
     # First, we load the settings
     model_name = conf.get('run.stacking-meta-classifier')
-    model_params = conf.get('run.stacking-meta-classifier-hyper-parameters')
+    # Load hyper params
+    model_params_raw = conf.get('run.stacking-meta-classifier-hyper-parameters')
+    assert len(model_params_raw) == 1
+    key = list(model_params_raw)[0]
+    model_params = model_params_raw[key][0]
+
     must_concat = conf.get('run.stacking-use-concat')
     no_matrix = conf.get('run.stacking-no-matrix')
     model_factory = classifiers.models[model_name]
@@ -116,7 +120,9 @@ def build_stacking_classifier():
     return factory, input_conversion
 
 
-def transform_predictions_to_stacking_input(predictions, input_conversion: InputConversion):
+def transform_predictions_to_stacking_input(output_mode: OutputMode,
+                                            predictions,
+                                            input_conversion: InputConversion):
     match input_conversion:
         case InputConversion.Concatenate:
             converted = []
@@ -129,7 +135,6 @@ def transform_predictions_to_stacking_input(predictions, input_conversion: Input
                 converted.append(numpy.argmax(prediction, axis=1))
             return numpy.vstack(converted).transpose()
         case InputConversion.VectorAsBinary:
-            output_mode = conf.get('output-mode')
             number_of_digits = output_mode.output_size
             single_mask = [2**(number_of_digits - i - 1) for i in range(number_of_digits)]
             mask = numpy.asarray([

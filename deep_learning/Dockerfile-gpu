@@ -1,14 +1,15 @@
 # Start from a nice and fresh Ubuntu installation
 #FROM ubuntu:20.04
-FROM nvidia/cuda:11.2.0-cudnn8-runtime AS CUDA
+FROM nvidia/cuda:11.2.0-cudnn8-devel-ubuntu20.04 AS CUDA
+#FROM nvidia/cuda:11.7.0-cudnn8-runtime-ubuntu20.04
 
 # Remove NVIDIA repositories because they mess with apt-get update
-RUN rm /etc/apt/sources.list.d/nvidia-ml.list
-RUN rm /etc/apt/sources.list.d/cuda.list
+#RUN rm /etc/apt/sources.list.d/nvidia-ml.list
+#RUN rm /etc/apt/sources.list.d/cuda.list
 
 # Install Python3.10
 RUN apt-get update
-RUN apt-get -y install software-properties-common
+RUN DEBIAN_FRONTEND=noninteractive apt-get -y install software-properties-common
 RUN add-apt-repository ppa:deadsnakes/ppa
 RUN apt-get -y install python3.10-dev
 
@@ -21,6 +22,9 @@ ENV PATH="$PATH:/root/.cargo/bin"
 # Check that all software is installed correctly
 RUN python3.10 --version
 RUN cargo --version
+
+# Needed for CUDA
+ENV XLA_FLAGS="--xla_gpu_cuda_data_dir=/usr/lib/cuda"
 
 # Copy important files
 COPY ./server.crt /app/server.crt
@@ -36,6 +40,10 @@ RUN python3.10 -m pip install setuptools_rust nltk
 # Install build essentialls - required for Gensim
 RUN apt-get -y install --reinstall build-essential
 
+# Install OpenSSL dependencies
+RUN apt install pkg-config
+RUN apt-get -y install libssl-dev
+
 # Get list of dependencies and install them
 RUN python3.10 setup.py sdist
 RUN python3.10 -m pip install -r dl_manager.egg-info/requires.txt
@@ -49,4 +57,4 @@ RUN python3.10 setup.py build_ext --inplace --verbose
 COPY ./dl_manager /app/dl_manager
 
 # Setup start-up command
-CMD ["python3.10", "-m", "dl_manager", "serve", "--keyfile", "server.key", "--certfile", "server.crt"]
+CMD ["python3.10", "-m", "dl_manager",  "--keyfile", "server.key", "--certfile", "server.crt"]

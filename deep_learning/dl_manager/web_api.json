@@ -1,0 +1,771 @@
+{
+  "name": "__main__.py",
+  "help": "A Deep Learning CLI utility.",
+  "commands": [
+    {
+      "name": "run",
+      "help": "Train a classifier and store the results",
+      "private": true,
+      "args": [
+        {
+          "name": "input-mode",
+          "help": "Generator to use.",
+          "nargs": "+",
+          "type": "dynamic_enum",
+          "required": true,
+          "options": [
+            "dl_manager.feature_generators.generators"
+          ]
+        },
+        {
+          "name": "output-mode",
+          "help": "Output mode to use.",
+          "nargs": "1",
+          "type": "enum",
+          "required": true,
+          "options": [
+            "Detection",
+            "Classification3Simplified",
+            "Classification3",
+            "Classification8"
+          ]
+        },
+        {
+          "name": "params",
+          "help": "Generator params. Items in the name=value format.",
+          "nargs": "1",
+          "type": "arglist",
+          "required": true,
+          "options": [
+            {
+              "map-path": "dl_manager.feature_generators.generators",
+              "multi-valued": true
+            }
+          ]
+        },
+        {
+          "name": "ontology-classes",
+          "help": "ID of the DB-file containing ontology classes.",
+          "nargs": "1",
+          "type": "str",
+          "default": "",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "apply-ontology-classes",
+          "help": "Enable application of ontology classes",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "classifier",
+          "help": "Classifier to use. Use `list` for options",
+          "nargs": "+",
+          "type": "dynamic_enum",
+          "required": true,
+          "options": [
+            "dl_manager.classifiers.models"
+          ]
+        },
+        {
+          "name": "epochs",
+          "help": "Amount of training epochs",
+          "nargs": "1",
+          "type": "int",
+          "required": true,
+          "options": []
+        },
+        {
+          "name": "split-size",
+          "help": "Size of testing and validation splits. Ignored when k-cross > 0",
+          "type": "float",
+          "default": 0.2,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "max-train",
+          "help": "Maximum amount of training items. -1 for infinite",
+          "nargs": "1",
+          "type": "int",
+          "default": -1,
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "k-cross",
+          "help": "Enable k-fold cross-validation.",
+          "type": "int",
+          "default": 0,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "quick-cross",
+          "help": "Enable k-fold cross validation",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "cross-project",
+          "help": "Run cross project validation.",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "cache-features",
+          "help": "Force caching of features. NOTE: the pipeline does not handle cache invalidation!",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "architectural-only",
+          "help": "If specified, only architectural issues are used",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "hyper-params",
+          "help": "Hyper-parameters params. Items in the name=value format.",
+          "nargs": "1",
+          "type": "arglist",
+          "required": true,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.models",
+              "multi-valued": true
+            }
+          ]
+        },
+        {
+          "name": "class-balancer",
+          "help": "Enable Class-Balancing",
+          "nargs": "1",
+          "type": "enum",
+          "default": "none",
+          "required": false,
+          "options": [
+            "none",
+            "upsample",
+            "class-weights"
+          ]
+        },
+        {
+          "name": "upsampler",
+          "help": "Upsampler to use",
+          "nargs": "1",
+          "type": "dynamic_enum",
+          "null-unless": {"name": "class-balancer", "value": "upsample"},
+          "required": false,
+          "options": [
+            "dl_manager.upsampling.upsamplers"
+          ]
+        },
+        {
+          "name": "upsampler-params",
+          "help": "Parameters for the upsampler",
+          "nargs": "1",
+          "type": "arglist",
+          "default": null,
+          "null-unless": {"name": "class-balancer", "value": "upsample"},
+          "required": false,
+          "options": [
+            {
+              "map-path": "dl_manager.upsampling.upsamplers",
+              "multi-valued": false
+            }
+          ]
+        },
+        {
+          "name": "batch-size",
+          "help": "Specify the batch size used during training",
+          "type": "int",
+          "default": 32,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "combination-strategy",
+          "help": "Strategy used to combine models. Use `combination-strategies` for more information.",
+          "nargs": "1",
+          "default": null,
+          "type": "enum",
+          "null-unless": {"name": "ensemble-strategy", "value": "combination"},
+          "options": [
+            "add",
+            "subtract",
+            "average",
+            "min",
+            "max",
+            "multiply",
+            "dot",
+            "concat"
+          ],
+          "required": false
+        },
+        {
+          "name": "combination-model-hyper-params",
+          "help": "Hyper-parameters for the creation of a combined model",
+          "nargs": "1",
+          "default": null,
+          "type": "arglist",
+          "null-unless": {"name": "ensemble-strategy", "value":  "combination"},
+          "required": false,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.combined_model.combined_models",
+              "multi-valued": false
+            }
+          ]
+        },
+        {
+          "name": "ensemble-strategy",
+          "help": "Strategy used to combine models. Use `combination-strategies` for more information.",
+          "nargs": "1",
+          "default": "none",
+          "type": "enum",
+          "options": [
+            "stacking",
+            "voting",
+            "combination",
+            "none"
+          ],
+          "required": false
+        },
+        {
+          "name": "stacking-meta-classifier",
+          "help": "Classifier to use as meta-classifier in stacking.",
+          "nargs": "1",
+          "type": "dynamic_enum",
+          "required": false,
+          "null-unless": {"name": "ensemble-strategy", "value": "stacking"},
+          "default": null,
+          "options": [
+            "dl_manager.classifiers.models"
+          ]
+        },
+        {
+          "name": "stacking-meta-classifier-hyper-parameters",
+          "help": "Hyper-parameters for the meta-classifier",
+          "type": "arglist",
+          "nargs": "1",
+          "null-unless": {"name": "ensemble-strategy", "value": "stacking"},
+          "default": null,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.models",
+              "multi-valued": false
+            }
+          ]
+        },
+        {
+          "name": "stacking-use-concat",
+          "help": "Use simple concatenation to create the input for the meta classifier",
+          "nargs": "1",
+          "type": "bool",
+          "default": false,
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "stacking-no-matrix",
+          "help": "Disallow the use of matrices for meta classifier input",
+          "nargs": "1",
+          "type": "bool",
+          "default": false,
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "voting-mode",
+          "help": "Mode for the voting ensemble. Either hard of sort voting",
+          "nargs": "1",
+          "type": "enum",
+          "default": null,
+          "required": false,
+          "null-unless": {"name":  "ensemble-strategy", "value":  "voting"},
+          "options": [
+            "soft",
+            "hard"
+          ]
+        },
+        {
+          "name": "use-early-stopping",
+          "help": "If specified, use early stopping.",
+          "nargs": "1",
+          "type": "bool",
+          "default": false,
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "early-stopping-patience",
+          "help": "Patience used when using early stopping",
+          "nargs": "1",
+          "type": "int",
+          "default": 5,
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "early-stopping-min-delta",
+          "help": "Minimum delta used when using early stopping. One entry for every attribute used.",
+          "nargs": "+",
+          "type": "float",
+          "default": [0.001],
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "early-stopping-attribute",
+          "help": "Attribute(s) to use for early stopping (from the validation set)",
+          "nargs": "+",
+          "type": "str",
+          "default": ["loss"],
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "test-separately",
+          "help": "If given, disable combining multiple classifiers. In stead, test them separately on the same data.",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "store-model",
+          "help": "If given, store the trained model. Can only be used when training a single model.",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model being trained. Must be present in the database. (passed automatically be `train` endpoint)",
+          "type": "str",
+          "nargs": "1",
+          "required": true,
+          "options": []
+        },
+        {
+          "name": "analyze-keywords",
+          "help": "Compute a list of important keywords (convolutional mode only)",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "training-data-query",
+          "help": "Query to obtain data from the database for training",
+          "type": "query",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "test-data-query",
+          "help": "Query to obtain data from the database for performance evaluation",
+          "type": "query",
+          "required": false,
+          "nargs": "1",
+          "default": null,
+          "null-if": {"name": "test-with-training-data", "value": true},
+          "options": []
+        },
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "test-with-training-data",
+          "help": "Draw testing data from training data using train/test split",
+          "default": false,
+          "type": "bool",
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "seed",
+          "help": "Seed to use to initialize all the RNG related stuff. -1 means no seed is used",
+          "default": -1,
+          "type": "int",
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "perform-tuning",
+          "help": "Enable hyperparameter tuning",
+          "default": false,
+          "type": "bool",
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "tuner-type",
+          "help": "Select the hyperparameter optimization strategy.",
+          "type": "str",
+          "nargs": "1",
+          "default": null,
+          "required": true,
+          "null-unless": {"name": "perform-tuning", "value": true},
+          "options": ["RandomSearch", "BayesianOptimization", "Hyperband"]
+        },
+        {
+          "name": "tuner-objective",
+          "help": "Select the metric to optimize for.",
+          "type": "str",
+          "default": null,
+          "nargs": "1",
+          "required": true,
+          "null-unless": {"name": "perform-tuning", "value": true},
+          "options": []
+        },
+        {
+          "name": "tuner-max-trials",
+          "help": "Select the number of hyperparameter combinations that are tried.",
+          "type": "int",
+          "default": null,
+          "nargs": "1",
+          "required": true,
+          "null-unless": {"name": "perform-tuning", "value": true},
+          "options": []
+        },
+        {
+          "name": "tuner-executions-per-trial",
+          "help": "Select the number of executions per trial, to mitigate randomness.",
+          "type": "int",
+          "default": null,
+          "nargs": "1",
+          "required": true,
+          "null-unless": {"name": "perform-tuning", "value": true},
+          "options": []
+        },
+        {
+          "name": "tuner-hyper-params",
+          "help": "Hyper-parameters params for the Keras Tuner. Items in the name=value format.",
+          "nargs": "1",
+          "type": "hyper_arglist",
+          "default": null,
+          "null-unless": {"name": "perform-tuning", "value":  true},
+          "required": true,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.models",
+              "multi-valued": true
+            }
+          ]
+        },
+        {
+          "name": "tuner-combination-model-hyper-params",
+          "help": "Hyper-parameters for the creation of a combined model for keras tuner",
+          "nargs": "1",
+          "default": {"CombinedModel.0":  {}},
+          "null-unless": {"name": "perform-tuning", "value":  true},
+          "type": "hyper_arglist",
+          "required": false,
+          "options": [
+            {
+              "map-path": "dl_manager.classifiers.combined_model.combined_models",
+              "multi-valued": false
+            }
+          ]
+        }
+      ]
+    },
+    {
+      "name": "train",
+      "help": "Variant of the `run` command which loads a config from the database.",
+      "private": false,
+      "args": [
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model being trained. Must be present in the database. (only required for storage)",
+          "type": "str",
+          "default": "",
+          "required": false,
+          "nargs": "1",
+          "options": []
+        }
+      ]
+    },
+    {
+      "name": "predict",
+      "help": "Use an existing classifier to make predictions on new data.",
+      "private": false,
+      "args": [
+        {
+          "name": "model",
+          "help": "Model to predict with",
+          "required": true,
+          "type": "str",
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "version",
+          "help": "Trained instance of the given model to use for prediction",
+          "required": false,
+          "type": "str",
+          "default": "most-recent",
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "data-query",
+          "help": "Query used to retrieve issues to predict",
+          "required": true,
+          "type": "query",
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        }
+      ]
+    },
+    {
+      "name": "generate-embedding",
+      "help": "Generate a word or document embedding for use in a feature generator",
+      "private": false,
+      "args": [
+        {
+          "name": "embedding-id",
+          "help": "Embedding to train",
+          "required": true,
+          "type": "str",
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        }
+      ]
+    },
+    {
+      "name": "generate-embedding-internal",
+      "help": "Internal implementation endpoint for generate-embedding endpoint",
+      "private": true,
+      "args": [
+        {
+          "name": "embedding-id",
+          "help": "Embedding to train",
+          "required": true,
+          "type": "str",
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "embedding-generator",
+          "help": "Type of embedding to train.",
+          "required": true,
+          "type": "dynamic_enum",
+          "nargs": "1",
+          "options": [
+            "dl_manager.embeddings.generators"
+          ]
+        },
+        {
+          "name": "embedding-config",
+          "help": "Config of the embedding",
+          "type": "arglist",
+          "required": true,
+          "nargs": "1",
+          "options": [
+            {
+              "map-path": "dl_manager.embeddings.generators",
+              "multi-valued": false
+            }
+          ]
+        },
+        {
+          "name": "training-data-query",
+          "help": "Query to obtain data from the database for training",
+          "type": "query",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        }
+      ]
+    },
+    {
+      "name": "metrics",
+      "help": "Endpoint to calculate various metrics based on predictions",
+      "private": false,
+      "args": [
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model from which predictions must be fetched",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "version-id",
+          "help": "ID of the model version from which predictions must be fetched",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "metrics",
+          "help": "JSON describing which metrics should be calculated",
+          "type": "object",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "classification-as-detection",
+          "help": "Evaluate detection performance of a classification model",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "epoch",
+          "help": "Epoch to evaluate metrics at. Either an epoch, `last`, `stopping-point`, or `all`",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "include-non-arch",
+          "help": "Include the non-architectural class as a class in Classification3",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        }
+      ]
+    },
+    {
+      "name": "confusion-matrix",
+      "help": "Endpoint to calculate the confusion matrix (or matrices) for a given training task.",
+      "private": false,
+      "args": [
+        {
+          "name": "database-url",
+          "help": "URL of the database (wrapper)",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "model-id",
+          "help": "ID of the model from which predictions must be fetched",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "version-id",
+          "help": "ID of the model version from which predictions must be fetched",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "classification-as-detection",
+          "help": "Evaluate detection performance of a classification model",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        },
+        {
+          "name": "epoch",
+          "help": "Epoch to evaluate metrics at. Either an epoch, `last`, `stopping-point`, or `all`",
+          "type": "str",
+          "required": true,
+          "nargs": "1",
+          "options": []
+        },
+        {
+          "name": "include-non-arch",
+          "help": "Include the non-architectural class as a class in Classification3",
+          "type": "bool",
+          "default": false,
+          "nargs": "1",
+          "required": false,
+          "options": []
+        }
+      ]
+    }
+  ]
+}

@@ -9,10 +9,12 @@ import functools
 import random
 
 import numpy
+import sklearn.model_selection
+from sklearn.model_selection import train_test_split
 
 from . import kfold
 from . import custom_kfold
-from .config import conf
+from .config import Config
 
 ##############################################################################
 ##############################################################################
@@ -26,7 +28,7 @@ class DeepLearningData:
         'BOWFrequency',
         'BOWNormalized',
         'TfidfGenerator',
-        'Word2Vec1D',
+        'Word2Vec',
         'Doc2Vec',
         'AutoEncoder',
         'KateAutoEncoder',
@@ -34,9 +36,10 @@ class DeepLearningData:
         'OntologyFeatures'
     }
 
-    def __init__(self, labels, issue_keys, generators, *features):
+    def __init__(self, labels, issue_keys, issue_ids, generators, *features):
         self.labels = numpy.array(labels)
         self.issue_keys = numpy.array(issue_keys)
+        self.issue_ids = numpy.array(issue_ids)
         self.features = [
             self.prepare_feature(f, g)
             for f, g in zip(features, generators)
@@ -51,7 +54,7 @@ class DeepLearningData:
         raise ValueError(f'Cannot prepare features from generator {g}')
 
     def to_dataset_and_keys(self):
-        return self.to_dataset(), self.issue_keys
+        return self.to_dataset(), self.issue_keys, self.issue_ids
 
     def to_dataset(self):
         """Get a dataset which can be readily passed to a TensorFlow model.
@@ -83,6 +86,11 @@ class DeepLearningData:
         left = self.sample_indices(range(0, size_left))
         right = self.sample_indices(range(size_left, self.size))
         return left, right
+
+    def split_fraction_stratified(self, size: float):
+        indices = list(range(len(self.labels)))
+        left, right = kfold.StratifiedSplit(size).split(indices, self.extended_labels)
+        return self.sample_indices(left), self.sample_indices(right)
 
     def split_k_cross(self, k: int):
         splitter = kfold.StratifiedKFold(k)
@@ -133,6 +141,7 @@ class DeepLearningData:
         return DeepLearningData(
             self.labels[indices],
             self.issue_keys[indices],
+            self.issue_ids[indices],
             self.generators,
             *(
                 self.sample_from(f, indices, g)
@@ -179,7 +188,8 @@ def make_dataset(labels, *features):
 
 class DataSplitter(abc.ABC):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
+        self.conf = conf
         self.max_train = t if (t := kwargs.pop('max_train', -1)) != -1 else None
         if kwargs:
             keys = ', '.join(kwargs)
@@ -200,33 +210,36 @@ class DataSplitter(abc.ABC):
 
 class SimpleSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.val_split = kwargs.pop('val_split_size')
         self.test_split = kwargs.pop('test_split_size')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
-        features, labels, issue_keys  = training_data_raw
+            generators = self.conf.get('run.input-mode')
+        features, labels, issue_keys, issue_ids  = training_data_raw
         # labels, issue_keys, *features = shuffle_raw_data(labels,
         #                                                  issue_keys,
         #                                                  *features)
-        data = DeepLearningData(labels, issue_keys, generators, *features).shuffle()
+        data = DeepLearningData(labels, issue_keys, issue_ids, generators, *features).shuffle()
         if testing_data is None:
             size = self.val_split + self.test_split
-            training_data, remainder = data.split_fraction(1 - size)
+            #training_data, remainder = data.split_fraction(1 - size)
+            training_data, remainder = data.split_fraction_stratified(1 - size)
             size = self.val_split / (self.val_split + self.test_split)
-            val_data, test_data = remainder.split_fraction(size)
+            #val_data, test_data = remainder.split_fraction(size)
+            val_data, test_data = remainder.split_fraction_stratified(size)
         else:
-            training_data, val_data = data.split_fraction(1 - self.val_split)
+            #training_data, val_data = data.split_fraction(1 - self.val_split)
+            training_data, val_data = data.split_fraction_stratified(1 - self.val_split)
             assert (
                 (self.val_split < 0.5 and training_data.labels.size > val_data.labels.size) or
                 (self.val_split > 0.5 and training_data.labels.size < val_data.labels.size)
             )
-            features_test, labels_test, keys_test  = testing_data
+            features_test, labels_test, keys_test, ids_test  = testing_data
             #labels_test, keys_test, *features_test = shuffle_raw_data(labels, issue_keys, *features_test)
-            test_data = DeepLearningData(labels_test, keys_test, *features_test).shuffle()
+            test_data = DeepLearningData(labels_test, keys_test, ids_test, *features_test).shuffle()
         if self.max_train is not None:
             training_data = training_data.limit_size(self.max_train)
         yield (
@@ -235,28 +248,31 @@ class SimpleSplitter(DataSplitter):
             val_data.to_dataset(),
             training_data.issue_keys,
             val_data.issue_keys,
-            test_data.issue_keys
+            test_data.issue_keys,
+            training_data.issue_ids,
+            val_data.issue_ids,
+            test_data.issue_ids
         )
 
 
 class CrossFoldSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.k = kwargs.pop('k')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         if testing_data is not None:
             raise ValueError(
                 f'{self.__class__.__name__} does not support splitting with explicit testing data'
             )
-        features, labels, issue_keys = training_data_raw
+        features, labels, issue_keys, issue_ids = training_data_raw
         # labels, issue_keys, *features = shuffle_raw_data(labels,
         #                                                  issue_keys,
         #                                                  *features)
-        data = DeepLearningData(labels, issue_keys, generators, *features).shuffle()
+        data = DeepLearningData(labels, issue_keys, issue_ids, generators, *features).shuffle()
         for inner, test_data in data.split_k_cross(self.k):
             for training_data, validation_data in inner.split_k_cross(self.k - 1):
                 if self.max_train is not None:
@@ -267,28 +283,31 @@ class CrossFoldSplitter(DataSplitter):
                     validation_data.to_dataset(),
                     training_data.issue_keys,
                     validation_data.issue_keys,
-                    test_data.issue_keys
+                    test_data.issue_keys,
+                    training_data.issue_ids,
+                    validation_data.issue_ids,
+                    test_data.issue_ids
                 )
 
 
 class QuickCrossFoldSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.k = kwargs.pop('k')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         if testing_data is not None:
             raise ValueError(
                 f'{self.__class__.__name__} does not support splitting with explicit testing data'
             )
-        features, labels, issue_keys = training_data_raw
+        features, labels, issue_keys, issue_ids = training_data_raw
         # labels, issue_keys, *features = shuffle_raw_data(labels,
         #                                                  issue_keys,
         #                                                  *features)
-        data = DeepLearningData(labels, issue_keys, generators, *features).shuffle()
+        data = DeepLearningData(labels, issue_keys, issue_ids, generators, *features).shuffle()
         # if self.test_project is not None or self.test_study is not None:
         #     if self.test_project is not None:
         #         testing_data, remainder = data.split_on_project(self.test_project)
@@ -315,30 +334,33 @@ class QuickCrossFoldSplitter(DataSplitter):
                     validation.to_dataset(),
                     training.issue_keys,
                     validation.issue_keys,
-                    testing.issue_keys
+                    testing.issue_keys,
+                    training.issue_ids,
+                    validation.issue_ids,
+                    testing.issue_ids
                 )
 
 
 class CrossProjectSplitter(DataSplitter):
 
-    def __init__(self, **kwargs):
+    def __init__(self, conf: Config, /, **kwargs):
         self.val_split = kwargs.pop('val_split_size')
-        super().__init__(**kwargs)
+        super().__init__(conf, **kwargs)
         if self.max_train is not None:
             raise ValueError(f'{self.__class__.__name__} does not support max_train')
 
     def split(self, training_data_raw, testing_data=None, *, generators=None):
         if generators is None:
-            generators = conf.get('run.input-mode')
+            generators = self.conf.get('run.input-mode')
         if testing_data is not None:
             raise ValueError(
                 f'{self.__class__.__name__} does not support splitting with explicit testing data'
             )
-        features, labels, issue_keys = training_data_raw
+        features, labels, issue_keys, issue_ids = training_data_raw
         # labels, issue_keys, *features = shuffle_raw_data(labels,
         #                                                  issue_keys,
         #                                                  *features)
-        data = DeepLearningData(labels, issue_keys, generators, *features).shuffle()
+        data = DeepLearningData(labels, issue_keys, issue_ids, generators, *features).shuffle()
         for training, validation, testing in data.split_cross_project(self.val_split):
             if self.max_train is not None:
                 training = training.limit_size(self.max_train)
@@ -348,5 +370,8 @@ class CrossProjectSplitter(DataSplitter):
                 validation.to_dataset(),
                 training.issue_keys,
                 validation.issue_keys,
-                testing.issue_keys
+                testing.issue_keys,
+                training.issue_ids,
+                validation.issue_ids,
+                testing.issue_ids
             )

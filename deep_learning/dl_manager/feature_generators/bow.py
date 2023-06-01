@@ -1,9 +1,13 @@
 import abc
-import collections
+import json
+import os
+
+import issue_db_api
 
 from ..logger import timer
 
-from .generator import AbstractFeatureGenerator, ParameterSpec, FeatureEncoding
+from ..config import Argument, StringArgument
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -18,31 +22,36 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
                          args: dict[str, str]):
         with timer('BOW Feature Generation'):
             if self.pretrained is None:
-                doc_count = collections.defaultdict(int)
-                for tokenized_issue in tokenized_issues:
-                    for token in set(tokenized_issue):
-                        # if token not in word_to_idx:
-                        #     word_to_idx[token] = idx
-                        #     idx += 1
-                        doc_count[token] += 1
-                min_count = int(self.params.get('min-doc-count', '0'))
-                print(min_count)
-                included = [w for w, c in doc_count.items() if c >= min_count]
-                idx = len(included)
-                word_to_idx = {w: i for i, w in enumerate(included)}
+                db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
+                embedding = db.get_embedding_by_id(self.params['dictionary-id'])
+                filename = os.path.join(
+                    self.conf.get('system.os.scratch-directory'),
+                    self.params['dictionary-id'] + '.bin'
+                )
+                if os.path.exists(filename):
+                    os.remove(filename)
+                embedding.download_binary(filename)
+
+                with open(filename) as file:
+                    word_to_idx = json.load(file)
+
                 self.save_pretrained(
                     {
-                        'word-to-index-mapping': word_to_idx,
-                        'max-index': len(word_to_idx)
-                    }
+                        'dict-file': filename
+                    },
+                    [
+                        filename
+                    ]
                 )
             else:
-                word_to_idx = self.pretrained['word-to-index-mapping']
-                idx = self.pretrained['max-index']
+                aux_map = self.conf.get('system.storage.auxiliary_map')
+                filename = aux_map[self.pretrained['dict-file']]
+                with open(filename) as file:
+                    word_to_idx = json.load(file)
 
             bags = []
             for tokenized_issue in tokenized_issues:
-                bag = [0] * idx
+                bag = [0] * len(word_to_idx)
                 for token in tokenized_issue:
                     if token in word_to_idx:    # In pretrained mode, ignore unknown words.
                         token_idx = word_to_idx[token]
@@ -51,7 +60,7 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
 
         return {
             'features': bags,
-            'feature_shape': idx,
+            'feature_shape': len(word_to_idx),
             'feature_encoding': {
                 'encoding': self.feature_encoding(),
                 'metadata': []
@@ -68,10 +77,10 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
         return FeatureEncoding.Numerical
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'min-doc-count': ParameterSpec(
-                description='Minimum number of document occurrences for a word to be included',
-                type='int'
+            'dictionary-id': StringArgument(
+                name='dictionary-id',
+                description='ID of the (pretrained) dictionary to use for BOW feature generation.'
             )
-        } | super(AbstractBOW, AbstractBOW).get_parameters()
+        } | super(AbstractBOW, AbstractBOW).get_arguments()

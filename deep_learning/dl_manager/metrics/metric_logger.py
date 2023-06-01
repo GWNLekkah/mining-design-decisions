@@ -22,6 +22,9 @@ class PredictionLogger(keras.callbacks.Callback):
                  training_data,
                  validation_data,
                  testing_data,
+                 train_ids,
+                 val_ids,
+                 test_ids,
                  label_mapping,
                  max_epochs: int,
                  use_early_stopping: bool = False,
@@ -36,13 +39,21 @@ class PredictionLogger(keras.callbacks.Callback):
         self._max_epochs = max_epochs
         self._label_mapping = label_mapping
         self._result = {
-            'classes': list(self._label_mapping.items()),
+            'classes': [
+                [(list(k) if isinstance(k, tuple) else k), v]
+                for k, v in self._label_mapping.items()
+            ],
             'loss': collections.defaultdict(list),
             'predictions': collections.defaultdict(list),
             'truth': {
                 'training': self._train_y.tolist(),
                 'validation': self._val_y.tolist(),
                 'testing': self._test_y.tolist()
+            },
+            'datasets': {
+                'training': train_ids.tolist(),
+                'validation': val_ids.tolist(),
+                'testing': test_ids.tolist()
             },
             'early_stopping_settings': {
                 'use_early_stopping': use_early_stopping,

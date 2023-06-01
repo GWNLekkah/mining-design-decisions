@@ -1,7 +1,8 @@
 import tensorflow as tf
 from transformers import TFAutoModelForSequenceClassification
 
-from .model import AbstractModel, HyperParameter, _fix_hyper_params
+from ..config import Argument
+from .model import AbstractModel
 from ..model_io import InputEncoding
 
 class Bert(AbstractModel):
@@ -31,6 +32,5 @@ class Bert(AbstractModel):
         return False
 
     @classmethod
-    @_fix_hyper_params
-    def get_hyper_parameters(cls) -> dict[str, HyperParameter]:
-        return {} | super().get_hyper_parameters()
+    def get_arguments(cls) -> dict[str, Argument]:
+        return {} | super().get_arguments()

@@ -1,4 +1,5 @@
-from .generator import AbstractFeatureGenerator, ParameterSpec
+from ..config import Argument
+from .generator import AbstractFeatureGenerator, FeatureEncoding
 from ..model_io import InputEncoding
 
 
@@ -9,6 +10,13 @@ CATEGORICAL_ATTRIBUTES = {
     'resolution',
     'status '
 }
+
+
+def concat(stream):
+    result = []
+    for item in stream:
+        result.extend(item)
+    return result
 
 
 class Metadata(AbstractFeatureGenerator):
@@ -30,7 +38,9 @@ class Metadata(AbstractFeatureGenerator):
         attrs = self.params.get('metadata-attributes', '').split(',')
 
         return {
-            'features': metadata,
+            'features': [
+                concat(m[a] for a in attrs) for m in metadata
+            ],
             'feature_shape': len(metadata[0]),
             'feature_encoding': {
                 'encoding': self.feature_encoding(),
@@ -41,5 +51,9 @@ class Metadata(AbstractFeatureGenerator):
         }
 
     @staticmethod
-    def get_parameters() -> dict[str, ParameterSpec]:
-        return {} | super(Metadata, Metadata).get_parameters()
+    def feature_encoding() -> FeatureEncoding:
+        return FeatureEncoding.Numerical
+
+    @staticmethod
+    def get_arguments() -> dict[str, Argument]:
+        return {} | super(Metadata, Metadata).get_arguments()

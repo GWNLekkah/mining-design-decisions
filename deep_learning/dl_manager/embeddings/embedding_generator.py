@@ -1,28 +1,23 @@
 import abc
-import dataclasses
 import itertools
+import os.path
 import pathlib
-import typing
 
 import nltk
-from .. import accelerator
 
-from ..config import conf
-from ..database import DatabaseAPI
+import issue_db_api
+
+from .. import accelerator
+from ..config import Config, BoolArgument, Argument, ArgumentConsumer, EnumArgument, StringArgument
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
+from ..feature_generators.util.ontology import load_ontology, apply_ontologies_to_sentence
 from ..logger import get_logger
 
 log = get_logger('Embedding Generator')
 
 
-@dataclasses.dataclass
-class EmbeddingGeneratorParam:
-    description: str
-    data_type: str
-    minimum: int | None = None
-    maximum: int | None = None
-    options: typing.Any | None = None
+TEMP_EMBEDDING_PATH = pathlib.Path('embedding_binary.bin')
 
 
 POS_CONVERSION = {
@@ -46,27 +41,43 @@ POS_CONVERSION = {
 }
 
 
-class AbstractEmbeddingGenerator(abc.ABC):
+class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
 
     def __init__(self, **params):
         self.params = params
 
-    def make_embedding(self, query: str, path: pathlib.Path, formatting_handling: str):
+    def make_embedding(self,
+                       query: issue_db_api.Query,
+                       conf: Config):
         # Loading issues from database
-        db: DatabaseAPI = conf.get('system.storage.database-api')
-        issues = db.select_issues(query)
-        data = db.get_issue_data(issues, ['summary', 'description'])
+        # db: DatabaseAPI = conf.get('system.storage.database-api')
+        # issues = db.select_issues(query)
+        # data = db.get_issue_data(issues, ['summary', 'description'])
+        db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+        issues = db.search(query, attributes=['summary', 'description'])
+        log.info(f'Training embedding on {len(issues)} issues (query: {query})')
 
         # Setting up NLP stuff
+        formatting_handling = self.params['formatting-handling']
         handling = FormattingHandling.from_string(formatting_handling)
         stopwords = nltk.corpus.stopwords.words('english')
-        use_lemmatization = self.params.get('use-lemmatization', 'False') == 'True'
-        use_stemming = self.params.get('use-stemming', 'False') == 'True'
-        use_pos = self.params.get('use-pos', 'False') == 'True'
+        use_lemmatization = self.params['use-lemmatization']
+        use_stemming = self.params['use-stemming']
+        use_pos = self.params['use-pos']
+        use_ontologies = self.params['use-ontologies']
+        ontology_id = self.params['ontology-id']
         if use_stemming and use_lemmatization:
             raise ValueError('Cannot use both stemming and lemmatization')
         if not (use_stemming or use_lemmatization):
             log.warning('Not using stemming or lemmatization')
+        if use_ontologies and not ontology_id:
+            raise ValueError('ontology-id must be given is use-ontologies is true')
+        if use_ontologies:
+            ontology_file = db.get_file_by_id(ontology_id)
+            ontology_filename = f'{conf.get("system.storage.file-prefix")}_ontologies.json'
+            ontology_file.download(ontology_filename)
+        else:
+            ontology_filename = None 
         stemmer = None
         lemmatizer = None
         if use_stemming:
@@ -79,8 +90,8 @@ class AbstractEmbeddingGenerator(abc.ABC):
         tagger = accelerator.Tagger(weights, classes, tagdict)
 
         # Bulk processing
-        summaries = [issue['summary'] for issue in data]
-        descriptions = [issue['description'] for issue in data]
+        summaries = [issue.summary for issue in issues]
+        descriptions = [issue.description for issue in issues]
         summaries = accelerator.bulk_clean_text_parallel(
             summaries, handling.as_string(), conf.get('system.resources.threads')
         )
@@ -100,10 +111,17 @@ class AbstractEmbeddingGenerator(abc.ABC):
 
         # Per-issue processing
         documents = []
+        if use_ontologies:
+            ontology_table = load_ontology(ontology_filename)
+        else:
+            ontology_table = None
         for issue in texts:
             document = []
             for words in issue:
                 words = [(word, tag) for word, tag in words if word not in stopwords]
+                if use_ontologies:
+                    assert ontology_table is not None 
+                    words = apply_ontologies_to_sentence(words, ontology_table)
                 if use_lemmatization:
                     words = [
                         (lemmatizer.lemmatize(word, pos=POS_CONVERSION.get(tag, 'n')), tag)
@@ -119,7 +137,17 @@ class AbstractEmbeddingGenerator(abc.ABC):
             documents.append(document)
 
         # Embedding generation
-        self.generate_embedding(documents, path)
+        embedding_path = os.path.join(
+            conf.get('system.os.scratch-directory'),
+            TEMP_EMBEDDING_PATH
+        )
+        self.generate_embedding(documents, pathlib.Path(embedding_path))
+
+        # Upload binary file
+        embedding_id = conf.get('generate-embedding-internal.embedding-id')
+        embedding = db.get_embedding_by_id(embedding_id)
+        embedding.upload_binary(embedding_path)
+
 
     @abc.abstractmethod
     def generate_embedding(self, issues: list[list[str]], path: pathlib.Path):
@@ -127,18 +155,36 @@ class AbstractEmbeddingGenerator(abc.ABC):
 
     @staticmethod
     @abc.abstractmethod
-    def get_params() -> dict[str, EmbeddingGeneratorParam]:
+    def get_arguments() -> dict[str, Argument]:
         return {
-            'use-stemming': EmbeddingGeneratorParam(
+            'use-stemming': BoolArgument(
+                name='use-stemming',
                 description='stem the words in the text',
-                data_type='bool'
+                default=False
             ),
-            'use-lemmatization': EmbeddingGeneratorParam(
+            'use-lemmatization': BoolArgument(
+                name='use-lemmatization',
                 description='Use lemmatization on words in the text',
-                data_type='bool'
+                default=True
             ),
-            'use-pos': EmbeddingGeneratorParam(
-                'Enhance words in the text with part of speech information',
-                data_type='bool'
+            'use-pos': BoolArgument(
+                name='use-pos',
+                description='Enhance words in the text with part of speech information',
+                default=False,
+            ),
+            'formatting-handling': EnumArgument(
+                name='formatting-handling',
+                description='How to handle formatting in issues.',
+                options=['markers', 'keep', 'remove']
+            ),
+            'use-ontologies': BoolArgument(
+                name='use-ontologies',
+                description='If True, apply ontology classes to the input text.',
+                default=False
+            ),
+            'ontology-id': StringArgument(
+                name='ontology-id',
+                description='ID to a file containing ontology classes.',
+                default=''
             )
         }

@@ -12,7 +12,7 @@ from scipy.special import softmax, expit
 
 from .classifiers import models
 from .model_io import OutputMode, OutputEncoding
-from .config import conf
+from .config import Config
 from . import data_manager_bootstrap
 
 import tensorflow as tf
@@ -28,14 +28,14 @@ class KeywordEntry(typing.NamedTuple):
         }
 
 
-def model_is_convolution() -> bool:
+def model_is_convolution(conf: Config) -> bool:
     classifiers = conf.get('run.classifier')
     if len(classifiers) > 1:
         return False
     return models[classifiers[0]].input_must_support_convolution()
 
 
-def doing_one_run() -> bool:
+def doing_one_run(conf: Config) -> bool:
     k = conf.get('run.k-cross')
     if k > 0:
         return False
@@ -44,83 +44,28 @@ def doing_one_run() -> bool:
     return True
 
 
-def enabled() -> bool:
+def enabled(conf: Config) -> bool:
     return conf.get('run.analyze-keywords')
 
 
-def analyze_keywords(model, test_x, test_y, issue_keys, suffix):
-    def _to_str(y):
-        return OutputMode.Classification3Simplified.label_encoding[y]
-
-    def _pop(x):
-        y = x.copy()
-        del y['key']
-        return y
-
-    def _trim(z):
-        if z.count('-') == 1:
-            return z
-        p = z.split('-')
-        return f'{p[0]}-{p[1]}'
-
+def analyze_keywords(model,
+                     test_x,
+                     test_y,
+                     issue_ids,
+                     suffix,
+                     conf: Config):
     output_mode = OutputMode.from_string(conf.get('run.output-mode'))
     print('Analyzing Keywords...')
     if output_mode.output_encoding == OutputEncoding.Binary:
-        analyzer = BinaryConvolutionKeywordAnalyzer(model)
-        with alive_progress.alive_bar(len(issue_keys)) as bar:
-            keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
+        analyzer = BinaryConvolutionKeywordAnalyzer(model, conf)
+        with alive_progress.alive_bar(len(issue_ids)) as bar:
+            keywords_per_class = analyzer.get_keywords(test_x, issue_ids, test_y, bar)
     else:
-        analyzer = OneHotConvolutionKeywordAnalyzer(model)
-        with alive_progress.alive_bar(len(issue_keys)) as bar:
-            keywords_per_class = analyzer.get_keywords(test_x, issue_keys, test_y, bar)
+        analyzer = OneHotConvolutionKeywordAnalyzer(model, conf)
+        with alive_progress.alive_bar(len(issue_ids)) as bar:
+            keywords_per_class = analyzer.get_keywords(test_x, issue_ids, test_y, bar)
 
-
-    with open('../datasets/labels/bottom-up.csv') as file:
-        bottom_up = [line.strip() for line in file]
-    with open('../datasets/labels/maven.csv') as file:
-        maven = [line.strip() for line in file]
-    with open('../datasets/labels/top-down.csv') as file:
-        top_down = [line.strip() for line in file]
-    with open('../datasets/labels/BHAT_labels.json') as file:
-        bhat = [item['key'] for item in json.load(file)]
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_maven-keywords-{suffix}.json', 'w') as file:
-        print(keywords_per_class)
-        maven_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in maven
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(maven_keywords, file)
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_bottom-up-keywords-{suffix}.json', 'w') as file:
-        bottom_up_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in bottom_up
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(bottom_up_keywords, file)
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_top-down-keywords-{suffix}.json', 'w') as file:
-        top_down_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in top_down
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(top_down_keywords, file)
-
-    with open(f'./{conf.get("system.storage.file_prefix")}_bhat-keywords-{suffix}.json', 'w') as file:
-        bhat_keywords = {
-            cls: [
-                _pop(entry) for entry in entries if _trim(entry['key']) in bhat
-            ]
-            for cls, entries in keywords_per_class.items()
-        }
-        json.dump(bhat_keywords, file)
-
+    return keywords_per_class
 
 
 def sigmoid(x):
@@ -129,7 +74,8 @@ def sigmoid(x):
 
 class _ConvolutionKeywordAnalyzer(abc.ABC):
 
-    def __init__(self, model):
+    def __init__(self, model, conf: Config):
+        self.conf = conf
         output_mode = OutputMode.from_string(conf.get('run.output-mode'))
         self.__binary = output_mode.output_encoding == OutputEncoding.Binary
 
@@ -139,7 +85,7 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
         self.__model = model
 
         # Get original text
-        with open(data_manager_bootstrap.get_raw_text_file_name()) as file:
+        with open(data_manager_bootstrap.get_raw_text_file_name(self.conf)) as file:
             self.__original_text_lookup = json.load(file)
 
         # Store weights of last dense layer
@@ -185,8 +131,8 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
     def get_minimum_strength(self) -> float:
         return 0.0
 
-    def get_keywords(self, vectors, keys, truths, bar):
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+    def get_keywords(self, vectors, ids, truths, bar):
+        output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
 
         # Compute all predictions and features.
         # Even though we might make more predictions than strictly
@@ -206,12 +152,12 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
         # Map for the outputs
         output = {}
 
-        for j, (truth, issue_key) in enumerate(zip(truths, keys)):
+        for j, (truth, issue_id) in enumerate(zip(truths, ids)):
             pre_predictions_for_sample = pre_predictions[j, :]
             list_tuple_prob = self.get_candidates(pre_predictions_for_sample, truth, dense_weights=self.__dense_layer_weights)
 
             # Get text of the original issue
-            word_text = self.__original_text_lookup[issue_key]
+            word_text = self.__original_text_lookup[issue_id]
 
             votes_per_convolution = collections.defaultdict(
                 lambda: collections.defaultdict(
@@ -255,7 +201,7 @@ class _ConvolutionKeywordAnalyzer(abc.ABC):
                  for (keyword, prob) in keywords])
             for label, entry in kw:
                 output.setdefault(output_mode.label_encoding[label], []).append(
-                    entry.as_dict() | {'ground_truth': output_mode.label_encoding[label], 'key': issue_key}
+                    entry.as_dict() | {'ground_truth': output_mode.label_encoding[label], 'key': issue_id}
                 )
 
             bar()
@@ -282,7 +228,7 @@ class BinaryConvolutionKeywordAnalyzer(_ConvolutionKeywordAnalyzer):
 
     def get_candidates(self, pre_predictions, truth, dense_weights):
         warnings.warn(f'{self.__class__.__name__} does not collect keywords for the negative class')
-        output_mode = OutputMode.from_string(conf.get('run.output-mode'))
+        output_mode = OutputMode.from_string(self.conf.get('run.output-mode'))
         list_tuple_prob = []
         if not isinstance(truth, np.ndarray):
             truth = np.array([truth])

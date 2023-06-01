@@ -20,5 +20,5 @@ class RandomUpSampler(base.AbstractUpSampler):
         )
 
     @staticmethod
-    def get_hyper_params():
+    def get_arguments():
         return {}

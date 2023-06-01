@@ -12,11 +12,12 @@ from keras.models import load_model
 from transformers import TFAutoModelForSequenceClassification
 from transformers.modeling_tf_outputs import TFSequenceClassifierOutput
 
+import issue_db_api
+
 from .model_io import OutputMode, OutputEncoding
 from . import stacking
 from . import voting_util
-from .config import conf
-from .database import DatabaseAPI
+from .config import Config
 
 
 ##############################################################################
@@ -59,13 +60,14 @@ def predict_simple_model(path: pathlib.Path,
                          output_mode,
                          issue_ids,
                          model_id,
-                         model_version):
+                         model_version, *,
+                         conf: Config):
     _check_output_mode(output_mode)
-    if model_metadata['model_settings']['run.classifier'][0] == 'Bert':
-        model = TFAutoModelForSequenceClassification.from_pretrained(path / model_metadata['model_path'])
+    if model_metadata['model-settings']['classifier'][0] == 'Bert':
+        model = TFAutoModelForSequenceClassification.from_pretrained(path / model_metadata['model-path'])
         model.classifier.activation = tf.keras.activations.sigmoid
     else:
-        model = load_model(path / model_metadata['model_path'])
+        model = load_model(path / model_metadata['model-path'])
     if len(features) == 1:
         features = features[0]
 
@@ -85,7 +87,8 @@ def predict_simple_model(path: pathlib.Path,
                        issue_ids,
                        model_id,
                        model_version,
-                       probabilities=predictions)
+                       probabilities=predictions,
+                       conf=conf)
 
 
 ##############################################################################
@@ -100,17 +103,19 @@ def predict_stacking_model(path: pathlib.Path,
                            output_mode,
                            issue_ids,
                            model_id,
-                           model_version):
+                           model_version, *,
+                           conf: Config):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
-                                                model_metadata['child_models'],
+                                                model_metadata['child-models'],
                                                 features)
     conversion = stacking.InputConversion.from_json(
-        model_metadata['input_conversion_strategy']
+        model_metadata['input-conversion-strategy']
     )
-    new_features = stacking.transform_predictions_to_stacking_input(predictions,
+    new_features = stacking.transform_predictions_to_stacking_input(output_mode,
+                                                                    predictions,
                                                                     conversion)
-    meta_model = load_model(path / model_metadata['meta_model'])
+    meta_model = load_model(path / model_metadata['meta-model'])
     final_predictions = meta_model.predict(new_features)
     if output_mode.output_encoding == OutputEncoding.Binary:
         canonical_predictions = round_binary_predictions(final_predictions)
@@ -122,7 +127,8 @@ def predict_stacking_model(path: pathlib.Path,
                        issue_ids,
                        model_id,
                        model_version,
-                       probabilities=final_predictions)
+                       probabilities=final_predictions,
+                       conf=conf)
 
 
 ##############################################################################
@@ -137,13 +143,15 @@ def predict_voting_model(path: pathlib.Path,
                          output_mode,
                          issue_ids,
                          model_id,
-                         model_version):
+                         model_version, *,
+                         conf: Config):
     _check_output_mode(output_mode)
     predictions = _ensemble_collect_predictions(path,
-                                                model_metadata['child_models'],
+                                                model_metadata['child-models'],
                                                 features)
     voting_predictions = voting_util.get_voting_predictions(output_mode,
-                                                            predictions)
+                                                            predictions,
+                                                            model_metadata['model-settings']['voting_mode'])
     if output_mode.output_encoding == OutputEncoding.OneHot:
         converted_predictions = _predictions_to_canonical(output_mode,
                                                           voting_predictions)
@@ -154,7 +162,13 @@ def predict_voting_model(path: pathlib.Path,
                        output_mode,
                        issue_ids,
                        model_id,
-                       model_version)
+                       model_version,
+                       probabilities=voting_util.get_voting_confidences(
+                           output_mode,
+                           predictions,
+                           model_metadata['model-settings']['voting_mode']
+                       ),
+                       conf=conf)
 
 
 ##############################################################################
@@ -195,7 +209,8 @@ def _store_predictions(predictions,
                        model_id,
                        model_version,
                        *,
-                       probabilities=None):
+                       probabilities=None,
+                       conf: Config):
     predictions_by_id = {}
     for i, (pred, issue_id) in enumerate(zip(predictions, issue_ids)):
         match output_mode:
@@ -275,7 +290,7 @@ def _store_predictions(predictions,
                         'confidence': float(probabilities[i][7]) if probabilities is not None else None
                     }
                 }
-    db: DatabaseAPI = conf.get('system.storage.database-api')
-    db.save_predictions(model_id, model_version, predictions_by_id)
-    if (tag := conf.get('predict.with-tag')) != '':
-        db.add_tag(issue_ids, tag)
+    db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
+    model = db.get_model_by_id(model_id)
+    version = model.get_version_by_id(model_version)
+    version.predictions = predictions_by_id

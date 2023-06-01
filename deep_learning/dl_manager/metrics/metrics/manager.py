@@ -1,6 +1,7 @@
 import typing
 
 import numpy
+from sklearn.metrics import confusion_matrix
 
 from ...model_io import OutputMode, OutputEncoding
 from . import confusion
@@ -29,7 +30,7 @@ class MetricCalculationManager:
                 )
             self._y_pred = self._convert_labels_to_binary(y_pred_classes)
             self._y_true = self._convert_labels_to_binary(y_true_converted)
-            self._global_acc = self._confusion = confusion.compute_confusion_binary(
+            self._global_acc, self._confusion = confusion.compute_confusion_binary(
                 self._y_true, self._y_pred
             )
         else:
@@ -71,7 +72,7 @@ class MetricCalculationManager:
             case OutputMode.Detection:
                 return y
             case OutputMode.Classification3:
-                return ~(y == self._output_mode.non_architectural_pattern).all(axis=0)
+                return ~(y == self._output_mode.non_architectural_pattern).all(axis=1)
             case OutputMode.Classification3Simplified:
                 return y != self._output_mode.non_architectural_pattern.index(1)
             case OutputMode.Classification8:
@@ -93,7 +94,8 @@ class MetricCalculationManager:
                                                                self._y_pred,
                                                                labels,
                                                                all_negative_is_class=self._include_non_arch,
-                                                               all_negative_class_name='Non-Architectural')
+                                                               all_negative_class_name='Non-Architectural',
+                                                               all_negative_class_pattern=self._output_mode.non_architectural_pattern)
             case OutputMode.Classification3Simplified:
                 return confusion.compute_confusion_multi_class(self._y_true,
                                                                self._y_pred,
@@ -141,3 +143,42 @@ class MetricCalculationManager:
                     cls: metric.calculate_class(m)
                     for cls, m in self._confusion.items()
                 }
+
+    def get_raw_confusion_matrix(self):
+        match self._output_mode:
+            case OutputMode.Detection | OutputMode.Classification3:
+                return self._metric_set_to_matrix_description(self._confusion)
+            case OutputMode.Classification3Simplified | OutputMode.Classification8:
+                labels = self._output_mode.output_vector_field_names
+                return self._compute_normal_confusion_matrix(self._y_true,
+                                                             self._y_pred,
+                                                             'Confusion Matrix',
+                                                             labels)
+            case _ as x:
+                raise NotImplementedError(x)
+
+    @staticmethod
+    def _metric_set_to_matrix_description(sets):
+        return [
+            {
+                'title': cls.capitalize(),
+                'ticks': [f'Non-{cls.capitalize()}', cls.capitalize()],
+                'xlabel': 'Predicted',
+                'ylabel': 'Ground Truth',
+                'data': s.matrix()
+            }
+            for cls, s in sets.items()
+        ]
+
+    @staticmethod
+    def _compute_normal_confusion_matrix(y_true, y_pred, title, ticks):
+        matrix = confusion_matrix(y_true, y_pred)
+        return [
+            {
+                'title': title,
+                'ticks': ticks,
+                'xlabel': 'Predicted',
+                'ylabel': 'Ground Truth',
+                'data': matrix.tolist()
+            }
+        ]

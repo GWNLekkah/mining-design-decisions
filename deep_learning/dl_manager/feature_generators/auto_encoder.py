@@ -1,11 +1,7 @@
-import json
-import numpy
-
-from . import ParameterSpec
+from ..config import Argument, IntArgument, EnumArgument
 from .abstract_auto_encoder import AbstractAutoEncoder
 from ..model_io import InputEncoding
 from .. import data_splitting
-from ..config import conf
 from ..logger import get_logger
 log = get_logger('Auto Encoder')
 
@@ -107,24 +103,34 @@ class AutoEncoder(AbstractAutoEncoder):
         return encoder
 
     @classmethod
-    def get_parameters(cls) -> dict[str, ParameterSpec]:
-        return super(AutoEncoder, AutoEncoder).get_parameters() | cls.get_extra_params()
+    def get_arguments(cls) -> dict[str, Argument]:
+        return super(AutoEncoder, AutoEncoder).get_arguments() | cls.get_extra_params()
 
     @staticmethod
     def get_extra_params():
-        layers = {f'hidden-layer-{i}-size': ParameterSpec(description=f'Size of layer {i}', type='int')
+        layers = {f'hidden-layer-{i}-size': IntArgument(name=f'hidden-layer-{i}-size',
+                                                        description=f'Size of layer {i}',
+                                                        minimum=2)
                   for i in range(1, 17)}
         return layers | {
-            'number-of-hidden-layers': ParameterSpec(
+            'number-of-hidden-layers': IntArgument(
+                name='number-of-hidden-layers',
                 description='Number of hidden layers',
-                type='int'
+                minimum=0,
+                default=0
             ),
-            'target-feature-size': ParameterSpec(
+            'target-feature-size': IntArgument(
+                name='target-feature-size',
                 description='Target feature size',
-                type='int'
+                minimum=0
             ),
-            'activation-function': ParameterSpec(
-                description='Activation function to use in the auto encoder',
-                type='str'
+            'activation-function': EnumArgument(
+                default='linear',
+                options=[
+                    'linear', 'relu', 'elu', 'leakyrule', 'sigmoid',
+                    'tanh', 'softmax', 'softsign', 'selu', 'exp', 'prelu'
+                ],
+                name=f'activation-function',
+                description='Activation to use in the hidden layers'
             )
         }

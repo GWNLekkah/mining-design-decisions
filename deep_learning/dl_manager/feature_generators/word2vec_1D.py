@@ -1,10 +1,9 @@
-import warnings
-
+import os.path
 from ..model_io import InputEncoding
 from .word2vec import AbstractWord2Vec
 
 
-class Word2Vec1D(AbstractWord2Vec):
+class Word2Vec(AbstractWord2Vec):
 
     @staticmethod
     def input_encoding_type() -> InputEncoding:
@@ -15,8 +14,8 @@ class Word2Vec1D(AbstractWord2Vec):
             idx = 0
             word_to_idx = dict()
             embedding_weights = []
-            feature_shape = int(args['max-len'])
-            word_vector_length = int(args['vector-length'])
+            feature_shape = args['max-len']
+            word_vector_length = args['vector-length']
         else:
             word_to_idx = self.pretrained['word-to-index-mapping']
             idx = self.pretrained['max-index']
@@ -51,11 +50,17 @@ class Word2Vec1D(AbstractWord2Vec):
                     'embedding-weights': embedding_weights,
                     'feature-shape': feature_shape,
                     'word-vector-length': word_vector_length,
-                    'model': args['pretrained-file'],
-                    'model-binary': args['pretrained-binary'].lower() == 'true'
+                    'model': os.path.join(
+                        self.conf.get('system.os.scratch-directory'),
+                        self.params['embedding-id'] + '.bin'
+                    ),
+                    #'model-binary': args['pretrained-binary'].lower() == 'true'
                 },
                 [
-                    args['pretrained-file']
+                    os.path.join(
+                        self.conf.get('system.os.scratch-directory'),
+                        self.params['embedding-id'] + '.bin'
+                    )
                 ]
             )
 

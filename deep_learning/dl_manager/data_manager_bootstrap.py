@@ -1,7 +1,6 @@
-import json
 import os
 
-from .config import conf
+from .config import Config
 
 ##############################################################################
 ##############################################################################
@@ -9,12 +8,6 @@ from .config import conf
 ##############################################################################
 
 
-def get_raw_text_file_name() -> str:
-    if conf.get('system.peregrine'):
-        path = os.path.join(conf.get('system.peregrine.data'),
-                            f'{conf.get("system.storage.file_prefix")}_raw_words')
-    else:
-        path = f'{conf.get("system.storage.file_prefix")}_raw_words'
-    os.makedirs(path, exist_ok=True)
-    filename = os.path.join(path, f'{conf.get("system.storage.file_prefix")}_raw_words.json')
-    return filename
+def get_raw_text_file_name(conf: Config) -> str:
+    return os.path.join(conf.get('system.os.scratch-directory'),
+                        f'{conf.get("system.storage.file_prefix")}_raw_words')
