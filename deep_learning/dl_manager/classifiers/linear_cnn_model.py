@@ -1,7 +1,8 @@
 import tensorflow as tf
+import keras_tuner
 
-from ..config import Argument, IntArgument, EnumArgument
-from .model import AbstractModel
+from ..config import Argument, IntArgument, EnumArgument, FloatArgument
+from .model import AbstractModel, get_tuner_values, get_activation, get_tuner_activation
 from ..model_io import InputEncoding
 
 
@@ -30,6 +31,28 @@ class LinearConv1Model(AbstractModel):
         pooling_sizes = [
             height - kwargs[f"kernel-{i}-size"] for i in range(1, num_convolutions + 1)
         ]
+        convolutions = []
+        for i, kernel_size in enumerate(convolution_sizes):
+            activation = get_activation(f"layer-{i+1}-activation", **kwargs)
+            convolutions.append(
+                tf.keras.layers.Conv1D(
+                    filters=filters,
+                    kernel_size=kernel_size,
+                    activation=activation,
+                    kernel_regularizer=tf.keras.regularizers.L1L2(
+                        l1=kwargs[f"layer-{i+1}-kernel-l1"],
+                        l2=kwargs[f"layer-{i+1}-kernel-l2"],
+                    ),
+                    bias_regularizer=tf.keras.regularizers.L1L2(
+                        l1=kwargs[f"layer-{i+1}-bias-l1"],
+                        l2=kwargs[f"layer-{i+1}-bias-l2"],
+                    ),
+                    activity_regularizer=tf.keras.regularizers.L1L2(
+                        l1=kwargs[f"layer-{i+1}-activity-l1"],
+                        l2=kwargs[f"layer-{i+1}-activity-l2"],
+                    ),
+                )(next_layer)
+            )
         convolutions = [
             tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size)(next_layer)
             for kernel_size in convolution_sizes
@@ -49,9 +72,9 @@ class LinearConv1Model(AbstractModel):
             concatenated = tf.keras.layers.concatenate(pooling_layers, axis=1)
         hidden = tf.keras.layers.Flatten()(concatenated)
         if layer_size > 0:
-            hidden = tf.keras.layers.Dense(layer_size)(hidden)
-        if (act := kwargs["fnn-layer-activation"]) != "linear":
-            hidden = self.get_activation(act)(hidden)
+            hidden = tf.keras.layers.Dense(
+                layer_size, activation=get_activation("fnn-layer-activation", **kwargs)
+            )(hidden)
         outputs = self.get_output_layer()(hidden)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -72,11 +95,11 @@ class LinearConv1Model(AbstractModel):
                     "values"
                 ][0],
             )
-            layer_size = self._get_values(hp, "fully-connected-layer-size", **kwargs)
-            filters = self._get_values(hp, "filters", **kwargs)
-            num_convolutions = self._get_values(hp, "number-of-convolutions", **kwargs)
+            layer_size = get_tuner_values(hp, "fully-connected-layer-size", **kwargs)
+            filters = get_tuner_values(hp, "filters", **kwargs)
+            num_convolutions = get_tuner_values(hp, "number-of-convolutions", **kwargs)
             convolution_sizes = [
-                self._get_values(hp, f"kernel-{i}-size", **kwargs)
+                get_tuner_values(hp, f"kernel-{i}-size", **kwargs)
                 for i in range(1, num_convolutions + 1)
             ]
             height = self.input_size
@@ -84,12 +107,34 @@ class LinearConv1Model(AbstractModel):
                 height - convolution_sizes[i - 1]
                 for i in range(1, num_convolutions + 1)
             ]
-            convolutions = [
-                tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size)(
-                    next_layer
+            convolutions = []
+            for i, kernel_size in enumerate(convolution_sizes):
+                activation = get_tuner_activation(
+                    hp, f"layer-{i+1}-activation", **kwargs
                 )
-                for kernel_size in convolution_sizes
-            ]
+                convolutions.append(
+                    tf.keras.layers.Conv1D(
+                        filters=filters,
+                        kernel_size=kernel_size,
+                        activation=activation,
+                        kernel_regularizer=tf.keras.regularizers.L1L2(
+                            l1=get_tuner_values(hp, f"layer-{i+1}-kernel-l1", **kwargs),
+                            l2=get_tuner_values(hp, f"layer-{i+1}-kernel-l2", **kwargs),
+                        ),
+                        bias_regularizer=tf.keras.regularizers.L1L2(
+                            l1=get_tuner_values(hp, f"layer-{i+1}-bias-l1", **kwargs),
+                            l2=get_tuner_values(hp, f"layer-{i+1}-bias-l2", **kwargs),
+                        ),
+                        activity_regularizer=tf.keras.regularizers.L1L2(
+                            l1=get_tuner_values(
+                                hp, f"layer-{i+1}-activity-l1", **kwargs
+                            ),
+                            l2=get_tuner_values(
+                                hp, f"layer-{i+1}-activity-l2", **kwargs
+                            ),
+                        ),
+                    )(next_layer)
+                )
             pooling_layers = [
                 tf.keras.layers.MaxPooling1D(pool_size=p_size)(hidden)
                 for hidden, p_size in zip(convolutions, pooling_sizes)
@@ -107,7 +152,7 @@ class LinearConv1Model(AbstractModel):
             if layer_size > 0:
                 hidden = tf.keras.layers.Dense(
                     units=layer_size,
-                    activation=self._get_values(hp, "fnn-layer-activation", **kwargs),
+                    activation=get_tuner_values(hp, "fnn-layer-activation", **kwargs),
                 )(hidden)
             outputs = self.get_output_layer()(hidden)
             model = tf.keras.Model(inputs=[inputs], outputs=outputs)
@@ -120,6 +165,17 @@ class LinearConv1Model(AbstractModel):
             )
             return model
 
+        class TunerCNN(keras_tuner.HyperModel):
+            def __init__(self):
+                self.batch_size = None
+
+            def build(self, hp):
+                self.batch_size = get_tuner_values(hp, "batch-size", **kwargs)
+                return get_model(hp)
+
+            def fit(self, hp, model, *args, **kwargs_):
+                return model.fit(*args, batch_size=self.batch_size, **kwargs_)
+
         input_layer, _ = self.get_input_layer(
             embedding=embedding,
             embedding_size=embedding_size,
@@ -129,7 +185,7 @@ class LinearConv1Model(AbstractModel):
             ],
         )
 
-        return get_model, input_layer.shape
+        return TunerCNN(), input_layer.shape
 
     @staticmethod
     def supported_input_encodings() -> list[InputEncoding]:
@@ -162,6 +218,48 @@ class LinearConv1Model(AbstractModel):
             )
             for i in range(1, max_convolutions + 1)
         }
+        activations = {
+            f"layer-{i}-activation": EnumArgument(
+                default="linear",
+                options=[
+                    "linear",
+                    "relu",
+                    "elu",
+                    "leakyrelu",
+                    "sigmoid",
+                    "tanh",
+                    "softmax",
+                    "softsign",
+                    "selu",
+                    "exp",
+                    "prelu",
+                ],
+                name=f"layer-{i}-activation",
+                description="Activation to use in the i-th cnn layer",
+            )
+            for i in range(1, max_convolutions + 1)
+        }
+        activation_alpha = {
+            f"layer-{i}-activation-alpha": FloatArgument(
+                default=0.0,
+                name=f"layer-{i}-activation-alpha",
+                description=f"Alpha value for the elu activation of the i-th layer",
+            )
+            for i in range(1, max_convolutions + 1)
+        }
+        regularizers = {}
+        for i in range(1, max_convolutions + 1):
+            for goal in ["kernel", "bias", "activity"]:
+                for type_ in ["l1", "l2"]:
+                    regularizers |= {
+                        f"layer-{i}-{goal}-{type_}": FloatArgument(
+                            default=0.0,
+                            minimum=0.0,
+                            maximum=1.0,
+                            name=f"layer-{i}-{goal}-{type_}",
+                            description=f"{type_} {goal} regularizer for the i-th layer",
+                        )
+                    }
         return (
             {
                 "fully-connected-layer-size": IntArgument(
@@ -202,5 +300,8 @@ class LinearConv1Model(AbstractModel):
                 # ),
             }
             | kernel_sizes
+            | activations
+            | activation_alpha
+            | regularizers
             | super().get_arguments()
         )

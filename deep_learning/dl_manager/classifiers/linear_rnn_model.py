@@ -1,7 +1,8 @@
 import tensorflow as tf
+import keras_tuner
 
 from ..config import IntArgument, EnumArgument, Argument, FloatArgument
-from .model import AbstractModel
+from .model import AbstractModel, get_tuner_values, get_activation, get_tuner_activation
 from ..model_io import InputEncoding
 
 
@@ -24,10 +25,31 @@ class LinearRNNModel(AbstractModel):
         for i in range(1, n_rnn_layers + 1):
             layer_type = kwargs[f"rnn-layer-{i}-type"]
             units = kwargs[f"rnn-layer-{i}-size"]
-            activation = kwargs[f"rnn-layer-{i}-activation"]
-            recurrent_activation = kwargs[f"rnn-layer-{i}-recurrent-activation"]
+            activation = get_activation(f"rnn-layer-{i}-activation", **kwargs)
+            recurrent_activation = get_activation(
+                f"rnn-layer-{i}-recurrent-activation", **kwargs
+            )
             dropout = kwargs[f"rnn-layer-{i}-dropout"]
             recurrent_dropout = kwargs[f"rnn-layer-{i}-recurrent-dropout"]
+
+            # Regularization
+            kernel_regularizer = tf.keras.regularizers.L1L2(
+                l1=kwargs[f"rnn-layer-{i}-kernel-l1"],
+                l2=kwargs[f"rnn-layer-{i}-kernel-l2"],
+            )
+            recurrent_regularizer = tf.keras.regularizers.L1L2(
+                l1=kwargs[f"rnn-layer-{i}-recurrent-l1"],
+                l2=kwargs[f"rnn-layer-{i}-recurrent-l2"],
+            )
+            bias_regularizer = tf.keras.regularizers.L1L2(
+                l1=kwargs[f"rnn-layer-{i}-bias-l1"],
+                l2=kwargs[f"rnn-layer-{i}-bias-l2"],
+            )
+            activity_regularizer = tf.keras.regularizers.L1L2(
+                l1=kwargs[f"rnn-layer-{i}-activity-l1"],
+                l2=kwargs[f"rnn-layer-{i}-activity-l2"],
+            )
+
             return_sequences = True
             if i == n_rnn_layers:
                 return_sequences = False
@@ -40,6 +62,10 @@ class LinearRNNModel(AbstractModel):
                         return_sequences=return_sequences,
                         dropout=dropout,
                         recurrent_dropout=recurrent_dropout,
+                        kernel_regularizer=kernel_regularizer,
+                        recurrent_regularizer=recurrent_regularizer,
+                        bias_regularizer=bias_regularizer,
+                        activity_regularizer=activity_regularizer,
                     )
                 )(current)
             elif layer_type == "GRU":
@@ -51,6 +77,10 @@ class LinearRNNModel(AbstractModel):
                         return_sequences=return_sequences,
                         dropout=dropout,
                         recurrent_dropout=recurrent_dropout,
+                        kernel_regularizer=kernel_regularizer,
+                        recurrent_regularizer=recurrent_regularizer,
+                        bias_regularizer=bias_regularizer,
+                        activity_regularizer=activity_regularizer,
                     )
                 )(current)
             elif layer_type == "LSTM":
@@ -62,6 +92,10 @@ class LinearRNNModel(AbstractModel):
                         return_sequences=return_sequences,
                         dropout=dropout,
                         recurrent_dropout=recurrent_dropout,
+                        kernel_regularizer=kernel_regularizer,
+                        recurrent_regularizer=recurrent_regularizer,
+                        bias_regularizer=bias_regularizer,
+                        activity_regularizer=activity_regularizer,
                     )
                 )(current)
 
@@ -89,18 +123,38 @@ class LinearRNNModel(AbstractModel):
                     "values"
                 ][0],
             )
-            n_rnn_layers = self._get_values(hp, "number-of-rnn-layers", **kwargs)
+            n_rnn_layers = get_tuner_values(hp, "number-of-rnn-layers", **kwargs)
             for i in range(1, n_rnn_layers + 1):
-                layer_type = self._get_values(hp, f"rnn-layer-{i}-type", **kwargs)
-                units = self._get_values(hp, f"rnn-layer-{i}-size", **kwargs)
-                activation = self._get_values(hp, f"rnn-layer-{i}-activation", **kwargs)
-                recurrent_activation = self._get_values(
+                layer_type = get_tuner_values(hp, f"rnn-layer-{i}-type", **kwargs)
+                units = get_tuner_values(hp, f"rnn-layer-{i}-size", **kwargs)
+                activation = get_tuner_activation(
+                    hp, f"rnn-layer-{i}-activation", **kwargs
+                )
+                recurrent_activation = get_tuner_activation(
                     hp, f"rnn-layer-{i}-recurrent-activation", **kwargs
                 )
-                dropout = self._get_values(hp, f"rnn-layer-{i}-dropout", **kwargs)
-                recurrent_dropout = self._get_values(
+                dropout = get_tuner_values(hp, f"rnn-layer-{i}-dropout", **kwargs)
+                recurrent_dropout = get_tuner_values(
                     hp, f"rnn-layer-{i}-recurrent-dropout", **kwargs
                 )
+                # Regularization
+                kernel_regularizer = tf.keras.regularizers.L1L2(
+                    l1=get_tuner_values(hp, f"rnn-layer-{i}-kernel-l1", **kwargs),
+                    l2=get_tuner_values(hp, f"rnn-layer-{i}-kernel-l2", **kwargs),
+                )
+                recurrent_regularizer = tf.keras.regularizers.L1L2(
+                    l1=get_tuner_values(hp, f"rnn-layer-{i}-recurrent-l1", **kwargs),
+                    l2=get_tuner_values(hp, f"rnn-layer-{i}-recurrent-l2", **kwargs),
+                )
+                bias_regularizer = tf.keras.regularizers.L1L2(
+                    l1=get_tuner_values(hp, f"rnn-layer-{i}-bias-l1", **kwargs),
+                    l2=get_tuner_values(hp, f"rnn-layer-{i}-bias-l2", **kwargs),
+                )
+                activity_regularizer = tf.keras.regularizers.L1L2(
+                    l1=get_tuner_values(hp, f"rnn-layer-{i}-activity-l1", **kwargs),
+                    l2=get_tuner_values(hp, f"rnn-layer-{i}-activity-l2", **kwargs),
+                )
+
                 return_sequences = True
                 if i == n_rnn_layers:
                     return_sequences = False
@@ -113,6 +167,10 @@ class LinearRNNModel(AbstractModel):
                             return_sequences=return_sequences,
                             dropout=dropout,
                             recurrent_dropout=recurrent_dropout,
+                            kernel_regularizer=kernel_regularizer,
+                            recurrent_regularizer=recurrent_regularizer,
+                            bias_regularizer=bias_regularizer,
+                            activity_regularizer=activity_regularizer,
                         )
                     )(current)
                 elif layer_type == "GRU":
@@ -124,6 +182,10 @@ class LinearRNNModel(AbstractModel):
                             return_sequences=return_sequences,
                             dropout=dropout,
                             recurrent_dropout=recurrent_dropout,
+                            kernel_regularizer=kernel_regularizer,
+                            recurrent_regularizer=recurrent_regularizer,
+                            bias_regularizer=bias_regularizer,
+                            activity_regularizer=activity_regularizer,
                         )
                     )(current)
                 elif layer_type == "LSTM":
@@ -135,6 +197,10 @@ class LinearRNNModel(AbstractModel):
                             return_sequences=return_sequences,
                             dropout=dropout,
                             recurrent_dropout=recurrent_dropout,
+                            kernel_regularizer=kernel_regularizer,
+                            recurrent_regularizer=recurrent_regularizer,
+                            bias_regularizer=bias_regularizer,
+                            activity_regularizer=activity_regularizer,
                         )
                     )(current)
             outputs = self.get_output_layer()(current)
@@ -148,6 +214,17 @@ class LinearRNNModel(AbstractModel):
             )
             return model
 
+        class TunerRNN(keras_tuner.HyperModel):
+            def __init__(self):
+                self.batch_size = None
+
+            def build(self, hp):
+                self.batch_size = get_tuner_values(hp, "batch-size", **kwargs)
+                return get_model(hp)
+
+            def fit(self, hp, model, *args, **kwargs_):
+                return model.fit(*args, batch_size=self.batch_size, **kwargs_)
+
         input_layer, _ = self.get_input_layer(
             embedding=embedding,
             embedding_size=embedding_size,
@@ -157,7 +234,7 @@ class LinearRNNModel(AbstractModel):
             ],
         )
 
-        return get_model, input_layer.shape
+        return TunerRNN(), input_layer.shape
 
     @staticmethod
     def supported_input_encodings() -> list[InputEncoding]:
@@ -283,6 +360,27 @@ class LinearRNNModel(AbstractModel):
             )
             for i in range(1, max_layers + 1)
         }
+        activation_alpha = {
+            f"rnn-layer-{i}-activation-alpha": FloatArgument(
+                default=0.0,
+                name=f"rnn-layer-{i}-activation-alpha",
+                description=f"Alpha value for the elu activation of the i-th layer",
+            )
+            for i in range(1, max_layers + 1)
+        }
+        regularizers = {}
+        for i in range(1, max_layers + 1):
+            for goal in ["kernel", "recurrent", "bias", "activity"]:
+                for type_ in ["l1", "l2"]:
+                    regularizers |= {
+                        f"rnn-layer-{i}-{goal}-{type_}": FloatArgument(
+                            default=0.0,
+                            minimum=0.0,
+                            maximum=1.0,
+                            name=f"rnn-layer-{i}-{goal}-{type_}",
+                            description=f"{type_} {goal} regularizer for the i-th layer",
+                        )
+                    }
 
         return (
             n_rnn_layers
@@ -294,5 +392,7 @@ class LinearRNNModel(AbstractModel):
             | rnn_layer_recurrent_dropouts
             | n_dense_layers
             | dense_layer_sizes
+            | activation_alpha
+            | regularizers
             | super().get_arguments()
         )

@@ -27,6 +27,48 @@ from ..model_io import InputEncoding, OutputEncoding
 
 ##############################################################################
 ##############################################################################
+# Tuner functions
+##############################################################################
+
+
+def get_tuner_values(hp, arg, **kwargs):
+    arg_values = kwargs[arg]
+    if arg_values["type"] == "range":
+        start = arg_values["options"]["start"]
+        stop = arg_values["options"]["stop"]
+        step = arg_values["options"]["step"]
+        return hp.Int(arg, min_value=start, max_value=stop, step=step)
+    elif arg_values["type"] == "values":
+        return hp.Choice(arg, arg_values["options"]["values"])
+    elif arg_values["type"] == "floats":
+        start = arg_values["options"]["start"]
+        stop = arg_values["options"]["stop"]
+        step = arg_values["options"]["step"]
+        return hp.Float(arg, min_value=start, max_value=stop, step=step)
+
+
+def get_activation(key, **kwargs):
+    activation = kwargs[key]
+    if activation == "elu":
+        return tf.keras.layers.ELU(alpha=kwargs[f"{key}-alpha"])
+    elif activation == "leakyrelu":
+        return tf.keras.layers.LeakyReLU(alpha=kwargs[f"{key}-alpha"])
+    return activation
+
+
+def get_tuner_activation(hp, key, **kwargs):
+    activation = get_tuner_values(hp, key, **kwargs)
+    if activation == "elu":
+        return tf.keras.layers.ELU(alpha=get_tuner_values(hp, f"{key}-alpha", **kwargs))
+    elif activation == "leakyrelu":
+        return tf.keras.layers.LeakyReLU(
+            alpha=get_tuner_values(hp, f"{key}-alpha", **kwargs)
+        )
+    return activation
+
+
+##############################################################################
+##############################################################################
 # Main class
 ##############################################################################
 
@@ -141,6 +183,12 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 name="learning-rate-power",
                 description="Degree of the polynomial to use for the learning rate.",
             ),
+            "batch-size": IntArgument(
+                default=32,
+                minimum=1,
+                name="batch-size",
+                description="Batch size used during training",
+            ),
         }
         result |= {
             "use-trainable-embedding": BoolArgument(
@@ -163,33 +211,6 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
 
     # ================================================================
     # Auxiliary Methods for Model Creation
-
-    def get_activation(self, act: str):
-        match act:
-            case "relu":
-                return tf.keras.layers.Activation(tf.keras.activations.relu)
-            case "elu":
-                return tf.keras.layers.Activation(tf.keras.activations.elu)
-            case "leakyrelu":
-                # return tf.keras.layers.advanced_activations.LeakyReLU()
-                return tf.keras.layers.LeakyReLU()
-            case "sigmoid":
-                return tf.keras.layers.Activation(tf.keras.activations.sigmoid)
-            case "tanh":
-                return tf.keras.layers.Activation(tf.keras.activations.tanh)
-            case "softmax":
-                return tf.keras.layers.Activation(tf.keras.activations.softmax)
-            case "softsign":
-                return tf.keras.layers.Activation(tf.keras.activations.softsign)
-            case "selu":
-                return tf.keras.layers.Activation(tf.keras.activations.selu)
-            case "exp":
-                return tf.keras.layers.Activation(tf.keras.activations.exp)
-            case "prelu":
-                # return tf.keras.layers.advanced_activations.PReLU()
-                return tf.keras.layers.PReLU()
-            case _ as x:
-                raise ValueError(f"Invalid activation {x}")
 
     def get_input_layer(
         self,
@@ -358,23 +379,8 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
     ##############################################################################
     # Tuner functions
     ##############################################################################
-    def _get_values(self, hp, arg, **kwargs):
-        arg_values = kwargs[arg]
-        if arg_values["type"] == "range":
-            start = arg_values["options"]["start"]
-            stop = arg_values["options"]["stop"]
-            step = arg_values["options"]["step"]
-            return hp.Int(arg, min_value=start, max_value=stop, step=step)
-        elif arg_values["type"] == "values":
-            return hp.Choice(arg, arg_values["options"]["values"])
-        elif arg_values["type"] == "floats":
-            start = arg_values["options"]["start"]
-            stop = arg_values["options"]["stop"]
-            step = arg_values["options"]["step"]
-            return hp.Float(arg, min_value=start, max_value=stop, step=step)
-
     def _get_tuner_loss_function(self, hp, **kwargs):
-        loss = self._get_values(hp, "loss", **kwargs)
+        loss = get_tuner_values(hp, "loss", **kwargs)
         match self.__output_encoding:
             case OutputEncoding.OneHot:
                 if loss == "crossentropy":
@@ -392,13 +398,13 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                     raise ValueError(f"Invalid loss: {loss}")
 
     def _get_tuner_optimizer(self, hp, **kwargs):
-        optimizer = self._get_values(hp, "optimizer", **kwargs)
+        optimizer = get_tuner_values(hp, "optimizer", **kwargs)
         if optimizer == "adam":
             return tf.keras.optimizers.Adam(
-                learning_rate=self._get_values(hp, "learning-rate-start", **kwargs)
+                learning_rate=get_tuner_values(hp, "learning-rate-start", **kwargs)
             )
         elif optimizer == "sgd":
             return tf.keras.optimizers.SGD(
-                learning_rate=self._get_values(hp, "learning-rate-start", **kwargs),
+                learning_rate=get_tuner_values(hp, "learning-rate-start", **kwargs),
                 momentum=hp.Float("momentum", min_value=0.0, max_value=1.0, step=0.05),
             )

@@ -1,10 +1,10 @@
-from abc import ABC
-
 import tensorflow as tf
+import keras_tuner
 
 from ..config import Config
 from .fully_connected_model import FullyConnectedModel
 from ..model_io import InputEncoding, OutputMode
+from .model import get_tuner_values, get_activation, get_tuner_activation
 
 
 class CombinedModel(FullyConnectedModel):
@@ -84,9 +84,9 @@ def combine_models(models, conf: Config, **params) -> tf.keras.Model:
     hidden = combiner([model.output for model in models])
     for i in range(1, params["number-of-hidden-layers"] + 1):
         layer_size = params[f"hidden-layer-{i}-size"]
-        hidden = tf.keras.layers.Dense(layer_size)(hidden)
-        if (act := params[f"layer-{i}-activation"]) != "linear":
-            hidden = model_builder.get_activation(act)(hidden)
+        hidden = tf.keras.layers.Dense(
+            layer_size, activation=get_activation(f"layer-{i}-activation", **params)
+        )(hidden)
 
     outputs = model_builder.get_output_layer()(hidden)
 
@@ -133,16 +133,10 @@ def tuner_combine_models(models, conf: Config, **params) -> tf.keras.Model:
         )
 
         hidden = combiner([model.output for model in models])
-        n_hidden_layers = model_builder._get_values(
-            hp, "number-of-hidden-layers", **params
-        )
+        n_hidden_layers = get_tuner_values(hp, "number-of-hidden-layers", **params)
         for i in range(1, n_hidden_layers + 1):
-            layer_size = model_builder._get_values(
-                hp, f"hidden-layer-{i}-size", **params
-            )
-            activation = model_builder._get_values(
-                hp, f"layer-{i}-activation", **params
-            )
+            layer_size = get_tuner_values(hp, f"hidden-layer-{i}-size", **params)
+            activation = get_tuner_activation(hp, f"layer-{i}-activation", **params)
             hidden = tf.keras.layers.Dense(units=layer_size, activation=activation)(
                 hidden
             )
@@ -159,4 +153,12 @@ def tuner_combine_models(models, conf: Config, **params) -> tf.keras.Model:
         )
         return combined_model
 
-    return get_model, [model.inputs for model in models]
+    class TunerCombined(keras_tuner.HyperModel):
+        def build(self, hp):
+            self.batch_size = get_tuner_values(hp, "batch-size", **params)
+            return get_model(hp)
+
+        def fit(self, hp, model_, *args, **kwargs):
+            return model_.fit(*args, batch_size=self.batch_size, **kwargs)
+
+    return TunerCombined(), [model.inputs for model in models]

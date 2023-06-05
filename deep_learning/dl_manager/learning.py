@@ -260,7 +260,7 @@ def run_keras_tuner(
 
     # Things to configure
     directory = "tmp/dir_for_storing_results"
-    project_name = "project_name"
+    project_name = "trials_results"
 
     # Get the tuner
     if conf.get("run.tuner-type") == "RandomSearch":
@@ -272,7 +272,7 @@ def run_keras_tuner(
             ),
             max_trials=conf.get("run.tuner-max-trials"),
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
-            overwrite=True,
+            overwrite=False,
             directory=directory,
             project_name=project_name,
         )
@@ -285,7 +285,7 @@ def run_keras_tuner(
             ),
             max_trials=conf.get("run.tuner-max-trials"),
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
-            overwrite=True,
+            overwrite=False,
             directory=directory,
             project_name=project_name,
         )
@@ -296,13 +296,14 @@ def run_keras_tuner(
                 f"val_{conf.get('run.tuner-objective')}",
                 direction=EARLY_STOPPING_GOALS[conf.get("run.tuner-objective")],
             ),
-            max_epochs=50,
-            factor=10,
-            hyperband_iterations=3,
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
-            overwrite=True,
+            overwrite=False,
             directory=directory,
             project_name=project_name,
+            # Hyperband specific settings
+            max_epochs=100,
+            factor=3,
+            hyperband_iterations=3,
         )
     print(tuner.search_space_summary())  # TODO: this should be output
     splitter = splitting.SimpleSplitter(
