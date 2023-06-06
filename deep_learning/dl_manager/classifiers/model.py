@@ -313,16 +313,31 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         # except KeyError:
         #     optimizer = kwargs.get(self.__class__.__name__, None)
         optimizer = kwargs["optimizer"]
+        params = kwargs['optimizer-params']
+        if optimizer not in params:
+            raise ValueError(f'Mismatch between params and optimizer: {optimizer}, {params}')
+        params = params[optimizer][0]
         learning_rate = self.get_learning_rate_scheduler(**kwargs)
-        if optimizer is None or optimizer == "adam":
-            return tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        elif optimizer.startswith("sgd"):
-            momentum = float(optimizer[optimizer.find("_") + 1 :])
-            return tf.keras.optimizers.SGD(
-                learning_rate=learning_rate, momentum=momentum
-            )
-        else:
-            raise ValueError("Invalid Optimizer Specified")
+        # if optimizer is None or optimizer == "adam":
+        #     return tf.keras.optimizers.Adam(learning_rate=learning_rate)
+        # elif optimizer.startswith("sgd"):
+        #     momentum = float(optimizer[optimizer.find("_") + 1 :])
+        #     return tf.keras.optimizers.SGD(
+        #         learning_rate=learning_rate, momentum=momentum
+        #     )
+        # else:
+        #     raise ValueError("Invalid Optimizer Specified")
+        match optimizer:
+            case 'adam':
+                return tf.keras.optimizers.Adam(learning_rate=learning_rate)
+            case 'sgd':
+                return tf.keras.optimizers.SGD(
+                    learning_rate=learning_rate,
+                    momentum=params['momentum'],
+                    nesterov=params['use-nesterov']
+                )
+            case _ as x:
+                raise ValueError(f'Invalid optimiser: {x}')
 
     # ================================================================
     # Model Building Functionality

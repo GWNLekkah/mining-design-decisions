@@ -938,23 +938,30 @@ class QueryArgument(Argument):
 
 class NestedArgument(Argument):
 
+    class _Wrapper(ArgumentConsumer):
+        def __init__(self, payload):
+            self._payload = payload
+        def get_arguments(self) -> dict[str, Argument]:
+            return self._payload
+
+
     def __init__(self,
                  name: str,
                  description: str, *,
                  spec: dict[str, dict[str, Argument]]):
         super().__init__(name, description, dict)
-        self._spec = spec
-        self._parser = ArgumentListParser(name, spec)
-        self._hyper_parser = HyperArgumentListParser(name, spec)
+        self._spec = {key: self._Wrapper(value) for key, value in spec.items()}
+        self._parser = ArgumentListParser(name, self._spec)
+        self._hyper_parser = HyperArgumentListParser(name, self._spec)
 
     def validate(self, value, *, tuning=False):
-        if not isinstance(value, dict):
-            self.raise_invalid(f'Expected a dictionary, got {value.__class__.__name__}')
-        if len(value) != 1:
-            self.raise_invalid(f'Expected a single key, got {len(value)}')
-        key, nested = next(iter(value.items()))
-        if key not in self._spec:
-            self.raise_invalid(f'Illegal key {key!r}')
+        # if not isinstance(value, dict):
+        #     self.raise_invalid(f'Expected a dictionary, got {value.__class__.__name__}')
+        # if len(value) != 1:
+        #     self.raise_invalid(f'Expected a single key, got {len(value)}')
+        # key, nested = next(iter(value.items()))
+        # if key not in self._spec:
+        #     self.raise_invalid(f'Illegal key {key!r}')
         try:
             if tuning:
                 return self._hyper_parser.validate(value)
