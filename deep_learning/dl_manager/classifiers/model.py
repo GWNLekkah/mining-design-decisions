@@ -34,17 +34,23 @@ from ..model_io import InputEncoding, OutputEncoding
 def get_tuner_values(hp, arg, **kwargs):
     arg_values = kwargs[arg]
     if arg_values["type"] == "range":
-        start = arg_values["options"]["start"]
-        stop = arg_values["options"]["stop"]
-        step = arg_values["options"]["step"]
-        return hp.Int(arg, min_value=start, max_value=stop, step=step)
+        return hp.Int(
+            arg,
+            min_value=arg_values["options"]["start"],
+            max_value=arg_values["options"]["stop"],
+            step=arg_values["options"]["step"],
+            sampling=arg_values["options"]["sampling"],
+        )
     elif arg_values["type"] == "values":
         return hp.Choice(arg, arg_values["options"]["values"])
     elif arg_values["type"] == "floats":
-        start = arg_values["options"]["start"]
-        stop = arg_values["options"]["stop"]
-        step = arg_values["options"]["step"]
-        return hp.Float(arg, min_value=start, max_value=stop, step=step)
+        return hp.Float(
+            arg,
+            min_value=arg_values["options"]["start"],
+            max_value=arg_values["options"]["stop"],
+            step=arg_values["options"]["step"],
+            sampling=arg_values["options"]["sampling"],
+        )
 
 
 def get_activation(key, **kwargs):

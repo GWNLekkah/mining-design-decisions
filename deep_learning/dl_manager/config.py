@@ -1132,14 +1132,22 @@ class HyperArgumentListParser(ArgumentListParser):
                 detail=f"Hyper param arglist item of type {validator.__class__.__name__} does not support range.",
                 status_code=400,
             )
-        self._check_opt_key(options, {"start", "stop", "step"})
+        if "step" not in options:
+            options["step"] = None
+        else:
+            self._check_opt_type(options["step"], int, "step")
+        if "sampling" not in options:
+            options["sampling"] = "linear"
+        else:
+            self._check_opt_type(options["sampling"], str, "sampling")
+        self._check_opt_key(options, {"start", "stop", "step", "sampling"})
         self._check_opt_type(options["start"], int, "start")
         self._check_opt_type(options["stop"], int, "stop")
-        self._check_opt_type(options["step"], int, "step")
         return {
             "start": options["start"],
             "stop": options["stop"],
             "step": options["step"],
+            "sampling": options["sampling"],
         }
 
     def _validate_values(self, validator: Argument, options: dict):
@@ -1158,14 +1166,22 @@ class HyperArgumentListParser(ArgumentListParser):
                 detail=f'Hyper param arglist item of type {validator.__class__.__name__} does not support "floats".',
                 status_code=400,
             )
-        self._check_opt_key(options, {"start", "stop", "step"})
+        if "step" not in options:
+            options["step"] = None
+        else:
+            self._check_opt_type(options["step"], float, "step")
+        if "sampling" not in options:
+            options["sampling"] = "linear"
+        else:
+            self._check_opt_type(options["sampling"], str, "sampling")
+        self._check_opt_key(options, {"start", "stop", "step", "sampling"})
         self._check_opt_type(options["start"], float, "start")
         self._check_opt_type(options["stop"], float, "stop")
-        self._check_opt_type(options["step"], float, "step")
         return {
             "start": options["start"],
             "stop": options["stop"],
             "step": options["step"],
+            "sampling": options["sampling"],
         }
 
     def _require_opt_field(self, options, key):
