@@ -1138,6 +1138,8 @@ class ArgumentListParser:
 
 class HyperArgumentListParser(ArgumentListParser):
     def validate_value(self, validator: Argument, value: typing.Any) -> typing.Any:
+        if isinstance(validator, NestedArgument):
+            return validator.validate(value, tuning=True)
         if not isinstance(value, dict):
             raise fastapi.HTTPException(
                 detail="hyper param arglist entry must be a dict", status_code=400
