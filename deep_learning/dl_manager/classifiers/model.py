@@ -21,6 +21,7 @@ from ..config import (
     FloatArgument,
     ArgumentConsumer,
     IntArgument,
+    NestedArgument
 )
 from ..model_io import InputEncoding, OutputEncoding
 
@@ -158,6 +159,22 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 default="adam",
                 description="Optimizer to use. Special case: use sgd_XXX to specify SGD with momentum XXX",
                 name="optimizer",
+            ),
+            'optimizer-params': NestedArgument(
+                name='optimizer-params',
+                description='Hyper-parameters for the optimizer',
+                spec={
+                    'sgd': {
+                        'momentum': FloatArgument(name='momentum',
+                                                  description='Momentum value for the SGD optimizer',
+                                                  minimum=0,
+                                                  maximum=1,
+                                                  default=0),
+                        'use-nesterov': BoolArgument(name='use-nesterov',
+                                                     description='Whether to use Nesterov momentum in the SGD optimizer',
+                                                     default=False)
+                    }
+                }
             ),
             "loss": EnumArgument(
                 default="crossentropy",

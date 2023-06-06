@@ -505,7 +505,7 @@ class _ArgumentValidator:
                 f'[{self.name}] Cannot set both "null-if" and "null-unless"'
             )
         # self._options = spec.get('options', [])
-        self._options = spec["options"]
+        self._options: typing.Any = spec["options"]
         if self._nargs not in ("1", "*", "+"):
             raise ValueError(f"[{self.name}] Invalid nargs: {self._nargs}")
         if self._type not in (
@@ -544,11 +544,11 @@ class _ArgumentValidator:
                 raise ValueError(
                     f'[{self.name}] Option of "arglist" argument must contain "map-path" and "multi-valued".'
                 )
-            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1)
+            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1) # type: ignore
             self._options[0] = ArgumentListParser(
                 name=self.name,
                 lookup_map=getattr(importlib.import_module(module), item),
-                multi_valued=self._options[0]["multi-valued"],
+                multi_valued=self._options[0]["multi-valued"],  # type: ignore
             )
         if self._type == "hyper_arglist":
             if len(self._options) != 1 or not isinstance(self._options[0], dict):
@@ -562,11 +562,11 @@ class _ArgumentValidator:
                 raise ValueError(
                     f'[{self.name}] Option of "hyper_arglist" argument must contain "map-path" and "multi-valued".'
                 )
-            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1)
+            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1) # type: ignore
             self._options[0] = HyperArgumentListParser(
                 name=self.name,
                 lookup_map=getattr(importlib.import_module(module), item),
-                multi_valued=self._options[0]["multi-valued"],
+                multi_valued=self._options[0]["multi-valued"], # type: ignore
             )
         if self._type == "dynamic_enum":
             if len(self._options) != 1 or not isinstance(self._options[0], str):
@@ -657,7 +657,7 @@ class _ArgumentValidator:
                 return x
             case "class":
                 try:
-                    return self._options[0](x)
+                    return self._options[0](x)  # type: ignore
                 except Exception as e:
                     raise fastapi.HTTPException(
                         detail=f"Error while converting {self.name!r} to {self._options[0].__class__.__name__}: {e}",
@@ -739,7 +739,7 @@ class Argument(abc.ABC):
         return self._data_type
 
     @abc.abstractmethod
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         pass
 
     @property
@@ -782,7 +782,7 @@ class FloatArgument(Argument):
         self._min = minimum
         self._max = maximum
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, float):
             self.raise_invalid(f"Must be float, got {value.__class__.__name__}")
         if self._min is not None and value < self._min:
@@ -817,7 +817,7 @@ class IntArgument(Argument):
         self._min = minimum
         self._max = maximum
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, int):
             self.raise_invalid(f"Must be int, got {value.__class__.__name__}")
         if self._min is not None and value < self._min:
@@ -855,7 +855,7 @@ class EnumArgument(Argument):
         else:
             self._options = options
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, str):
             self.raise_invalid(f"Must be string, got {value.__class__.__name__}")
         if value not in self._options:
@@ -877,7 +877,7 @@ class BoolArgument(Argument):
     def __init__(self, name: str, description: str, default=Argument._NOT_SET):
         super().__init__(name, description, bool, default)
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if isinstance(value, bool) or (isinstance(value, int) and value in (0, 1)):
             return value
         self.raise_invalid(f"Must be Boolean, got {value.__class__.__name__}")
@@ -897,7 +897,7 @@ class StringArgument(Argument):
     def __init__(self, name: str, description: str, default=Argument._NOT_SET):
         super().__init__(name, description, str, default)
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, str):
             self.raise_invalid(f"Must be string, got {value.__class__.__name__}")
         return value
@@ -917,7 +917,7 @@ class QueryArgument(Argument):
     def __init__(self, name: str, description: str, default=Argument._NOT_SET):
         super().__init__(name, description, issue_db_api.Query, default)
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if value is None:
             return value
         try:
@@ -934,6 +934,44 @@ class QueryArgument(Argument):
     @staticmethod
     def supported_hyper_param_specs():
         return ["values"]
+
+
+class NestedArgument(Argument):
+
+    def __init__(self,
+                 name: str,
+                 description: str, *,
+                 spec: dict[str, dict[str, Argument]]):
+        super().__init__(name, description, dict)
+        self._spec = spec
+        self._parser = ArgumentListParser(name, spec)
+        self._hyper_parser = HyperArgumentListParser(name, spec)
+
+    def validate(self, value, *, tuning=False):
+        if not isinstance(value, dict):
+            self.raise_invalid(f'Expected a dictionary, got {value.__class__.__name__}')
+        if len(value) != 1:
+            self.raise_invalid(f'Expected a single key, got {len(value)}')
+        key, nested = next(iter(value.items()))
+        if key not in self._spec:
+            self.raise_invalid(f'Illegal key {key!r}')
+        try:
+            if tuning:
+                return self._hyper_parser.validate(value)
+            return self._parser.validate(value)
+        except fastapi.HTTPException as e:
+            self.raise_invalid(e.detail)
+
+    @property
+    def legal_values(self):
+        return {}
+
+    def get_json_spec(self):
+        return super().get_json_spec()
+
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['nested']
 
 
 class ArgumentListParser:
