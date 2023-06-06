@@ -950,6 +950,7 @@ class NestedArgument(Argument):
                  description: str, *,
                  spec: dict[str, dict[str, Argument]]):
         super().__init__(name, description, dict)
+        self._raw_spec = spec
         self._spec = {key: self._Wrapper(value) for key, value in spec.items()}
         self._parser = ArgumentListParser(name, self._spec)
         self._hyper_parser = HyperArgumentListParser(name, self._spec)
@@ -974,7 +975,12 @@ class NestedArgument(Argument):
         return {}
 
     def get_json_spec(self):
-        return super().get_json_spec()
+        return super().get_json_spec() | {
+            'spec': {
+                key: {k: v.get_json_spec() for k, v in value.items()}
+                for key, value in self._raw_spec.items()
+            }
+        }
 
     @staticmethod
     def supported_hyper_param_specs():
