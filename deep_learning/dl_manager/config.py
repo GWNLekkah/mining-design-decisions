@@ -573,7 +573,7 @@ class _ArgumentValidator:
                 raise ValueError(
                     f'[{self.name}] Argument of type "dynamic_enum" requires exactly one option of type "str".'
                 )
-            module, item = self._options[0].rsplit(".", maxsplit=1)
+            module, item = self._options[0].rsplit(".", maxsplit=1) # type: ignore
             self._options[0] = set(getattr(importlib.import_module(module), item))
 
     @property
@@ -949,7 +949,11 @@ class NestedArgument(Argument):
                  name: str,
                  description: str, *,
                  spec: dict[str, dict[str, Argument]]):
-        super().__init__(name, description, dict)
+        default = {
+            key: {k: v.default for k, v in value.items()}
+            for key, value in spec.items()
+        }
+        super().__init__(name, description, dict, default=default)
         self._raw_spec = spec
         self._spec = {key: self._Wrapper(value) for key, value in spec.items()}
         self._parser = ArgumentListParser(name, self._spec)
