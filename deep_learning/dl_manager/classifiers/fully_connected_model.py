@@ -2,7 +2,13 @@ import tensorflow as tf
 import keras_tuner
 
 from ..config import Argument, IntArgument, EnumArgument, FloatArgument
-from .model import AbstractModel, get_tuner_values, get_activation, get_tuner_activation
+from .model import (
+    AbstractModel,
+    get_tuner_values,
+    get_activation,
+    get_tuner_activation,
+    get_tuner_optimizer,
+)
 from ..model_io import InputEncoding
 
 
@@ -94,7 +100,7 @@ class FullyConnectedModel(AbstractModel):
 
             # Compile model
             model.compile(
-                optimizer=self._get_tuner_optimizer(hp, **kwargs),
+                optimizer=get_tuner_optimizer(hp, **kwargs),
                 loss=self._get_tuner_loss_function(hp, **kwargs),
                 metrics=self.get_metric_list(),
             )

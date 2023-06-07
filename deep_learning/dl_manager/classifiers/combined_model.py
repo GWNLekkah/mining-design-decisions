@@ -4,7 +4,12 @@ import keras_tuner
 from ..config import Config
 from .fully_connected_model import FullyConnectedModel
 from ..model_io import InputEncoding, OutputMode
-from .model import get_tuner_values, get_activation, get_tuner_activation
+from .model import (
+    get_tuner_values,
+    get_activation,
+    get_tuner_activation,
+    get_tuner_optimizer,
+)
 
 
 class CombinedModel(FullyConnectedModel):
@@ -147,7 +152,7 @@ def tuner_combine_models(models, conf: Config, **params) -> tf.keras.Model:
             inputs=[model.inputs for model in models], outputs=outputs
         )
         combined_model.compile(
-            optimizer=model_builder._get_tuner_optimizer(hp, **params),
+            optimizer=get_tuner_optimizer(hp, **params),
             loss=model_builder._get_tuner_loss_function(hp, **params),
             metrics=model_builder.get_metric_list(),
         )

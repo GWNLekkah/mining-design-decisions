@@ -21,7 +21,7 @@ from ..config import (
     FloatArgument,
     ArgumentConsumer,
     IntArgument,
-    NestedArgument
+    NestedArgument,
 )
 from ..model_io import InputEncoding, OutputEncoding
 
@@ -54,15 +54,6 @@ def get_tuner_values(hp, arg, **kwargs):
         )
 
 
-def get_activation(key, **kwargs):
-    activation = kwargs[key]
-    if activation == "elu":
-        return tf.keras.layers.ELU(alpha=kwargs[f"{key}-alpha"])
-    elif activation == "leakyrelu":
-        return tf.keras.layers.LeakyReLU(alpha=kwargs[f"{key}-alpha"])
-    return activation
-
-
 def get_tuner_activation(hp, key, **kwargs):
     activation = get_tuner_values(hp, key, **kwargs)
     if activation == "elu":
@@ -71,6 +62,83 @@ def get_tuner_activation(hp, key, **kwargs):
         return tf.keras.layers.LeakyReLU(
             alpha=get_tuner_values(hp, f"{key}-alpha", **kwargs)
         )
+    return activation
+
+
+def get_tuner_learning_rate_scheduler(hp, **kwargs):
+    initial_learning_rate = get_tuner_values(hp, "learning-rate-start", **kwargs)
+    if kwargs["learning-rate-start"]["type"] in ["range", "floats"]:
+        old_max = kwargs["learning-rate-stop"]["options"]["stop"]
+        kwargs["learning-rate-stop"]["options"]["stop"] = initial_learning_rate
+        end_learning_rate = get_tuner_values(hp, "learning-rate-end", **kwargs)
+        kwargs["learning-rate-stop"]["options"]["stop"] = old_max
+    elif kwargs["learning-rate-start"]["type"] == "values":
+        old_values = kwargs["learning-rate-stop"]["options"]["values"]
+        available_values = []
+        for value in kwargs["learning-rate-stop"]["options"]["values"]:
+            if value <= initial_learning_rate:
+                available_values.append(value)
+        kwargs["learning-rate-stop"]["options"]["values"] = available_values
+        end_learning_rate = get_tuner_values(hp, "learning-rate-end", **kwargs)
+        kwargs["learning-rate-stop"]["options"]["values"] = old_values
+
+    lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
+        initial_learning_rate=initial_learning_rate,
+        decay_steps=get_tuner_values(hp, "learning-rate-steps", **kwargs),
+        end_learning_rate=end_learning_rate,
+        power=get_tuner_values(hp, "learning-rate-power", **kwargs),
+        cycle=False,
+        name=None,
+    )
+    return lr_schedule
+
+
+def get_tuner_optimizer(hp, **kwargs):
+    optimizer = get_tuner_values(hp, "optimizer", **kwargs)
+    params = kwargs["optimizer-params"]
+    if optimizer not in params:
+        raise ValueError(
+            f"Mismatch between params and optimizer: {optimizer}, {params}"
+        )
+    params = params[optimizer]
+    learning_rate = get_tuner_learning_rate_scheduler(hp, **kwargs)
+    match optimizer:
+        case "adam":
+            return tf.keras.optimizers.Adam(
+                learning_rate=learning_rate,
+                beta_1=get_tuner_values(hp, "beta-1", **params),
+                beta_2=get_tuner_values(hp, "beta-2", **params),
+                epsilon=get_tuner_values(hp, "epsilon", **params),
+            )
+        case "nadam":
+            return tf.keras.optimizers.Nadam(
+                learning_rate=learning_rate,
+                beta_1=get_tuner_values(hp, "beta-1", **params),
+                beta_2=get_tuner_values(hp, "beta-2", **params),
+                epsilon=get_tuner_values(hp, "epsilon", **params),
+            )
+        case "sgd":
+            return tf.keras.optimizers.SGD(
+                learning_rate=learning_rate,
+                momentum=params["momentum"],
+                nesterov=params["use-nesterov"],
+            )
+        case _ as x:
+            raise ValueError(f"Invalid optimiser: {x}")
+
+
+##############################################################################
+##############################################################################
+# Functions for all models
+##############################################################################
+
+
+def get_activation(key, **kwargs):
+    activation = kwargs[key]
+    if activation == "elu":
+        return tf.keras.layers.ELU(alpha=kwargs[f"{key}-alpha"])
+    elif activation == "leakyrelu":
+        return tf.keras.layers.LeakyReLU(alpha=kwargs[f"{key}-alpha"])
     return activation
 
 
@@ -160,21 +228,59 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 description="Optimizer to use. Special case: use sgd_XXX to specify SGD with momentum XXX",
                 name="optimizer",
             ),
-            'optimizer-params': NestedArgument(
-                name='optimizer-params',
-                description='Hyper-parameters for the optimizer',
+            "optimizer-params": NestedArgument(
+                name="optimizer-params",
+                description="Hyper-parameters for the optimizer",
                 spec={
-                    'sgd': {
-                        'momentum': FloatArgument(name='momentum',
-                                                  description='Momentum value for the SGD optimizer',
-                                                  minimum=0,
-                                                  maximum=1,
-                                                  default=0),
-                        'use-nesterov': BoolArgument(name='use-nesterov',
-                                                     description='Whether to use Nesterov momentum in the SGD optimizer',
-                                                     default=False)
-                    }
-                }
+                    "adam": {
+                        "beta-1": FloatArgument(
+                            name="beta-1",
+                            description="Beta-1 value for the Adam optimizer",
+                            default=0.9,
+                        ),
+                        "beta-2": FloatArgument(
+                            name="beta-2",
+                            description="Beta-2 value for the Adam optimizer",
+                            default=0.999,
+                        ),
+                        "epsilon": FloatArgument(
+                            name="epsilon",
+                            description="Epsilon value for the Adam optimizer",
+                            default=1e-07,
+                        ),
+                    },
+                    "nadam": {
+                        "beta-1": FloatArgument(
+                            name="beta-1",
+                            description="Beta-1 value for the Nadam optimizer",
+                            default=0.9,
+                        ),
+                        "beta-2": FloatArgument(
+                            name="beta-2",
+                            description="Beta-2 value for the Nadam optimizer",
+                            default=0.999,
+                        ),
+                        "epsilon": FloatArgument(
+                            name="epsilon",
+                            description="Epsilon value for the Nadam optimizer",
+                            default=1e-07,
+                        ),
+                    },
+                    "sgd": {
+                        "momentum": FloatArgument(
+                            name="momentum",
+                            description="Momentum value for the SGD optimizer",
+                            minimum=0,
+                            maximum=1,
+                            default=0,
+                        ),
+                        "use-nesterov": BoolArgument(
+                            name="use-nesterov",
+                            description="Whether to use Nesterov momentum in the SGD optimizer",
+                            default=False,
+                        ),
+                    },
+                },
             ),
             "loss": EnumArgument(
                 default="crossentropy",
@@ -287,14 +393,6 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
     # Optimizer Configuration
 
     def get_learning_rate_scheduler(self, **kwargs):
-        # lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
-        #     initial_learning_rate=0.005,
-        #     decay_steps=470,
-        #     end_learning_rate=0.0005,
-        #     power=1.0,
-        #     cycle=False,
-        #     name=None
-        # )
         if abs(kwargs["learning-rate-start"] - kwargs["learning-rate-stop"]) <= 1e-10:
             return kwargs["learning-rate-start"]
         lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
@@ -308,36 +406,37 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
         return lr_schedule
 
     def get_optimizer(self, **kwargs) -> tf.keras.optimizers.Optimizer:
-        # try:
-        #     optimizer = kwargs.get('optimizer')
-        # except KeyError:
-        #     optimizer = kwargs.get(self.__class__.__name__, None)
         optimizer = kwargs["optimizer"]
-        params = kwargs['optimizer-params']
+        params = kwargs["optimizer-params"]
         if optimizer not in params:
-            raise ValueError(f'Mismatch between params and optimizer: {optimizer}, {params}')
-        params = params[optimizer][0]
+            raise ValueError(
+                f"Mismatch between params and optimizer: {optimizer}, {params}"
+            )
+        params = params[optimizer]
         learning_rate = self.get_learning_rate_scheduler(**kwargs)
-        # if optimizer is None or optimizer == "adam":
-        #     return tf.keras.optimizers.Adam(learning_rate=learning_rate)
-        # elif optimizer.startswith("sgd"):
-        #     momentum = float(optimizer[optimizer.find("_") + 1 :])
-        #     return tf.keras.optimizers.SGD(
-        #         learning_rate=learning_rate, momentum=momentum
-        #     )
-        # else:
-        #     raise ValueError("Invalid Optimizer Specified")
         match optimizer:
-            case 'adam':
-                return tf.keras.optimizers.Adam(learning_rate=learning_rate)
-            case 'sgd':
+            case "adam":
+                return tf.keras.optimizers.Adam(
+                    learning_rate=learning_rate,
+                    beta_1=params["beta-1"],
+                    beta_2=params["beta-2"],
+                    epsilon=params["epsilon"],
+                )
+            case "nadam":
+                return tf.keras.optimizers.Nadam(
+                    learning_rate=learning_rate,
+                    beta_1=params["beta-1"],
+                    beta_2=params["beta-2"],
+                    epsilon=params["epsilon"],
+                )
+            case "sgd":
                 return tf.keras.optimizers.SGD(
                     learning_rate=learning_rate,
-                    momentum=params['momentum'],
-                    nesterov=params['use-nesterov']
+                    momentum=params["momentum"],
+                    nesterov=params["use-nesterov"],
                 )
             case _ as x:
-                raise ValueError(f'Invalid optimiser: {x}')
+                raise ValueError(f"Invalid optimiser: {x}")
 
     # ================================================================
     # Model Building Functionality
@@ -434,15 +533,3 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                     return tf.keras.losses.Hinge()
                 else:
                     raise ValueError(f"Invalid loss: {loss}")
-
-    def _get_tuner_optimizer(self, hp, **kwargs):
-        optimizer = get_tuner_values(hp, "optimizer", **kwargs)
-        if optimizer == "adam":
-            return tf.keras.optimizers.Adam(
-                learning_rate=get_tuner_values(hp, "learning-rate-start", **kwargs)
-            )
-        elif optimizer == "sgd":
-            return tf.keras.optimizers.SGD(
-                learning_rate=get_tuner_values(hp, "learning-rate-start", **kwargs),
-                momentum=hp.Float("momentum", min_value=0.0, max_value=1.0, step=0.05),
-            )
