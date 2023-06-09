@@ -957,7 +957,7 @@ class NestedArgument(Argument):
         self._raw_spec = spec
         self._spec = {key: self._Wrapper(value) for key, value in spec.items()}
         self._parser = ArgumentListParser(name, self._spec)
-        self._hyper_parser = HyperArgumentListParser(name, self._spec)
+        self._hyper_parser = HyperArgumentListParser(name, self._spec, multi_valued=True)
 
     def validate(self, value, *, tuning=False):
         # if not isinstance(value, dict):
