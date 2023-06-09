@@ -259,7 +259,9 @@ def run_keras_tuner(
     model, input_shape = model_and_input_shape
 
     # Things to configure
-    directory = "tmp/dir_for_storing_results"
+    directory = os.path.join(
+        conf.get("system.os.data-directory"), conf.get("run.model-id")
+    )
     project_name = "trials_results"
 
     # Get the tuner
@@ -313,6 +315,8 @@ def run_keras_tuner(
         max_train=None,
     )
     # Split returns an iterator; call next() to get data splits
+    if conf.get("run.seed") >= 0:
+        random.seed(conf.get("run.seed"))
     (
         train,
         test,
@@ -324,6 +328,16 @@ def run_keras_tuner(
         val_ids,
         test_ids,
     ) = next(splitter.split(data))
+
+    with open(f"{directory}/datasets.json", "w") as file:
+        json.dump(
+            {
+                "train": train_ids.tolist(),
+                "val": val_ids.tolist(),
+                "test": test_ids.tolist(),
+            },
+            file,
+        )
 
     # Create callbacks
     callbacks = []

@@ -8,6 +8,7 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
+    get_non_increasing_next_value,
 )
 from ..model_io import InputEncoding
 
@@ -130,35 +131,48 @@ class LinearRNNModel(AbstractModel):
                 ][0],
             )
             n_rnn_layers = get_tuner_values(hp, "number-of-rnn-layers", **kwargs)
+            activation = get_tuner_activation(hp, f"rnn-layer-activation", **kwargs)
+            recurrent_activation = get_tuner_activation(
+                hp, f"rnn-layer-recurrent-activation", **kwargs
+            )
+            kernel_l1 = get_tuner_values(hp, f"rnn-layer-kernel-l1", **kwargs)
+            kernel_l2 = get_tuner_values(hp, f"rnn-layer-kernel-l2", **kwargs)
+            recurrent_l1 = get_tuner_values(hp, f"rnn-layer-recurrent-l1", **kwargs)
+            recurrent_l2 = get_tuner_values(hp, f"rnn-layer-recurrent-l2", **kwargs)
+            bias_l1 = get_tuner_values(hp, f"rnn-layer-bias-l1", **kwargs)
+            bias_l2 = get_tuner_values(hp, f"rnn-layer-bias-l2", **kwargs)
+            activity_l1 = get_tuner_values(hp, f"rnn-layer-activity-l1", **kwargs)
+            activity_l2 = get_tuner_values(hp, f"rnn-layer-activity-l2", **kwargs)
+            previous_size = -1
             for i in range(1, n_rnn_layers + 1):
                 layer_type = get_tuner_values(hp, f"rnn-layer-{i}-type", **kwargs)
-                units = get_tuner_values(hp, f"rnn-layer-{i}-size", **kwargs)
-                activation = get_tuner_activation(
-                    hp, f"rnn-layer-{i}-activation", **kwargs
-                )
-                recurrent_activation = get_tuner_activation(
-                    hp, f"rnn-layer-{i}-recurrent-activation", **kwargs
-                )
+                if previous_size == -1:
+                    units = get_tuner_values(hp, f"rnn-layer-{i}-size", **kwargs)
+                else:
+                    units = get_non_increasing_next_value(
+                        hp, f"rnn-layer-{i}-size", previous_size, **kwargs
+                    )
+                previous_size = units
                 dropout = get_tuner_values(hp, f"rnn-layer-{i}-dropout", **kwargs)
                 recurrent_dropout = get_tuner_values(
                     hp, f"rnn-layer-{i}-recurrent-dropout", **kwargs
                 )
                 # Regularization
                 kernel_regularizer = tf.keras.regularizers.L1L2(
-                    l1=get_tuner_values(hp, f"rnn-layer-{i}-kernel-l1", **kwargs),
-                    l2=get_tuner_values(hp, f"rnn-layer-{i}-kernel-l2", **kwargs),
+                    l1=kernel_l1,
+                    l2=kernel_l2,
                 )
                 recurrent_regularizer = tf.keras.regularizers.L1L2(
-                    l1=get_tuner_values(hp, f"rnn-layer-{i}-recurrent-l1", **kwargs),
-                    l2=get_tuner_values(hp, f"rnn-layer-{i}-recurrent-l2", **kwargs),
+                    l1=recurrent_l1,
+                    l2=recurrent_l2,
                 )
                 bias_regularizer = tf.keras.regularizers.L1L2(
-                    l1=get_tuner_values(hp, f"rnn-layer-{i}-bias-l1", **kwargs),
-                    l2=get_tuner_values(hp, f"rnn-layer-{i}-bias-l2", **kwargs),
+                    l1=bias_l1,
+                    l2=bias_l2,
                 )
                 activity_regularizer = tf.keras.regularizers.L1L2(
-                    l1=get_tuner_values(hp, f"rnn-layer-{i}-activity-l1", **kwargs),
-                    l2=get_tuner_values(hp, f"rnn-layer-{i}-activity-l2", **kwargs),
+                    l1=activity_l1,
+                    l2=activity_l2,
                 )
 
                 return_sequences = True
@@ -285,7 +299,7 @@ class LinearRNNModel(AbstractModel):
             for i in range(1, max_layers + 1)
         }
         rnn_layer_activations = {
-            f"rnn-layer-{i}-activation": EnumArgument(
+            f"rnn-layer-activation": EnumArgument(
                 default="tanh",
                 options=[
                     "linear",
@@ -300,13 +314,12 @@ class LinearRNNModel(AbstractModel):
                     "exp",
                     "prelu",
                 ],
-                name=f"rnn-layer-{i}-activation",
-                description="Activation to use in the i-th rnn layer",
+                name=f"rnn-layer-activation",
+                description="Activation to use in the rnn layers",
             )
-            for i in range(1, max_layers + 1)
         }
         rnn_layer_recurrent_activations = {
-            f"rnn-layer-{i}-recurrent-activation": EnumArgument(
+            f"rnn-layer-recurrent-activation": EnumArgument(
                 default="sigmoid",
                 options=[
                     "linear",
@@ -321,10 +334,9 @@ class LinearRNNModel(AbstractModel):
                     "exp",
                     "prelu",
                 ],
-                name=f"rnn-layer-{i}-recurrent-activation",
-                description="Recurrent activation to use in the i-th rnn layer",
+                name=f"rnn-layer-recurrent-activation",
+                description="Recurrent activation to use in the rnn layers",
             )
-            for i in range(1, max_layers + 1)
         }
         rnn_layer_dropouts = {
             f"rnn-layer-{i}-dropout": FloatArgument(
@@ -367,26 +379,24 @@ class LinearRNNModel(AbstractModel):
             for i in range(1, max_layers + 1)
         }
         activation_alpha = {
-            f"rnn-layer-{i}-activation-alpha": FloatArgument(
+            f"rnn-layer-activation-alpha": FloatArgument(
                 default=0.0,
-                name=f"rnn-layer-{i}-activation-alpha",
+                name=f"rnn-layer-activation-alpha",
                 description=f"Alpha value for the elu activation of the i-th layer",
             )
-            for i in range(1, max_layers + 1)
         }
         regularizers = {}
-        for i in range(1, max_layers + 1):
-            for goal in ["kernel", "recurrent", "bias", "activity"]:
-                for type_ in ["l1", "l2"]:
-                    regularizers |= {
-                        f"rnn-layer-{i}-{goal}-{type_}": FloatArgument(
-                            default=0.0,
-                            minimum=0.0,
-                            maximum=1.0,
-                            name=f"rnn-layer-{i}-{goal}-{type_}",
-                            description=f"{type_} {goal} regularizer for the i-th layer",
-                        )
-                    }
+        for goal in ["kernel", "recurrent", "bias", "activity"]:
+            for type_ in ["l1", "l2"]:
+                regularizers |= {
+                    f"rnn-layer-{goal}-{type_}": FloatArgument(
+                        default=0.0,
+                        minimum=0.0,
+                        maximum=1.0,
+                        name=f"rnn-layer-{goal}-{type_}",
+                        description=f"{type_} {goal} regularizer for the layers",
+                    )
+                }
 
         return (
             n_rnn_layers

@@ -32,6 +32,11 @@ from ..model_io import InputEncoding, OutputEncoding
 ##############################################################################
 
 
+class CustomHinge(tf.keras.losses.Hinge):
+    def call(self, y_true, y_pred):
+        return super().call(y_true, 2 * y_pred - 1)
+
+
 def get_tuner_values(hp, arg, **kwargs):
     arg_values = kwargs[arg]
     if arg_values["type"] == "range":
@@ -54,6 +59,25 @@ def get_tuner_values(hp, arg, **kwargs):
         )
 
 
+def get_non_increasing_next_value(hp, arg, max_value, **kwargs):
+    if kwargs[arg]["type"] in ["range", "floats"]:
+        old_max = kwargs[arg]["options"]["stop"]
+        kwargs[arg]["options"]["stop"] = max_value
+        value = get_tuner_values(hp, arg, **kwargs)
+        kwargs[arg]["options"]["stop"] = old_max
+    elif kwargs[arg]["type"] == "values":
+        old_values = kwargs[arg]["options"]["values"]
+        available_values = []
+        for value in kwargs[arg]["options"]["values"]:
+            if value <= max_value:
+                available_values.append(value)
+        kwargs[arg]["options"]["values"] = available_values
+        value = get_tuner_values(hp, arg, **kwargs)
+        kwargs[arg]["options"]["values"] = old_values
+
+    return value
+
+
 def get_tuner_activation(hp, key, **kwargs):
     activation = get_tuner_values(hp, key, **kwargs)
     if activation == "elu":
@@ -70,7 +94,7 @@ def get_tuner_learning_rate_scheduler(hp, **kwargs):
     if kwargs["learning-rate-start"]["type"] in ["range", "floats"]:
         old_max = kwargs["learning-rate-stop"]["options"]["stop"]
         kwargs["learning-rate-stop"]["options"]["stop"] = initial_learning_rate
-        end_learning_rate = get_tuner_values(hp, "learning-rate-end", **kwargs)
+        end_learning_rate = get_tuner_values(hp, "learning-rate-stop", **kwargs)
         kwargs["learning-rate-stop"]["options"]["stop"] = old_max
     elif kwargs["learning-rate-start"]["type"] == "values":
         old_values = kwargs["learning-rate-stop"]["options"]["values"]
@@ -79,7 +103,7 @@ def get_tuner_learning_rate_scheduler(hp, **kwargs):
             if value <= initial_learning_rate:
                 available_values.append(value)
         kwargs["learning-rate-stop"]["options"]["values"] = available_values
-        end_learning_rate = get_tuner_values(hp, "learning-rate-end", **kwargs)
+        end_learning_rate = get_tuner_values(hp, "learning-rate-stop", **kwargs)
         kwargs["learning-rate-stop"]["options"]["values"] = old_values
 
     lr_schedule = tf.keras.optimizers.schedules.PolynomialDecay(
@@ -530,6 +554,6 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                 if loss == "crossentropy":
                     return tf.keras.losses.BinaryCrossentropy()
                 elif loss == "hinge":
-                    return tf.keras.losses.Hinge()
+                    return CustomHinge()
                 else:
                     raise ValueError(f"Invalid loss: {loss}")

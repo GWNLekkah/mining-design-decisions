@@ -8,6 +8,7 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
+    get_non_increasing_next_value,
 )
 from ..model_io import InputEncoding
 
@@ -104,40 +105,48 @@ class LinearConv1Model(AbstractModel):
             layer_size = get_tuner_values(hp, "fully-connected-layer-size", **kwargs)
             filters = get_tuner_values(hp, "filters", **kwargs)
             num_convolutions = get_tuner_values(hp, "number-of-convolutions", **kwargs)
-            convolution_sizes = [
-                get_tuner_values(hp, f"kernel-{i}-size", **kwargs)
-                for i in range(1, num_convolutions + 1)
-            ]
+            previous_size = -1
+            convolution_sizes = []
+            for i in range(1, num_convolutions + 1):
+                if previous_size == -1:
+                    size = get_tuner_values(hp, f"kernel-{i}-size", **kwargs)
+                else:
+                    # -1 for strictly decreasing
+                    size = get_non_increasing_next_value(
+                        hp, f"kernel-{i}-size", previous_size - 1, **kwargs
+                    )
+                previous_size = size
+                convolution_sizes.append(size)
             height = self.input_size
             pooling_sizes = [
                 height - convolution_sizes[i - 1]
                 for i in range(1, num_convolutions + 1)
             ]
             convolutions = []
+            activation = get_tuner_activation(hp, f"layer-activation", **kwargs)
+            kernel_l1 = get_tuner_values(hp, f"layer-kernel-l1", **kwargs)
+            kernel_l2 = get_tuner_values(hp, f"layer-kernel-l2", **kwargs)
+            bias_l1 = get_tuner_values(hp, f"layer-bias-l1", **kwargs)
+            bias_l2 = get_tuner_values(hp, f"layer-bias-l2", **kwargs)
+            activity_l1 = get_tuner_values(hp, f"layer-activity-l1", **kwargs)
+            activity_l2 = get_tuner_values(hp, f"layer-activity-l2", **kwargs)
             for i, kernel_size in enumerate(convolution_sizes):
-                activation = get_tuner_activation(
-                    hp, f"layer-{i+1}-activation", **kwargs
-                )
                 convolutions.append(
                     tf.keras.layers.Conv1D(
                         filters=filters,
                         kernel_size=kernel_size,
                         activation=activation,
                         kernel_regularizer=tf.keras.regularizers.L1L2(
-                            l1=get_tuner_values(hp, f"layer-{i+1}-kernel-l1", **kwargs),
-                            l2=get_tuner_values(hp, f"layer-{i+1}-kernel-l2", **kwargs),
+                            l1=kernel_l1,
+                            l2=kernel_l2,
                         ),
                         bias_regularizer=tf.keras.regularizers.L1L2(
-                            l1=get_tuner_values(hp, f"layer-{i+1}-bias-l1", **kwargs),
-                            l2=get_tuner_values(hp, f"layer-{i+1}-bias-l2", **kwargs),
+                            l1=bias_l1,
+                            l2=bias_l2,
                         ),
                         activity_regularizer=tf.keras.regularizers.L1L2(
-                            l1=get_tuner_values(
-                                hp, f"layer-{i+1}-activity-l1", **kwargs
-                            ),
-                            l2=get_tuner_values(
-                                hp, f"layer-{i+1}-activity-l2", **kwargs
-                            ),
+                            l1=activity_l1,
+                            l2=activity_l2,
                         ),
                     )(next_layer)
                 )
@@ -225,7 +234,7 @@ class LinearConv1Model(AbstractModel):
             for i in range(1, max_convolutions + 1)
         }
         activations = {
-            f"layer-{i}-activation": EnumArgument(
+            f"layer-activation": EnumArgument(
                 default="linear",
                 options=[
                     "linear",
@@ -240,32 +249,29 @@ class LinearConv1Model(AbstractModel):
                     "exp",
                     "prelu",
                 ],
-                name=f"layer-{i}-activation",
-                description="Activation to use in the i-th cnn layer",
+                name=f"layer-activation",
+                description="Activation to use in the cnn layers",
             )
-            for i in range(1, max_convolutions + 1)
         }
         activation_alpha = {
-            f"layer-{i}-activation-alpha": FloatArgument(
+            f"layer-activation-alpha": FloatArgument(
                 default=0.0,
-                name=f"layer-{i}-activation-alpha",
-                description=f"Alpha value for the elu activation of the i-th layer",
+                name=f"layer-activation-alpha",
+                description=f"Alpha value for the elu activation of the layers",
             )
-            for i in range(1, max_convolutions + 1)
         }
         regularizers = {}
-        for i in range(1, max_convolutions + 1):
-            for goal in ["kernel", "bias", "activity"]:
-                for type_ in ["l1", "l2"]:
-                    regularizers |= {
-                        f"layer-{i}-{goal}-{type_}": FloatArgument(
-                            default=0.0,
-                            minimum=0.0,
-                            maximum=1.0,
-                            name=f"layer-{i}-{goal}-{type_}",
-                            description=f"{type_} {goal} regularizer for the i-th layer",
-                        )
-                    }
+        for goal in ["kernel", "bias", "activity"]:
+            for type_ in ["l1", "l2"]:
+                regularizers |= {
+                    f"layer-{goal}-{type_}": FloatArgument(
+                        default=0.0,
+                        minimum=0.0,
+                        maximum=1.0,
+                        name=f"layer-{goal}-{type_}",
+                        description=f"{type_} {goal} regularizer for the layers",
+                    )
+                }
         return (
             {
                 "fully-connected-layer-size": IntArgument(

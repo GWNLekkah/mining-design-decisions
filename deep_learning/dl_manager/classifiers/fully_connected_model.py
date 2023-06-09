@@ -8,6 +8,7 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
+    get_non_increasing_next_value,
 )
 from ..model_io import InputEncoding
 
@@ -74,22 +75,36 @@ class FullyConnectedModel(AbstractModel):
             else:
                 current = next_layer
             n_hidden_layers = get_tuner_values(hp, "number-of-hidden-layers", **kwargs)
+            activation = get_tuner_activation(hp, f"layer-activation", **kwargs)
+            kernel_l1 = get_tuner_values(hp, f"layer-kernel-l1", **kwargs)
+            kernel_l2 = get_tuner_values(hp, f"layer-kernel-l2", **kwargs)
+            bias_l1 = get_tuner_values(hp, f"layer-bias-l1", **kwargs)
+            bias_l2 = get_tuner_values(hp, f"layer-bias-l2", **kwargs)
+            activity_l1 = get_tuner_values(hp, f"layer-activity-l1", **kwargs)
+            activity_l2 = get_tuner_values(hp, f"layer-activity-l2", **kwargs)
+            previous_size = -1
             for i in range(1, n_hidden_layers + 1):
-                activation = get_tuner_activation(hp, f"layer-{i}-activation", **kwargs)
+                if previous_size == -1:
+                    units = get_tuner_values(hp, f"hidden-layer-{i}-size", **kwargs)
+                else:
+                    units = get_non_increasing_next_value(
+                        hp, f"hidden-layer-{i}-size", previous_size, **kwargs
+                    )
+                previous_size = units
                 current = tf.keras.layers.Dense(
-                    units=get_tuner_values(hp, f"hidden-layer-{i}-size", **kwargs),
+                    units=units,
                     activation=activation,
                     kernel_regularizer=tf.keras.regularizers.L1L2(
-                        l1=get_tuner_values(hp, f"layer-{i}-kernel-l1", **kwargs),
-                        l2=get_tuner_values(hp, f"layer-{i}-kernel-l2", **kwargs),
+                        l1=kernel_l1,
+                        l2=kernel_l2,
                     ),
                     bias_regularizer=tf.keras.regularizers.L1L2(
-                        l1=get_tuner_values(hp, f"layer-{i}-bias-l1", **kwargs),
-                        l2=get_tuner_values(hp, f"layer-{i}-bias-l2", **kwargs),
+                        l1=bias_l1,
+                        l2=bias_l2,
                     ),
                     activity_regularizer=tf.keras.regularizers.L1L2(
-                        l1=get_tuner_values(hp, f"layer-{i}-activity-l1", **kwargs),
-                        l2=get_tuner_values(hp, f"layer-{i}-activity-l2", **kwargs),
+                        l1=activity_l1,
+                        l2=activity_l2,
                     ),
                 )(current)
                 current = tf.keras.layers.Dropout(
@@ -158,7 +173,7 @@ class FullyConnectedModel(AbstractModel):
             for i in range(1, max_layers + 1)
         }
         activations = {
-            f"layer-{i}-activation": EnumArgument(
+            f"layer-activation": EnumArgument(
                 default="linear",
                 options=[
                     "linear",
@@ -173,18 +188,16 @@ class FullyConnectedModel(AbstractModel):
                     "exp",
                     "prelu",
                 ],
-                name=f"layer-{i}-activation",
-                description="Activation to use in the i-th hidden layer",
+                name=f"layer-activation",
+                description="Activation to use in the hidden layers",
             )
-            for i in range(1, max_layers + 1)
         }
         activation_alpha = {
-            f"layer-{i}-activation-alpha": FloatArgument(
+            f"layer-activation-alpha": FloatArgument(
                 default=0.0,
-                name=f"layer-{i}-activation-alpha",
-                description=f"Alpha value for the elu activation of the i-th layer",
+                name=f"layer-activation-alpha",
+                description=f"Alpha value for the elu activation",
             )
-            for i in range(1, max_layers + 1)
         }
         dropouts = {
             f"layer-{i}-dropout": FloatArgument(
@@ -197,18 +210,17 @@ class FullyConnectedModel(AbstractModel):
             for i in range(1, max_layers + 1)
         }
         regularizers = {}
-        for i in range(1, max_layers + 1):
-            for goal in ["kernel", "bias", "activity"]:
-                for type_ in ["l1", "l2"]:
-                    regularizers |= {
-                        f"layer-{i}-{goal}-{type_}": FloatArgument(
-                            default=0.0,
-                            minimum=0.0,
-                            maximum=1.0,
-                            name=f"layer-{i}-{goal}-{type_}",
-                            description=f"{type_} {goal} regularizer for the i-th layer",
-                        )
-                    }
+        for goal in ["kernel", "bias", "activity"]:
+            for type_ in ["l1", "l2"]:
+                regularizers |= {
+                    f"layer-{goal}-{type_}": FloatArgument(
+                        default=0.0,
+                        minimum=0.0,
+                        maximum=1.0,
+                        name=f"layer-{goal}-{type_}",
+                        description=f"{type_} {goal} regularizer for the layers",
+                    )
+                }
         return (
             {
                 "number-of-hidden-layers": num_layers_param,
