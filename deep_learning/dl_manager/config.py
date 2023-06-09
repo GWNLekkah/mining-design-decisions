@@ -1137,6 +1137,8 @@ class ArgumentListParser:
         return validator.validate(value)
 
     def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
+        if isinstance(validator, NestedArgument):
+            return validator.default
         return validator.validate(value)
 
 
