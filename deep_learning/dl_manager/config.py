@@ -1266,5 +1266,5 @@ class HyperArgumentListParser(ArgumentListParser):
     def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
         return self.validate_value(
             validator,
-            {"type": "values", "options": {"values": [validator.validate(value)]}},
+            {"type": "values", "options": {"values": [validator.validate(value, tuning=True)]}},
         )
