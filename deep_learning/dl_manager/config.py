@@ -1264,6 +1264,15 @@ class HyperArgumentListParser(ArgumentListParser):
             )
 
     def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
+        if isinstance(validator, NestedArgument):
+            default = {
+                f'{key}.0': {
+                    k: {'type': 'values', 'options': {'values': [v]}}
+                    for k, v in value.items()
+                }
+                for key, value in value.items()
+            }
+            return validator.validate(default, tuning=True)
         return self.validate_value(
             validator,
             {"type": "values", "options": {"values": [validator.validate(value, tuning=True)]}},
