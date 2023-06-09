@@ -36,18 +36,18 @@ class FullyConnectedModel(AbstractModel):
         for i in range(1, n_layers + 1):
             current = tf.keras.layers.Dense(
                 units=kwargs[f"hidden-layer-{i}-size"],
-                activation=get_activation(f"layer-{i}-activation", **kwargs),
+                activation=get_activation(f"layer-activation", **kwargs),
                 kernel_regularizer=tf.keras.regularizers.L1L2(
-                    l1=kwargs[f"layer-{i}-kernel-l1"],
-                    l2=kwargs[f"layer-{i}-kernel-l2"],
+                    l1=kwargs[f"layer-kernel-l1"],
+                    l2=kwargs[f"layer-kernel-l2"],
                 ),
                 bias_regularizer=tf.keras.regularizers.L1L2(
-                    l1=kwargs[f"layer-{i}-bias-l1"],
-                    l2=kwargs[f"layer-{i}-bias-l2"],
+                    l1=kwargs[f"layer-bias-l1"],
+                    l2=kwargs[f"layer-bias-l2"],
                 ),
                 activity_regularizer=tf.keras.regularizers.L1L2(
-                    l1=kwargs[f"layer-{i}-activity-l1"],
-                    l2=kwargs[f"layer-{i}-activity-l2"],
+                    l1=kwargs[f"layer-activity-l1"],
+                    l2=kwargs[f"layer-activity-l2"],
                 ),
             )(current)
             current = tf.keras.layers.Dropout(kwargs[f"layer-{i}-dropout"])(current)
@@ -187,6 +187,7 @@ class FullyConnectedModel(AbstractModel):
                     "selu",
                     "exp",
                     "prelu",
+                    "swish",
                 ],
                 name=f"layer-activation",
                 description="Activation to use in the hidden layers",

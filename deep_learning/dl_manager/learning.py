@@ -303,9 +303,9 @@ def run_keras_tuner(
             directory=directory,
             project_name=project_name,
             # Hyperband specific settings
-            max_epochs=100,
+            max_epochs=conf.get("run.epochs"),
             factor=3,
-            hyperband_iterations=3,
+            hyperband_iterations=conf.get("run.tuner-hyperband-iterations"),
         )
     print(tuner.search_space_summary())  # TODO: this should be output
     splitter = splitting.SimpleSplitter(

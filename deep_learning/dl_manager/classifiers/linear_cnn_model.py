@@ -40,23 +40,23 @@ class LinearConv1Model(AbstractModel):
         ]
         convolutions = []
         for i, kernel_size in enumerate(convolution_sizes):
-            activation = get_activation(f"layer-{i+1}-activation", **kwargs)
+            activation = get_activation(f"layer-activation", **kwargs)
             convolutions.append(
                 tf.keras.layers.Conv1D(
                     filters=filters,
                     kernel_size=kernel_size,
                     activation=activation,
                     kernel_regularizer=tf.keras.regularizers.L1L2(
-                        l1=kwargs[f"layer-{i+1}-kernel-l1"],
-                        l2=kwargs[f"layer-{i+1}-kernel-l2"],
+                        l1=kwargs[f"layer-kernel-l1"],
+                        l2=kwargs[f"layer-kernel-l2"],
                     ),
                     bias_regularizer=tf.keras.regularizers.L1L2(
-                        l1=kwargs[f"layer-{i+1}-bias-l1"],
-                        l2=kwargs[f"layer-{i+1}-bias-l2"],
+                        l1=kwargs[f"layer-bias-l1"],
+                        l2=kwargs[f"layer-bias-l2"],
                     ),
                     activity_regularizer=tf.keras.regularizers.L1L2(
-                        l1=kwargs[f"layer-{i+1}-activity-l1"],
-                        l2=kwargs[f"layer-{i+1}-activity-l2"],
+                        l1=kwargs[f"layer-activity-l1"],
+                        l2=kwargs[f"layer-activity-l2"],
                     ),
                 )(next_layer)
             )
@@ -248,6 +248,7 @@ class LinearConv1Model(AbstractModel):
                     "selu",
                     "exp",
                     "prelu",
+                    "swish",
                 ],
                 name=f"layer-activation",
                 description="Activation to use in the cnn layers",
@@ -303,6 +304,7 @@ class LinearConv1Model(AbstractModel):
                         "selu",
                         "exp",
                         "prelu",
+                        "swish",
                     ],
                     name="fnn-layer-activation",
                     description="Activation to use in the fully connected layer.",

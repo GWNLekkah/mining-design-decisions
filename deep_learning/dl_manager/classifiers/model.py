@@ -163,6 +163,8 @@ def get_activation(key, **kwargs):
         return tf.keras.layers.ELU(alpha=kwargs[f"{key}-alpha"])
     elif activation == "leakyrelu":
         return tf.keras.layers.LeakyReLU(alpha=kwargs[f"{key}-alpha"])
+    elif activation == "prelu":
+        return tf.keras.layers.PReLU()
     return activation
 
 

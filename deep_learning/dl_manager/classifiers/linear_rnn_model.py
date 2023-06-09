@@ -32,29 +32,29 @@ class LinearRNNModel(AbstractModel):
         for i in range(1, n_rnn_layers + 1):
             layer_type = kwargs[f"rnn-layer-{i}-type"]
             units = kwargs[f"rnn-layer-{i}-size"]
-            activation = get_activation(f"rnn-layer-{i}-activation", **kwargs)
+            activation = get_activation(f"rnn-layer-activation", **kwargs)
             recurrent_activation = get_activation(
-                f"rnn-layer-{i}-recurrent-activation", **kwargs
+                f"rnn-layer-recurrent-activation", **kwargs
             )
             dropout = kwargs[f"rnn-layer-{i}-dropout"]
             recurrent_dropout = kwargs[f"rnn-layer-{i}-recurrent-dropout"]
 
             # Regularization
             kernel_regularizer = tf.keras.regularizers.L1L2(
-                l1=kwargs[f"rnn-layer-{i}-kernel-l1"],
-                l2=kwargs[f"rnn-layer-{i}-kernel-l2"],
+                l1=kwargs[f"rnn-layer-kernel-l1"],
+                l2=kwargs[f"rnn-layer-kernel-l2"],
             )
             recurrent_regularizer = tf.keras.regularizers.L1L2(
-                l1=kwargs[f"rnn-layer-{i}-recurrent-l1"],
-                l2=kwargs[f"rnn-layer-{i}-recurrent-l2"],
+                l1=kwargs[f"rnn-layer-recurrent-l1"],
+                l2=kwargs[f"rnn-layer-recurrent-l2"],
             )
             bias_regularizer = tf.keras.regularizers.L1L2(
-                l1=kwargs[f"rnn-layer-{i}-bias-l1"],
-                l2=kwargs[f"rnn-layer-{i}-bias-l2"],
+                l1=kwargs[f"rnn-layer--bias-l1"],
+                l2=kwargs[f"rnn-layer-bias-l2"],
             )
             activity_regularizer = tf.keras.regularizers.L1L2(
-                l1=kwargs[f"rnn-layer-{i}-activity-l1"],
-                l2=kwargs[f"rnn-layer-{i}-activity-l2"],
+                l1=kwargs[f"rnn-layer-activity-l1"],
+                l2=kwargs[f"rnn-layer-activity-l2"],
             )
 
             return_sequences = True
@@ -313,6 +313,7 @@ class LinearRNNModel(AbstractModel):
                     "selu",
                     "exp",
                     "prelu",
+                    "swish",
                 ],
                 name=f"rnn-layer-activation",
                 description="Activation to use in the rnn layers",
@@ -333,6 +334,7 @@ class LinearRNNModel(AbstractModel):
                     "selu",
                     "exp",
                     "prelu",
+                    "swish",
                 ],
                 name=f"rnn-layer-recurrent-activation",
                 description="Recurrent activation to use in the rnn layers",
