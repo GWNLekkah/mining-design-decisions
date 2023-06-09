@@ -100,7 +100,7 @@ def get_tuner_optimizer(hp, **kwargs):
         raise ValueError(
             f"Mismatch between params and optimizer: {optimizer}, {params}"
         )
-    params = params[optimizer]
+    params = params[optimizer][0]
     learning_rate = get_tuner_learning_rate_scheduler(hp, **kwargs)
     match optimizer:
         case "adam":
@@ -270,9 +270,9 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                         "momentum": FloatArgument(
                             name="momentum",
                             description="Momentum value for the SGD optimizer",
-                            minimum=0,
-                            maximum=1,
-                            default=0,
+                            minimum=0.0,
+                            maximum=1.0,
+                            default=0.0,
                         ),
                         "use-nesterov": BoolArgument(
                             name="use-nesterov",
@@ -412,7 +412,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
             raise ValueError(
                 f"Mismatch between params and optimizer: {optimizer}, {params}"
             )
-        params = params[optimizer]
+        params = params[optimizer][0]
         learning_rate = self.get_learning_rate_scheduler(**kwargs)
         match optimizer:
             case "adam":
