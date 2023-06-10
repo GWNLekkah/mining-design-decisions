@@ -304,7 +304,7 @@ def run_keras_tuner(
             project_name=project_name,
             # Hyperband specific settings
             max_epochs=conf.get("run.epochs"),
-            factor=3,
+            factor=5,
             hyperband_iterations=conf.get("run.tuner-hyperband-iterations"),
         )
     print(tuner.search_space_summary())  # TODO: this should be output

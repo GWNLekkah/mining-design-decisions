@@ -1,0 +1,342 @@
+{
+    "model_name": "BOWFrequency keras-tuner",
+    "model_config": {
+        "perform-tuning": true,
+        "tuner-type": "BayesianOptimization",
+        "tuner-objective": "f_score_tf_macro",
+        "tuner-executions-per-trial": 2,
+        "tuner-max-trials": 50,
+        "classifier": [
+            "FullyConnectedModel"
+        ],
+        "early-stopping-attribute": [
+            "f_score_tf_macro"
+        ],
+        "early-stopping-min-delta": [
+            0.01
+        ],
+        "early-stopping-patience": 20,
+        "epochs": 200,
+        "hyper-params": {
+            "FullyConnectedModel.0": {
+                "optimizer-params": {
+                    "adam.0": {
+                        "beta-1": 0.42
+                    }
+                },
+                "optimizer": "adam"
+            }
+        },
+        "tuner-hyper-params": {
+            "FullyConnectedModel.0": {
+                "batch-size": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            1,
+                            2,
+                            4,
+                            8,
+                            16,
+                            32,
+                            64,
+                            128,
+                            256
+                        ]
+                    }
+                },
+                "number-of-hidden-layers": {
+                    "type": "range",
+                    "options": {
+                        "start": 1,
+                        "stop": 5,
+                        "step": 1
+                    }
+                },
+                "layer-activation": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            "linear",
+                            "relu",
+                            "elu",
+                            "tanh",
+                            "softmax",
+                            "softsign",
+                            "prelu",
+                            "selu",
+                            "swish"
+                        ]
+                    }
+                },
+                "layer-kernel-l1": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                },
+                "layer-kernel-l2": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                },
+                "layer-bias-l1": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                },
+                "layer-bias-l2": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                },
+                "layer-activity-l1": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                },
+                "layer-activity-l2": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                },
+                "hidden-layer-1-size": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+                        ]
+                    }
+                },
+                "layer-1-dropout": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.00000000001,
+                        "stop": 0.5,
+                        "sampling": "log"
+                    }
+                },
+                "optimizer": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            "adam",
+                            "nadam"
+                        ]
+                    }
+                },
+                "learning-rate-start": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.001,
+                        "stop": 0.1,
+                        "sampling": "log"
+                    }
+                },
+                "learning-rate-stop": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.0001,
+                        "stop": 0.01,
+                        "sampling": "log"
+                    }
+                },
+                "learning-rate-steps": {
+                    "type": "range",
+                    "options": {
+                        "start": 1,
+                        "stop": 100000,
+                        "sampling": "log"
+                    }
+                },
+                "learning-rate-power": {
+                    "type": "floats",
+                    "options": {
+                        "start": 1.0,
+                        "stop": 1.0,
+                        "sampling": "linear"
+                    }
+                },
+                "optimizer-params": {
+                    "adam.0": {
+                        "beta-1": {
+                            "type": "floats",
+                            "options": {
+                                "start": 0.001,
+                                "stop": 0.999,
+                                "sampling": "log"
+                            }
+                        },
+                        "beta-2": {
+                            "type": "floats",
+                            "options": {
+                                "start": 0.0001,
+                                "stop": 0.9999,
+                                "sampling": "log"
+                            }
+                        },
+                        "epsilon": {
+                            "type": "floats",
+                            "options": {
+                                "start": 0.0000000001,
+                                "stop": 10000000000.0,
+                                "sampling": "log"
+                            }
+                        }
+                    },
+                    "nadam.0": {
+                        "beta-1": {
+                            "type": "floats",
+                            "options": {
+                                "start": 0.001,
+                                "stop": 0.999,
+                                "sampling": "log"
+                            }
+                        },
+                        "beta-2": {
+                            "type": "floats",
+                            "options": {
+                                "start": 0.0001,
+                                "stop": 0.9999,
+                                "sampling": "log"
+                            }
+                        },
+                        "epsilon": {
+                            "type": "floats",
+                            "options": {
+                                "start": 0.0000000001,
+                                "stop": 10000000000.0,
+                                "sampling": "log"
+                            }
+                        }
+                    }
+                },
+                "loss": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            "crossentropy",
+                            "hinge"
+                        ]
+                    }
+                },
+                "hidden-layer-2-size": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+                        ]
+                    }
+                },
+                "layer-2-dropout": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.0000000001,
+                        "stop": 0.5,
+                        "sampling": "log"
+                    }
+                },
+                "hidden-layer-3-size": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+                        ]
+                    }
+                },
+                "layer-3-dropout": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.0000000001,
+                        "stop": 0.5,
+                        "sampling": "log"
+                    }
+                },
+                "hidden-layer-4-size": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+                        ]
+                    }
+                },
+                "layer-4-dropout": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.0000000001,
+                        "stop": 0.5,
+                        "sampling": "log"
+                    }
+                },
+                "hidden-layer-5-size": {
+                    "type": "values",
+                    "options": {
+                        "values": [
+                            2, 4, 8, 16, 32, 64, 128, 256, 512, 1024, 2048
+                        ]
+                    }
+                },
+                "layer-5-dropout": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.0000000001,
+                        "stop": 0.5,
+                        "sampling": "log"
+                    }
+                },
+                "layer-activation-alpha": {
+                    "type": "floats",
+                    "options": {
+                        "start": 0.0000000001,
+                        "stop": 1.0,
+                        "sampling": "log"
+                    }
+                }
+            }
+        },
+        "input-mode": [
+            "BOWFrequency"
+        ],
+        "max-train": -1,
+        "ontology-classes": "",
+        "output-mode": "Classification3",
+        "params": {
+            "BOWFrequency.0": {
+                "class-limit": -1,
+                "dictionary-id": "648448c2d364b0625efa76e4",
+                "formatting-handling": "markers",
+                "max-len": 40000,
+                "use-lemmatization": true,
+                "use-pos": false,
+                "use-stemming": false
+            }
+        },
+        "seed": 9011,
+        "split-size": 0.1,
+        "store-model": false,
+        "test-with-training-data": true,
+        "training-data-query": {
+            "tags": {
+                "$ne": "random-sample-web-projects"
+            }
+        },
+        "use-early-stopping": true
+    }
+}
