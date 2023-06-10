@@ -8,7 +8,6 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
-    get_non_increasing_next_value,
 )
 from ..model_io import InputEncoding
 
@@ -146,13 +145,7 @@ class LinearRNNModel(AbstractModel):
             previous_size = -1
             for i in range(1, n_rnn_layers + 1):
                 layer_type = get_tuner_values(hp, f"rnn-layer-{i}-type", **kwargs)
-                if previous_size == -1:
-                    units = get_tuner_values(hp, f"rnn-layer-{i}-size", **kwargs)
-                else:
-                    units = get_non_increasing_next_value(
-                        hp, f"rnn-layer-{i}-size", previous_size, **kwargs
-                    )
-                previous_size = units
+                units = get_tuner_values(hp, f"rnn-layer-{i}-size", **kwargs)
                 dropout = get_tuner_values(hp, f"rnn-layer-{i}-dropout", **kwargs)
                 recurrent_dropout = get_tuner_values(
                     hp, f"rnn-layer-{i}-recurrent-dropout", **kwargs

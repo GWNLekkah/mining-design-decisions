@@ -9,7 +9,6 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
-    get_non_increasing_next_value,
 )
 
 
@@ -141,14 +140,8 @@ def tuner_combine_models(models, conf: Config, **params) -> tf.keras.Model:
         hidden = combiner([model.output for model in models])
         n_hidden_layers = get_tuner_values(hp, "number-of-hidden-layers", **params)
         activation = get_tuner_activation(hp, f"layer-activation", **params)
-        previous_size = -1
         for i in range(1, n_hidden_layers + 1):
-            if previous_size == -1:
-                layer_size = get_tuner_values(hp, f"hidden-layer-{i}-size", **params)
-            else:
-                layer_size = get_non_increasing_next_value(
-                    hp, f"hidden-layer-{i}-size", previous_size, **params
-                )
+            layer_size = get_tuner_values(hp, f"hidden-layer-{i}-size", **params)
             hidden = tf.keras.layers.Dense(units=layer_size, activation=activation)(
                 hidden
             )

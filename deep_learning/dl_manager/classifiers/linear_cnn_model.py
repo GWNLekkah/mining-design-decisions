@@ -8,7 +8,6 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
-    get_non_increasing_next_value,
 )
 from ..model_io import InputEncoding
 
@@ -105,18 +104,10 @@ class LinearConv1Model(AbstractModel):
             layer_size = get_tuner_values(hp, "fully-connected-layer-size", **kwargs)
             filters = get_tuner_values(hp, "filters", **kwargs)
             num_convolutions = get_tuner_values(hp, "number-of-convolutions", **kwargs)
-            previous_size = -1
-            convolution_sizes = []
-            for i in range(1, num_convolutions + 1):
-                if previous_size == -1:
-                    size = get_tuner_values(hp, f"kernel-{i}-size", **kwargs)
-                else:
-                    # -1 for strictly decreasing
-                    size = get_non_increasing_next_value(
-                        hp, f"kernel-{i}-size", previous_size - 1, **kwargs
-                    )
-                previous_size = size
-                convolution_sizes.append(size)
+            convolution_sizes = [
+                get_tuner_values(hp, f"kernel-{i}-size", **kwargs)
+                for i in range(1, num_convolutions + 1)
+            ]
             height = self.input_size
             pooling_sizes = [
                 height - convolution_sizes[i - 1]
@@ -167,7 +158,9 @@ class LinearConv1Model(AbstractModel):
             if layer_size > 0:
                 hidden = tf.keras.layers.Dense(
                     units=layer_size,
-                    activation=get_tuner_values(hp, "fnn-layer-activation", **kwargs),
+                    activation=get_tuner_activation(
+                        hp, "fnn-layer-activation", **kwargs
+                    ),
                 )(hidden)
             outputs = self.get_output_layer()(hidden)
             model = tf.keras.Model(inputs=[inputs], outputs=outputs)
@@ -259,7 +252,12 @@ class LinearConv1Model(AbstractModel):
                 default=0.0,
                 name=f"layer-activation-alpha",
                 description=f"Alpha value for the elu activation of the layers",
-            )
+            ),
+            f"fnn-layer-activation-alpha": FloatArgument(
+                default=0.0,
+                name=f"fnn-layer-activation-alpha",
+                description=f"Alpha value for the elu activation of the fnn layer",
+            ),
         }
         regularizers = {}
         for goal in ["kernel", "bias", "activity"]:

@@ -8,7 +8,6 @@ from .model import (
     get_activation,
     get_tuner_activation,
     get_tuner_optimizer,
-    get_non_increasing_next_value,
 )
 from ..model_io import InputEncoding
 
@@ -82,15 +81,8 @@ class FullyConnectedModel(AbstractModel):
             bias_l2 = get_tuner_values(hp, f"layer-bias-l2", **kwargs)
             activity_l1 = get_tuner_values(hp, f"layer-activity-l1", **kwargs)
             activity_l2 = get_tuner_values(hp, f"layer-activity-l2", **kwargs)
-            previous_size = -1
             for i in range(1, n_hidden_layers + 1):
-                if previous_size == -1:
-                    units = get_tuner_values(hp, f"hidden-layer-{i}-size", **kwargs)
-                else:
-                    units = get_non_increasing_next_value(
-                        hp, f"hidden-layer-{i}-size", previous_size, **kwargs
-                    )
-                previous_size = units
+                units = get_tuner_values(hp, f"hidden-layer-{i}-size", **kwargs)
                 current = tf.keras.layers.Dense(
                     units=units,
                     activation=activation,
