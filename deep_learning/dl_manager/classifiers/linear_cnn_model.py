@@ -114,7 +114,8 @@ class LinearConv1Model(AbstractModel):
                 for i in range(1, num_convolutions + 1)
             ]
             convolutions = []
-            activation = get_tuner_activation(hp, f"layer-activation", **kwargs)
+            activation = get_tuner_values(hp, "layer-activation", **kwargs)
+            activation_alpha = get_tuner_values(hp, "layer-activation-alpha", **kwargs)
             kernel_l1 = get_tuner_values(hp, f"layer-kernel-l1", **kwargs)
             kernel_l2 = get_tuner_values(hp, f"layer-kernel-l2", **kwargs)
             bias_l1 = get_tuner_values(hp, f"layer-bias-l1", **kwargs)
@@ -126,7 +127,7 @@ class LinearConv1Model(AbstractModel):
                     tf.keras.layers.Conv1D(
                         filters=filters,
                         kernel_size=kernel_size,
-                        activation=activation,
+                        activation=get_tuner_activation(activation, activation_alpha),
                         kernel_regularizer=tf.keras.regularizers.L1L2(
                             l1=kernel_l1,
                             l2=kernel_l2,
@@ -156,11 +157,13 @@ class LinearConv1Model(AbstractModel):
                 concatenated = tf.keras.layers.concatenate(pooling_layers, axis=1)
             hidden = tf.keras.layers.Flatten()(concatenated)
             if layer_size > 0:
+                activation = get_tuner_values(hp, "fnn-layer-activation", **kwargs)
+                activation_alpha = get_tuner_values(
+                    hp, "fnn-layer-activation-alpha", **kwargs
+                )
                 hidden = tf.keras.layers.Dense(
                     units=layer_size,
-                    activation=get_tuner_activation(
-                        hp, "fnn-layer-activation", **kwargs
-                    ),
+                    activation=get_tuner_activation(activation, activation_alpha),
                 )(hidden)
             outputs = self.get_output_layer()(hidden)
             model = tf.keras.Model(inputs=[inputs], outputs=outputs)

@@ -59,14 +59,11 @@ def get_tuner_values(hp, arg, **kwargs):
         )
 
 
-def get_tuner_activation(hp, key, **kwargs):
-    activation = get_tuner_values(hp, key, **kwargs)
+def get_tuner_activation(activation, activation_alpha):
     if activation == "elu":
-        return tf.keras.layers.ELU(alpha=get_tuner_values(hp, f"{key}-alpha", **kwargs))
+        return tf.keras.layers.ELU(alpha=activation_alpha)
     elif activation == "leakyrelu":
-        return tf.keras.layers.LeakyReLU(
-            alpha=get_tuner_values(hp, f"{key}-alpha", **kwargs)
-        )
+        return tf.keras.layers.LeakyReLU(alpha=activation_alpha)
     elif activation == "prelu":
         return tf.keras.layers.PReLU()
     return activation

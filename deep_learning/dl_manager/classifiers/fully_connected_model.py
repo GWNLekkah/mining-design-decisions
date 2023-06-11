@@ -74,7 +74,8 @@ class FullyConnectedModel(AbstractModel):
             else:
                 current = next_layer
             n_hidden_layers = get_tuner_values(hp, "number-of-hidden-layers", **kwargs)
-            activation = get_tuner_activation(hp, f"layer-activation", **kwargs)
+            activation = get_tuner_values(hp, "layer-activation", **kwargs)
+            activation_alpha = get_tuner_values(hp, "layer-activation-alpha", **kwargs)
             kernel_l1 = get_tuner_values(hp, f"layer-kernel-l1", **kwargs)
             kernel_l2 = get_tuner_values(hp, f"layer-kernel-l2", **kwargs)
             bias_l1 = get_tuner_values(hp, f"layer-bias-l1", **kwargs)
@@ -85,7 +86,7 @@ class FullyConnectedModel(AbstractModel):
                 units = get_tuner_values(hp, f"hidden-layer-{i}-size", **kwargs)
                 current = tf.keras.layers.Dense(
                     units=units,
-                    activation=activation,
+                    activation=get_tuner_activation(activation, activation_alpha),
                     kernel_regularizer=tf.keras.regularizers.L1L2(
                         l1=kernel_l1,
                         l2=kernel_l2,

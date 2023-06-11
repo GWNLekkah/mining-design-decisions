@@ -139,12 +139,14 @@ def tuner_combine_models(models, conf: Config, **params) -> tf.keras.Model:
 
         hidden = combiner([model.output for model in models])
         n_hidden_layers = get_tuner_values(hp, "number-of-hidden-layers", **params)
-        activation = get_tuner_activation(hp, f"layer-activation", **params)
+        activation = get_tuner_values(hp, "layer-activation", **params)
+        activation_alpha = get_tuner_values(hp, "layer-activation-alpha", **params)
         for i in range(1, n_hidden_layers + 1):
             layer_size = get_tuner_values(hp, f"hidden-layer-{i}-size", **params)
-            hidden = tf.keras.layers.Dense(units=layer_size, activation=activation)(
-                hidden
-            )
+            hidden = tf.keras.layers.Dense(
+                units=layer_size,
+                activation=get_tuner_activation(activation, activation_alpha),
+            )(hidden)
 
         outputs = model_builder.get_output_layer()(hidden)
 

@@ -130,9 +130,15 @@ class LinearRNNModel(AbstractModel):
                 ][0],
             )
             n_rnn_layers = get_tuner_values(hp, "number-of-rnn-layers", **kwargs)
-            activation = get_tuner_activation(hp, f"rnn-layer-activation", **kwargs)
-            recurrent_activation = get_tuner_activation(
-                hp, f"rnn-layer-recurrent-activation", **kwargs
+            activation = get_tuner_values(hp, "rnn-layer-activation", **kwargs)
+            activation_alpha = get_tuner_values(
+                hp, "rnn-layer-activation-alpha", **kwargs
+            )
+            recurrent_activation = get_tuner_values(
+                hp, "rnn-layer-recurrent-activation", **kwargs
+            )
+            recurrent_activation_alpha = get_tuner_values(
+                hp, "rnn-layer-recurrent-activation-alpha", **kwargs
             )
             kernel_l1 = get_tuner_values(hp, f"rnn-layer-kernel-l1", **kwargs)
             kernel_l2 = get_tuner_values(hp, f"rnn-layer-kernel-l2", **kwargs)
@@ -142,7 +148,6 @@ class LinearRNNModel(AbstractModel):
             bias_l2 = get_tuner_values(hp, f"rnn-layer-bias-l2", **kwargs)
             activity_l1 = get_tuner_values(hp, f"rnn-layer-activity-l1", **kwargs)
             activity_l2 = get_tuner_values(hp, f"rnn-layer-activity-l2", **kwargs)
-            previous_size = -1
             for i in range(1, n_rnn_layers + 1):
                 layer_type = get_tuner_values(hp, f"rnn-layer-{i}-type", **kwargs)
                 units = get_tuner_values(hp, f"rnn-layer-{i}-size", **kwargs)
@@ -175,7 +180,9 @@ class LinearRNNModel(AbstractModel):
                     current = tf.keras.layers.Bidirectional(
                         tf.keras.layers.SimpleRNN(
                             units=units,
-                            activation=activation,
+                            activation=get_tuner_activation(
+                                activation, activation_alpha
+                            ),
                             recurrent_activation=recurrent_activation,
                             return_sequences=return_sequences,
                             dropout=dropout,
@@ -190,7 +197,9 @@ class LinearRNNModel(AbstractModel):
                     current = tf.keras.layers.Bidirectional(
                         tf.keras.layers.GRU(
                             units=units,
-                            activation=activation,
+                            activation=get_tuner_activation(
+                                activation, activation_alpha
+                            ),
                             recurrent_activation=recurrent_activation,
                             return_sequences=return_sequences,
                             dropout=dropout,
@@ -205,7 +214,9 @@ class LinearRNNModel(AbstractModel):
                     current = tf.keras.layers.Bidirectional(
                         tf.keras.layers.LSTM(
                             units=units,
-                            activation=activation,
+                            activation=get_tuner_activation(
+                                activation, activation_alpha
+                            ),
                             recurrent_activation=recurrent_activation,
                             return_sequences=return_sequences,
                             dropout=dropout,
