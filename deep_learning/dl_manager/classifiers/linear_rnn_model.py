@@ -395,7 +395,12 @@ class LinearRNNModel(AbstractModel):
                 default=0.0,
                 name=f"rnn-layer-activation-alpha",
                 description=f"Alpha value for the elu activation of the i-th layer",
-            )
+            ),
+            f"rnn-layer-recurrent-activation-alpha": FloatArgument(
+                default=0.0,
+                name=f"rnn-layer-recurrent-activation-alpha",
+                description=f"Alpha value for the elu activation of the i-th layer",
+            ),
         }
         regularizers = {}
         for goal in ["kernel", "recurrent", "bias", "activity"]:
