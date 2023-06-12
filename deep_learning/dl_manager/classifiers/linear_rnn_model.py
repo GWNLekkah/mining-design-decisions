@@ -183,7 +183,9 @@ class LinearRNNModel(AbstractModel):
                             activation=get_tuner_activation(
                                 activation, activation_alpha
                             ),
-                            recurrent_activation=recurrent_activation,
+                            recurrent_activation=get_tuner_activation(
+                                recurrent_activation, recurrent_activation_alpha
+                            ),
                             return_sequences=return_sequences,
                             dropout=dropout,
                             recurrent_dropout=recurrent_dropout,
@@ -200,7 +202,9 @@ class LinearRNNModel(AbstractModel):
                             activation=get_tuner_activation(
                                 activation, activation_alpha
                             ),
-                            recurrent_activation=recurrent_activation,
+                            recurrent_activation=get_tuner_activation(
+                                recurrent_activation, recurrent_activation_alpha
+                            ),
                             return_sequences=return_sequences,
                             dropout=dropout,
                             recurrent_dropout=recurrent_dropout,
@@ -217,7 +221,9 @@ class LinearRNNModel(AbstractModel):
                             activation=get_tuner_activation(
                                 activation, activation_alpha
                             ),
-                            recurrent_activation=recurrent_activation,
+                            recurrent_activation=get_tuner_activation(
+                                recurrent_activation, recurrent_activation_alpha
+                            ),
                             return_sequences=return_sequences,
                             dropout=dropout,
                             recurrent_dropout=recurrent_dropout,
