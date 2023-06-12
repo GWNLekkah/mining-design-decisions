@@ -48,7 +48,7 @@ class LinearRNNModel(AbstractModel):
                 l2=kwargs[f"rnn-layer-recurrent-l2"],
             )
             bias_regularizer = tf.keras.regularizers.L1L2(
-                l1=kwargs[f"rnn-layer--bias-l1"],
+                l1=kwargs[f"rnn-layer-bias-l1"],
                 l2=kwargs[f"rnn-layer-bias-l2"],
             )
             activity_regularizer = tf.keras.regularizers.L1L2(
