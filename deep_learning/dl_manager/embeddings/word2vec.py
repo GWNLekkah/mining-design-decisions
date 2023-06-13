@@ -2,7 +2,7 @@ import pathlib
 
 from gensim.models import Word2Vec as GensimWord2Vec
 
-from ..config import Argument, IntArgument
+from ..config import Argument, IntArgument, EnumArgument
 from .embedding_generator import AbstractEmbeddingGenerator
 
 
@@ -12,7 +12,10 @@ class Word2VecGenerator(AbstractEmbeddingGenerator):
     def generate_embedding(self, issues: list[str], path: pathlib.Path):
         min_count = self.params['min-count']
         vector_size = self.params['vector-length']
-        model = GensimWord2Vec(issues, min_count=min_count, vector_size=vector_size)
+        model = GensimWord2Vec(issues,
+                               min_count=min_count,
+                               vector_size=vector_size,
+                               sg=self.params['algorithm'] == 'skip-gram')
         model.wv.save_word2vec_format(path, binary=True)
 
     @staticmethod
@@ -29,5 +32,11 @@ class Word2VecGenerator(AbstractEmbeddingGenerator):
                 description='Minimum amount of occurrences for a word to be included',
                 minimum=0,
                 maximum=10000
+            ),
+            'algorithm': EnumArgument(
+                name='algorithm',
+                description='Word2Vec algorithm to use',
+                default='skip-gram',
+                options=['cbow', 'skip-gram']
             )
         }

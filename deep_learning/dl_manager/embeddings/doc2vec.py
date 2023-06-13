@@ -3,7 +3,7 @@ import pathlib
 from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 from gensim.models.doc2vec import TaggedDocument
 
-from ..config import Argument, IntArgument
+from ..config import Argument, IntArgument, EnumArgument
 from .embedding_generator import AbstractEmbeddingGenerator
 
 
@@ -15,7 +15,10 @@ class Doc2VecGenerator(AbstractEmbeddingGenerator):
             documents.append(TaggedDocument(doc, [idx]))
         min_count = self.params['min-count']
         vector_size = self.params['vector-length']
-        doc2vec_model = GensimDoc2Vec(documents, min_count=min_count, vector_size=vector_size)
+        doc2vec_model = GensimDoc2Vec(documents,
+                                      min_count=min_count,
+                                      vector_size=vector_size,
+                                      dm=self.params['algorithm'] == 'PV-DM')
         doc2vec_model.save(str(path))
 
     @staticmethod
@@ -32,5 +35,11 @@ class Doc2VecGenerator(AbstractEmbeddingGenerator):
                 description='Minimum amount of occurrences for a word to be included in the analysis',
                 minimum=0,
                 maximum=10000
+            ),
+            'algorithm': EnumArgument(
+                name='algorithm',
+                description='Doc2Vec algorithm to use',
+                default='PV-DM',
+                options=['PV-DM', 'PV-DBOW']
             )
         }
