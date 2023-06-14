@@ -125,7 +125,7 @@ def get_tuner_optimizer(hp, **kwargs):
                 weight_decay=get_tuner_values(hp, "weight-decay", **params),
             )
         case "adamw":
-            return tf.keras.optimizers.AdamW(
+            return tf.keras.optimizers.experimental.AdamW(
                 learning_rate=learning_rate,
                 beta_1=1 - get_tuner_values(hp, "beta-1", **params),
                 beta_2=1 - get_tuner_values(hp, "beta-2", **params),
@@ -481,7 +481,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                     weight_decay=params["weight-decay"],
                 )
             case "adamw":
-                return tf.keras.optimizers.AdamW(
+                return tf.keras.optimizers.experimental.AdamW(
                     learning_rate=learning_rate,
                     beta_1=params["beta-1"],
                     beta_2=params["beta-2"],

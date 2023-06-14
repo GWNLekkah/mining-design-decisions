@@ -57,10 +57,10 @@ class LinearConv1Model(AbstractModel):
                     l2=kwargs[f"layer-activity-l2"],
                 ),
             )(next_layer)
-            if kwargs[f"layer-{i}-batch-normalization"]:
+            if kwargs[f"layer-batch-normalization"]:
                 layer = tf.keras.layers.BatchNormalization(
-                    momentum=kwargs[f"layer-{i}-batch-normalization-momentum"],
-                    epsilon=kwargs[f"layer-{i}-batch-normalization-epsilon"],
+                    momentum=kwargs[f"layer-{i+1}-batch-normalization-momentum"],
+                    epsilon=kwargs[f"layer-{i+1}-batch-normalization-epsilon"],
                 )(layer)
             convolutions.append(layer)
         pooling_layers = [
@@ -127,6 +127,9 @@ class LinearConv1Model(AbstractModel):
             bias_l2 = get_tuner_values(hp, f"layer-bias-l2", **kwargs)
             activity_l1 = get_tuner_values(hp, f"layer-activity-l1", **kwargs)
             activity_l2 = get_tuner_values(hp, f"layer-activity-l2", **kwargs)
+            batch_normalization = get_tuner_values(
+                hp, f"layer-batch-normalization", **kwargs
+            )
             for i, kernel_size in enumerate(convolution_sizes):
                 layer = tf.keras.layers.Conv1D(
                     filters=filters,
@@ -145,13 +148,13 @@ class LinearConv1Model(AbstractModel):
                         l2=activity_l2,
                     ),
                 )(next_layer)
-                if get_tuner_values(hp, f"layer-{i}-batch-normalization", **kwargs):
+                if batch_normalization:
                     layer = tf.keras.layers.BatchNormalization(
                         momentum=get_tuner_values(
-                            hp, f"layer-{i}-batch-normalization-momentum", **kwargs
+                            hp, f"layer-{i+1}-batch-normalization-momentum", **kwargs
                         ),
                         epsilon=get_tuner_values(
-                            hp, f"layer-{i}-batch-normalization-epsilon", **kwargs
+                            hp, f"layer-{i+1}-batch-normalization-epsilon", **kwargs
                         ),
                     )(layer)
                 convolutions.append(layer)
@@ -298,12 +301,11 @@ class LinearConv1Model(AbstractModel):
                 }
         batch_normalization = (
             {
-                f"layer-{i}-batch-normalization": BoolArgument(
+                f"layer-batch-normalization": BoolArgument(
                     default=False,
-                    name=f"layer-{i}-batch-normalization",
-                    description="Use batch normalization for the i-th layer",
+                    name=f"layer-batch-normalization",
+                    description="Use batch normalization for the CNN layers",
                 )
-                for i in range(1, max_convolutions + 1)
             }
             | {
                 f"layer-{i}-batch-normalization-momentum": FloatArgument(
@@ -389,5 +391,6 @@ class LinearConv1Model(AbstractModel):
             | activations
             | activation_alpha
             | regularizers
+            | batch_normalization
             | super().get_arguments()
         )
