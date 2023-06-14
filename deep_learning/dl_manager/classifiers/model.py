@@ -268,7 +268,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                         "weight-decay": FloatArgument(
                             name="weight-decay",
                             description="Weight decay",
-                            default=None,
+                            default=0.0,
                         ),
                     },
                     "nadam": {
@@ -290,7 +290,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                         "weight-decay": FloatArgument(
                             name="weight-decay",
                             description="Weight decay",
-                            default=None,
+                            default=0.0,
                         ),
                     },
                     "adamw": {
@@ -312,7 +312,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                         "weight-decay": FloatArgument(
                             name="weight-decay",
                             description="Weight decay",
-                            default=None,
+                            default=0.0,
                         ),
                     },
                     "sgd": {
