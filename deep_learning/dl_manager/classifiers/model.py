@@ -114,6 +114,7 @@ def get_tuner_optimizer(hp, **kwargs):
                 beta_1=1 - get_tuner_values(hp, "beta-1", **params),
                 beta_2=1 - get_tuner_values(hp, "beta-2", **params),
                 epsilon=get_tuner_values(hp, "epsilon", **params),
+                weight_decay=get_tuner_values(hp, "weight-decay", **params),
             )
         case "nadam":
             return tf.keras.optimizers.Nadam(
@@ -121,6 +122,15 @@ def get_tuner_optimizer(hp, **kwargs):
                 beta_1=1 - get_tuner_values(hp, "beta-1", **params),
                 beta_2=1 - get_tuner_values(hp, "beta-2", **params),
                 epsilon=get_tuner_values(hp, "epsilon", **params),
+                weight_decay=get_tuner_values(hp, "weight-decay", **params),
+            )
+        case "adamw":
+            return tf.keras.optimizers.AdamW(
+                learning_rate=learning_rate,
+                beta_1=1 - get_tuner_values(hp, "beta-1", **params),
+                beta_2=1 - get_tuner_values(hp, "beta-2", **params),
+                epsilon=get_tuner_values(hp, "epsilon", **params),
+                weight_decay=get_tuner_values(hp, "weight-decay", **params),
             )
         case "sgd":
             return tf.keras.optimizers.SGD(
@@ -255,6 +265,11 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                             description="Epsilon value for the Adam optimizer",
                             default=1e-07,
                         ),
+                        "weight-decay": FloatArgument(
+                            name="weight-decay",
+                            description="Weight decay",
+                            default=None,
+                        ),
                     },
                     "nadam": {
                         "beta-1": FloatArgument(
@@ -271,6 +286,33 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                             name="epsilon",
                             description="Epsilon value for the Nadam optimizer",
                             default=1e-07,
+                        ),
+                        "weight-decay": FloatArgument(
+                            name="weight-decay",
+                            description="Weight decay",
+                            default=None,
+                        ),
+                    },
+                    "adamw": {
+                        "beta-1": FloatArgument(
+                            name="beta-1",
+                            description="Beta-1 value for the Nadam optimizer",
+                            default=0.9,
+                        ),
+                        "beta-2": FloatArgument(
+                            name="beta-2",
+                            description="Beta-2 value for the Nadam optimizer",
+                            default=0.999,
+                        ),
+                        "epsilon": FloatArgument(
+                            name="epsilon",
+                            description="Epsilon value for the Nadam optimizer",
+                            default=1e-07,
+                        ),
+                        "weight-decay": FloatArgument(
+                            name="weight-decay",
+                            description="Weight decay",
+                            default=None,
                         ),
                     },
                     "sgd": {
@@ -428,6 +470,7 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                     beta_1=params["beta-1"],
                     beta_2=params["beta-2"],
                     epsilon=params["epsilon"],
+                    weight_decay=params["weight-decay"],
                 )
             case "nadam":
                 return tf.keras.optimizers.Nadam(
@@ -435,6 +478,15 @@ class AbstractModel(abc.ABC, ArgumentConsumer):
                     beta_1=params["beta-1"],
                     beta_2=params["beta-2"],
                     epsilon=params["epsilon"],
+                    weight_decay=params["weight-decay"],
+                )
+            case "adamw":
+                return tf.keras.optimizers.AdamW(
+                    learning_rate=learning_rate,
+                    beta_1=params["beta-1"],
+                    beta_2=params["beta-2"],
+                    epsilon=params["epsilon"],
+                    weight_decay=params["weight-decay"],
                 )
             case "sgd":
                 return tf.keras.optimizers.SGD(
