@@ -111,24 +111,24 @@ def get_tuner_optimizer(hp, **kwargs):
         case "adam":
             return tf.keras.optimizers.Adam(
                 learning_rate=learning_rate,
-                beta_1=1 - get_tuner_values(hp, "beta-1", **params),
-                beta_2=1 - get_tuner_values(hp, "beta-2", **params),
+                beta_1=get_tuner_values(hp, "beta-1", **params),
+                beta_2=get_tuner_values(hp, "beta-2", **params),
                 epsilon=get_tuner_values(hp, "epsilon", **params),
                 weight_decay=get_tuner_values(hp, "weight-decay", **params),
             )
         case "nadam":
             return tf.keras.optimizers.Nadam(
                 learning_rate=learning_rate,
-                beta_1=1 - get_tuner_values(hp, "beta-1", **params),
-                beta_2=1 - get_tuner_values(hp, "beta-2", **params),
+                beta_1=get_tuner_values(hp, "beta-1", **params),
+                beta_2=get_tuner_values(hp, "beta-2", **params),
                 epsilon=get_tuner_values(hp, "epsilon", **params),
                 weight_decay=get_tuner_values(hp, "weight-decay", **params),
             )
         case "adamw":
             return tf.keras.optimizers.experimental.AdamW(
                 learning_rate=learning_rate,
-                beta_1=1 - get_tuner_values(hp, "beta-1", **params),
-                beta_2=1 - get_tuner_values(hp, "beta-2", **params),
+                beta_1=get_tuner_values(hp, "beta-1", **params),
+                beta_2=get_tuner_values(hp, "beta-2", **params),
                 epsilon=get_tuner_values(hp, "epsilon", **params),
                 weight_decay=get_tuner_values(hp, "weight-decay", **params),
             )
