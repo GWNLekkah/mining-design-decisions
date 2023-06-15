@@ -6,6 +6,7 @@ from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
 from ..config import Argument, IntArgument, StringArgument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
+from ..embeddings.util import load_embedding
 from ..model_io import InputEncoding
 
 
@@ -32,13 +33,7 @@ class Doc2Vec(AbstractFeatureGenerator):
 
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
             embedding = db.get_embedding_by_id(self.params['embedding-id'])
-            filename = os.path.join(
-                self.conf.get('system.os.scratch-directory'),
-                self.params['embedding-id'] + '.bin'
-            )
-            if os.path.exists(filename):
-                os.remove(filename)
-            embedding.download_binary(filename)
+            filename = load_embedding(embedding, db, self.conf)
 
             model = GensimDoc2Vec.load(filename)
 

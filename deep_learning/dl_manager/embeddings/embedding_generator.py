@@ -2,6 +2,7 @@ import abc
 import itertools
 import os.path
 import pathlib
+import shutil
 
 import nltk
 
@@ -17,7 +18,9 @@ from ..logger import get_logger
 log = get_logger('Embedding Generator')
 
 
-TEMP_EMBEDDING_PATH = pathlib.Path('embedding_binary.bin')
+TEMP_EMBEDDING_DIR = pathlib.Path('embedding-generation')
+TEMP_EMBEDDING_PATH = TEMP_EMBEDDING_DIR / 'embedding_binary.bin'
+TEMP_EMBEDDING_ZIP = pathlib.Path('embedding-zip.zip')
 
 
 POS_CONVERSION = {
@@ -143,10 +146,19 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         )
         self.generate_embedding(documents, pathlib.Path(embedding_path))
 
+        # Create a zip file
+        shutil.make_archive(
+            os.path.join(conf.get('system.os.scratch-directory'), TEMP_EMBEDDING_ZIP),
+            'zip',
+            os.path.join(conf.get('system.os.scratch-directory'), TEMP_EMBEDDING_DIR)
+        )
+
         # Upload binary file
         embedding_id = conf.get('generate-embedding-internal.embedding-id')
         embedding = db.get_embedding_by_id(embedding_id)
-        embedding.upload_binary(embedding_path)
+        embedding.upload_binary(
+            os.path.join(conf.get('system.os.scratch-directory'), TEMP_EMBEDDING_ZIP)
+        )
 
 
     @abc.abstractmethod

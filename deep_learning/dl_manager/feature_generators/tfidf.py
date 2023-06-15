@@ -6,6 +6,7 @@ import issue_db_api
 
 from ..config import Argument, StringArgument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
+from ..embeddings.util import load_embedding
 from ..model_io import InputEncoding
 
 
@@ -22,13 +23,7 @@ class TfidfGenerator(AbstractFeatureGenerator):
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
             embedding = db.get_embedding_by_id(self.params['dictionary-id'])
-            filename = os.path.join(
-                self.conf.get('system.os.scratch-directory'),
-                self.params['dictionary-id'] + '.bin'
-            )
-            if os.path.exists(filename):
-                os.remove(filename)
-            embedding.download_binary(filename)
+            filename = load_embedding(embedding, db, self.conf)
 
             with open(filename) as file:
                 tfidf_data = json.load(file)
