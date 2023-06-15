@@ -144,6 +144,12 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             conf.get('system.os.scratch-directory'),
             TEMP_EMBEDDING_PATH
         )
+        directory = os.path.join(
+            conf.get('system.os.scratch-directory'),
+            TEMP_EMBEDDING_DIR
+        )
+        if not os.path.exists(directory):
+            os.makedirs(directory, exist_ok=True)
         self.generate_embedding(documents, pathlib.Path(embedding_path))
 
         # Create a zip file

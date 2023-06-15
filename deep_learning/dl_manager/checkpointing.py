@@ -7,9 +7,9 @@ class CheckpointManager:
     def __init__(self, filename: str):
         with open(filename) as file:
             payload = file.read()
-        ident = hashlib.sha256(payload).hexdigest()
+        ident = hashlib.sha256(payload.encode()).hexdigest()
         self._file = f'checkpoint_{ident}.json'
-        self._script = json.load(file)
+        self._script = json.loads(payload)
         if not os.path.exists(self._file):
             with open(self._file, 'w') as file:
                 json.dump({'checkpoint': 0}, file)
