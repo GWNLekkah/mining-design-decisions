@@ -151,8 +151,10 @@ def get_tuner_optimizer(hp, **kwargs):
 def get_activation(key, **kwargs):
     activation = kwargs[key]
     if activation == "elu":
+        raise NotImplementedError('alpha for ELU not implemented')
         return tf.keras.layers.ELU(alpha=kwargs[f"{key}-alpha"])
     elif activation == "leakyrelu":
+        raise NotImplementedError('alpha for LeakyReLU not implemented')
         return tf.keras.layers.LeakyReLU(alpha=kwargs[f"{key}-alpha"])
     elif activation == "prelu":
         return tf.keras.layers.PReLU()
