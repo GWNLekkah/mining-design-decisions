@@ -46,12 +46,12 @@ from . import prediction
 ##############################################################################
 
 
-def main(port, keyfile, certfile, script):
+def main(port, keyfile, certfile, script, invalidate_checkpoints):
     app = build_app()
     if not script:
         app.deploy(port, keyfile, certfile)
     else:
-        app.execute_script(script)
+        app.execute_script(script, invalidate_checkpoints=invalidate_checkpoints)
 
 
 def get_arg_spec():

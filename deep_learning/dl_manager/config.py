@@ -31,6 +31,7 @@ import uvicorn
 
 from . import db_util
 from . import logger
+from . import checkpointing
 
 log = logger.get_logger("App Builder")
 
@@ -313,14 +314,15 @@ class WebApp:
             ssl_certfile=certfile,
         )
 
-    def execute_script(self, filename):
-        with open(filename) as file:
-            script = json.load(file)
-        token = script["auth"]["token"]
-        for command in script["script"]:
+    def execute_script(self, filename, *, invalidate_checkpoints):
+        manager = checkpointing.CheckpointManager(filename)
+        if invalidate_checkpoints:
+            manager.invalidate()
+        token = manager.get_auth()["token"]
+        for command in manager.commands():
             # Refresh the token
             response = requests.post(
-                url=script["auth"]["token-endpoint"],
+                url=manager.get_auth()["token-endpoint"],
                 headers={"Authorization": "Bearer " + token},
             )
             response.raise_for_status()
