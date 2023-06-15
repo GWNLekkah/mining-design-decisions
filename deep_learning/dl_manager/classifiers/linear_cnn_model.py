@@ -1,7 +1,7 @@
 import tensorflow as tf
 import keras_tuner
 
-from ..config import Argument, IntArgument, EnumArgument, FloatArgument
+from ..config import Argument, IntArgument, EnumArgument, FloatArgument, BoolArgument
 from .model import (
     AbstractModel,
     get_tuner_values,
@@ -40,29 +40,29 @@ class LinearConv1Model(AbstractModel):
         convolutions = []
         for i, kernel_size in enumerate(convolution_sizes):
             activation = get_activation(f"layer-activation", **kwargs)
-            convolutions.append(
-                tf.keras.layers.Conv1D(
-                    filters=filters,
-                    kernel_size=kernel_size,
-                    activation=activation,
-                    kernel_regularizer=tf.keras.regularizers.L1L2(
-                        l1=kwargs[f"layer-kernel-l1"],
-                        l2=kwargs[f"layer-kernel-l2"],
-                    ),
-                    bias_regularizer=tf.keras.regularizers.L1L2(
-                        l1=kwargs[f"layer-bias-l1"],
-                        l2=kwargs[f"layer-bias-l2"],
-                    ),
-                    activity_regularizer=tf.keras.regularizers.L1L2(
-                        l1=kwargs[f"layer-activity-l1"],
-                        l2=kwargs[f"layer-activity-l2"],
-                    ),
-                )(next_layer)
-            )
-        convolutions = [
-            tf.keras.layers.Conv1D(filters=filters, kernel_size=kernel_size)(next_layer)
-            for kernel_size in convolution_sizes
-        ]
+            layer = tf.keras.layers.Conv1D(
+                filters=filters,
+                kernel_size=kernel_size,
+                activation=activation,
+                kernel_regularizer=tf.keras.regularizers.L1L2(
+                    l1=kwargs[f"layer-kernel-l1"],
+                    l2=kwargs[f"layer-kernel-l2"],
+                ),
+                bias_regularizer=tf.keras.regularizers.L1L2(
+                    l1=kwargs[f"layer-bias-l1"],
+                    l2=kwargs[f"layer-bias-l2"],
+                ),
+                activity_regularizer=tf.keras.regularizers.L1L2(
+                    l1=kwargs[f"layer-activity-l1"],
+                    l2=kwargs[f"layer-activity-l2"],
+                ),
+            )(next_layer)
+            if kwargs[f"layer-batch-normalization"]:
+                layer = tf.keras.layers.BatchNormalization(
+                    momentum=kwargs[f"layer-{i+1}-batch-normalization-momentum"],
+                    epsilon=kwargs[f"layer-{i+1}-batch-normalization-epsilon"],
+                )(layer)
+            convolutions.append(layer)
         pooling_layers = [
             tf.keras.layers.MaxPooling1D(pool_size=p_size)(hidden)
             for hidden, p_size in zip(convolutions, pooling_sizes)
@@ -81,6 +81,11 @@ class LinearConv1Model(AbstractModel):
             hidden = tf.keras.layers.Dense(
                 layer_size, activation=get_activation("fnn-layer-activation", **kwargs)
             )(hidden)
+            if kwargs[f"fnn-layer-batch-normalization"]:
+                hidden = tf.keras.layers.BatchNormalization(
+                    momentum=kwargs[f"fnn-layer-batch-normalization-momentum"],
+                    epsilon=kwargs[f"fnn-layer-batch-normalization-epsilon"],
+                )(hidden)
         outputs = self.get_output_layer()(hidden)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -122,26 +127,37 @@ class LinearConv1Model(AbstractModel):
             bias_l2 = get_tuner_values(hp, f"layer-bias-l2", **kwargs)
             activity_l1 = get_tuner_values(hp, f"layer-activity-l1", **kwargs)
             activity_l2 = get_tuner_values(hp, f"layer-activity-l2", **kwargs)
+            batch_normalization = get_tuner_values(
+                hp, f"layer-batch-normalization", **kwargs
+            )
             for i, kernel_size in enumerate(convolution_sizes):
-                convolutions.append(
-                    tf.keras.layers.Conv1D(
-                        filters=filters,
-                        kernel_size=kernel_size,
-                        activation=get_tuner_activation(activation, activation_alpha),
-                        kernel_regularizer=tf.keras.regularizers.L1L2(
-                            l1=kernel_l1,
-                            l2=kernel_l2,
+                layer = tf.keras.layers.Conv1D(
+                    filters=filters,
+                    kernel_size=kernel_size,
+                    activation=get_tuner_activation(activation, activation_alpha),
+                    kernel_regularizer=tf.keras.regularizers.L1L2(
+                        l1=kernel_l1,
+                        l2=kernel_l2,
+                    ),
+                    bias_regularizer=tf.keras.regularizers.L1L2(
+                        l1=bias_l1,
+                        l2=bias_l2,
+                    ),
+                    activity_regularizer=tf.keras.regularizers.L1L2(
+                        l1=activity_l1,
+                        l2=activity_l2,
+                    ),
+                )(next_layer)
+                if batch_normalization:
+                    layer = tf.keras.layers.BatchNormalization(
+                        momentum=get_tuner_values(
+                            hp, f"layer-{i+1}-batch-normalization-momentum", **kwargs
                         ),
-                        bias_regularizer=tf.keras.regularizers.L1L2(
-                            l1=bias_l1,
-                            l2=bias_l2,
+                        epsilon=get_tuner_values(
+                            hp, f"layer-{i+1}-batch-normalization-epsilon", **kwargs
                         ),
-                        activity_regularizer=tf.keras.regularizers.L1L2(
-                            l1=activity_l1,
-                            l2=activity_l2,
-                        ),
-                    )(next_layer)
-                )
+                    )(layer)
+                convolutions.append(layer)
             pooling_layers = [
                 tf.keras.layers.MaxPooling1D(pool_size=p_size)(hidden)
                 for hidden, p_size in zip(convolutions, pooling_sizes)
@@ -165,6 +181,15 @@ class LinearConv1Model(AbstractModel):
                     units=layer_size,
                     activation=get_tuner_activation(activation, activation_alpha),
                 )(hidden)
+                if get_tuner_values(hp, f"fnn-layer-batch-normalization", **kwargs):
+                    hidden = tf.keras.layers.BatchNormalization(
+                        momentum=get_tuner_values(
+                            hp, f"fnn-layer-batch-normalization-momentum", **kwargs
+                        ),
+                        epsilon=get_tuner_values(
+                            hp, f"fnn-layer-batch-normalization-epsilon", **kwargs
+                        ),
+                    )(hidden)
             outputs = self.get_output_layer()(hidden)
             model = tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -274,6 +299,54 @@ class LinearConv1Model(AbstractModel):
                         description=f"{type_} {goal} regularizer for the layers",
                     )
                 }
+        batch_normalization = (
+            {
+                f"layer-batch-normalization": BoolArgument(
+                    default=False,
+                    name=f"layer-batch-normalization",
+                    description="Use batch normalization for the CNN layers",
+                )
+            }
+            | {
+                f"layer-{i}-batch-normalization-momentum": FloatArgument(
+                    minimum=0.0,
+                    maximum=1.0,
+                    default=0.99,
+                    name=f"layer-{i}-batch-normalization-momentum",
+                    description="Momentum for batch normalization for the i-th layer",
+                )
+                for i in range(1, max_convolutions + 1)
+            }
+            | {
+                f"layer-{i}-batch-normalization-epsilon": FloatArgument(
+                    minimum=1e-5,
+                    default=0.001,
+                    name=f"layer-{i}-batch-normalization-epsilon",
+                    description="Epsilon for batch normalization for the i-th layer",
+                )
+                for i in range(1, max_convolutions + 1)
+            }
+            | {
+                f"fnn-layer-batch-normalization": BoolArgument(
+                    default=False,
+                    name=f"fnn-layer-batch-normalization",
+                    description="Use batch normalization for the fnn layer",
+                ),
+                f"fnn-layer-batch-normalization-momentum": FloatArgument(
+                    minimum=0.0,
+                    maximum=1.0,
+                    default=0.99,
+                    name=f"fnn-layer-batch-normalization-momentum",
+                    description="Momentum for batch normalization for the fnn layer",
+                ),
+                f"fnn-layer-batch-normalization-epsilon": FloatArgument(
+                    minimum=1e-5,
+                    default=0.001,
+                    name=f"fnn-layer-batch-normalization-epsilon",
+                    description="Epsilon for batch normalization for the fnn layer",
+                ),
+            }
+        )
         return (
             {
                 "fully-connected-layer-size": IntArgument(
@@ -318,5 +391,6 @@ class LinearConv1Model(AbstractModel):
             | activations
             | activation_alpha
             | regularizers
+            | batch_normalization
             | super().get_arguments()
         )
