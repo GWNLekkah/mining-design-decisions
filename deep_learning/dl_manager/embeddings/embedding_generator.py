@@ -148,7 +148,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
 
         # Create a zip file
         shutil.make_archive(
-            os.path.join(conf.get('system.os.scratch-directory'), TEMP_EMBEDDING_ZIP),
+            os.path.join(conf.get('system.os.scratch-directory'), TEMP_EMBEDDING_ZIP).removesuffix('.zip'),
             'zip',
             os.path.join(conf.get('system.os.scratch-directory'), TEMP_EMBEDDING_DIR)
         )
