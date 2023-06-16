@@ -1272,7 +1272,7 @@ class HyperArgumentListParser(ArgumentListParser):
             default = {
                 f'{key}.0': {
                     k: {'type': 'values', 'options': {'values': [v]}}
-                    for k, v in value.items()
+                    for k, v in value[0].items()
                 }
                 for key, value in value.items()
             }
