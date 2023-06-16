@@ -14,4 +14,4 @@ def load_embedding(ident, repo: issue_db_api.IssueRepository, conf: config.Confi
         shutil.rmtree(target_dir)
     embedding.download_binary(temp_file)
     shutil.unpack_archive(temp_file, target_dir)
-    return os.path.join(target_dir, ident)      # Actual embedding file
+    return os.path.join(target_dir, 'embedding_binary.bin')      # Actual embedding file

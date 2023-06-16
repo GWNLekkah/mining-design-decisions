@@ -952,7 +952,7 @@ class NestedArgument(Argument):
                  description: str, *,
                  spec: dict[str, dict[str, Argument]]):
         default = {
-            key: {k: v.default for k, v in value.items()}
+            key: [{k: v.default for k, v in value.items()}]
             for key, value in spec.items()
         }
         super().__init__(name, description, dict, default=default)

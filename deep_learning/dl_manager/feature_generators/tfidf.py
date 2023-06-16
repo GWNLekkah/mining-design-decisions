@@ -22,8 +22,7 @@ class TfidfGenerator(AbstractFeatureGenerator):
                          args: dict[str, str]):
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
-            embedding = db.get_embedding_by_id(self.params['dictionary-id'])
-            filename = load_embedding(embedding, db, self.conf)
+            filename = load_embedding(self.params['dictionary-id'], db, self.conf)
 
             with open(filename) as file:
                 tfidf_data = json.load(file)

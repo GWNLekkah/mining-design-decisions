@@ -18,8 +18,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
         # Train or load a model
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
-            embedding = db.get_embedding_by_id(self.params['embedding-id'])
-            filename = load_embedding(embedding, db, self.conf)
+            filename = load_embedding(self.params['embedding-id'], db, self.conf)
 
             # Load the model
             wv = models.KeyedVectors.load_word2vec_format(filename, binary=True)
