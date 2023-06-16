@@ -261,9 +261,14 @@ def run_keras_tuner(
     model, input_shape = model_and_input_shape
 
     # Things to configure
-    directory = os.path.join(
-        conf.get("system.os.data-directory"), conf.get("run.model-id")
-    )
+    if conf.get("system.os.peregrine"):
+        directory = os.path.join(
+            conf.get("system.os.scratch-directory"), conf.get("run.model-id")
+        )
+    else:
+        directory = os.path.join(
+            conf.get("system.os.data-directory"), conf.get("run.model-id")
+        )
     project_name = "trials_results"
 
     # Get the tuner
