@@ -105,10 +105,26 @@ class LinearRNNModel(AbstractModel):
                     )
                 )(current)
 
+        # FNN layers
         n_dense_layers = kwargs["number-of-dense-layers"]
         for i in range(1, n_dense_layers + 1):
-            layer_size = kwargs[f"dense-layer-{i}-size"]
-            current = tf.keras.layers.Dense(layer_size)(current)
+            current = tf.keras.layers.Dense(
+                units=kwargs[f"dense-layer-{i}-size"],
+                activation=get_activation(f"fnn-layer-activation", **kwargs),
+                kernel_regularizer=tf.keras.regularizers.L1L2(
+                    l1=kwargs[f"fnn-layer-kernel-l1"],
+                    l2=kwargs[f"fnn-layer-kernel-l2"],
+                ),
+                bias_regularizer=tf.keras.regularizers.L1L2(
+                    l1=kwargs[f"fnn-layer-bias-l1"],
+                    l2=kwargs[f"fnn-layer-bias-l2"],
+                ),
+                activity_regularizer=tf.keras.regularizers.L1L2(
+                    l1=kwargs[f"fnn-layer-activity-l1"],
+                    l2=kwargs[f"fnn-layer-activity-l2"],
+                ),
+            )(current)
+            current = tf.keras.layers.Dropout(kwargs[f"fnn-layer-{i}-dropout"])(current)
         outputs = self.get_output_layer()(current)
         return tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -233,6 +249,39 @@ class LinearRNNModel(AbstractModel):
                             activity_regularizer=activity_regularizer,
                         )
                     )(current)
+            # FNN layers
+            n_dense_layers = kwargs["number-of-dense-layers"]
+            activation = get_tuner_values(hp, "fnn-layer-activation", **kwargs)
+            activation_alpha = get_tuner_values(
+                hp, "fnn-layer-activation-alpha", **kwargs
+            )
+            kernel_l1 = get_tuner_values(hp, f"fnn-layer-kernel-l1", **kwargs)
+            kernel_l2 = get_tuner_values(hp, f"fnn-layer-kernel-l2", **kwargs)
+            bias_l1 = get_tuner_values(hp, f"fnn-layer-bias-l1", **kwargs)
+            bias_l2 = get_tuner_values(hp, f"fnn-layer-bias-l2", **kwargs)
+            activity_l1 = get_tuner_values(hp, f"fnn-layer-activity-l1", **kwargs)
+            activity_l2 = get_tuner_values(hp, f"fnn-layer-activity-l2", **kwargs)
+            for i in range(1, n_dense_layers + 1):
+                units = kwargs[f"dense-layer-{i}-size"]
+                current = tf.keras.layers.Dense(
+                    units=units,
+                    activation=get_tuner_activation(activation, activation_alpha),
+                    kernel_regularizer=tf.keras.regularizers.L1L2(
+                        l1=kernel_l1,
+                        l2=kernel_l2,
+                    ),
+                    bias_regularizer=tf.keras.regularizers.L1L2(
+                        l1=bias_l1,
+                        l2=bias_l2,
+                    ),
+                    activity_regularizer=tf.keras.regularizers.L1L2(
+                        l1=activity_l1,
+                        l2=activity_l2,
+                    ),
+                )(current)
+                current = tf.keras.layers.Dropout(
+                    get_tuner_values(hp, f"fnn-layer-{i}-dropout", **kwargs)
+                )(current)
             outputs = self.get_output_layer()(current)
             model = tf.keras.Model(inputs=[inputs], outputs=outputs)
 
@@ -370,26 +419,6 @@ class LinearRNNModel(AbstractModel):
             )
             for i in range(1, max_layers + 1)
         }
-
-        n_dense_layers = {
-            "number-of-dense-layers": IntArgument(
-                default=0,
-                minimum=0,
-                maximum=max_layers,
-                name="number-of-dense-layers",
-                description="Number of dense layers to use",
-            )
-        }
-        dense_layer_sizes = {
-            f"dense-layer-{i}-size": IntArgument(
-                minimum=2,
-                default=32,
-                maximum=16384,
-                name=f"dense-layer-{i}-size",
-                description="Number of units in the i-th dense layer.",
-            )
-            for i in range(1, max_layers + 1)
-        }
         activation_alpha = {
             f"rnn-layer-activation-alpha": FloatArgument(
                 default=0.0,
@@ -414,7 +443,77 @@ class LinearRNNModel(AbstractModel):
                         description=f"{type_} {goal} regularizer for the layers",
                     )
                 }
-
+        # FNN params
+        fnn_params = (
+            {
+                "number-of-dense-layers": IntArgument(
+                    default=0,
+                    minimum=0,
+                    maximum=max_layers,
+                    name="number-of-dense-layers",
+                    description="Number of dense layers to use",
+                )
+            }
+            | {
+                f"dense-layer-{i}-size": IntArgument(
+                    minimum=2,
+                    default=32,
+                    maximum=16384,
+                    name=f"dense-layer-{i}-size",
+                    description="Number of units in the i-th dense layer.",
+                )
+                for i in range(1, max_layers + 1)
+            }
+            | {
+                f"fnn-layer-activation": EnumArgument(
+                    default="linear",
+                    options=[
+                        "linear",
+                        "relu",
+                        "elu",
+                        "leakyrelu",
+                        "sigmoid",
+                        "tanh",
+                        "softmax",
+                        "softsign",
+                        "selu",
+                        "exp",
+                        "prelu",
+                        "swish",
+                    ],
+                    name=f"fnn-layer-activation",
+                    description="Activation to use in the hidden FNN layers",
+                )
+            }
+            | {
+                f"fnn-layer-activation-alpha": FloatArgument(
+                    default=0.0,
+                    name=f"fnn-layer-activation-alpha",
+                    description=f"Alpha value for the elu activation",
+                )
+            }
+            | {
+                f"fnn-layer-{i}-dropout": FloatArgument(
+                    default=0.0,
+                    minimum=0.0,
+                    maximum=1.0,
+                    name=f"fnn-layer-{i}-dropout",
+                    description=f"Dropout for the i-th FNN layer",
+                )
+                for i in range(1, max_layers + 1)
+            }
+        )
+        for goal in ["kernel", "bias", "activity"]:
+            for type_ in ["l1", "l2"]:
+                fnn_params |= {
+                    f"fnn-layer-{goal}-{type_}": FloatArgument(
+                        default=0.0,
+                        minimum=0.0,
+                        maximum=1.0,
+                        name=f"fnn-layer-{goal}-{type_}",
+                        description=f"{type_} {goal} regularizer for the layers",
+                    )
+                }
         return (
             n_rnn_layers
             | rnn_layer_types
@@ -423,8 +522,7 @@ class LinearRNNModel(AbstractModel):
             | rnn_layer_recurrent_activations
             | rnn_layer_dropouts
             | rnn_layer_recurrent_dropouts
-            | n_dense_layers
-            | dense_layer_sizes
+            | fnn_params
             | activation_alpha
             | regularizers
             | super().get_arguments()
