@@ -262,7 +262,7 @@ class LinearRNNModel(AbstractModel):
             activity_l1 = get_tuner_values(hp, f"fnn-layer-activity-l1", **kwargs)
             activity_l2 = get_tuner_values(hp, f"fnn-layer-activity-l2", **kwargs)
             for i in range(1, n_dense_layers + 1):
-                units = kwargs[f"dense-layer-{i}-size"]
+                units = get_tuner_values(hp, f"dense-layer-{i}-size", **kwargs)
                 current = tf.keras.layers.Dense(
                     units=units,
                     activation=get_tuner_activation(activation, activation_alpha),
