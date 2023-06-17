@@ -250,7 +250,7 @@ class LinearRNNModel(AbstractModel):
                         )
                     )(current)
             # FNN layers
-            n_dense_layers = kwargs["number-of-dense-layers"]
+            n_dense_layers = get_tuner_values(hp, "number-of-dense-layers", **kwargs)
             activation = get_tuner_values(hp, "fnn-layer-activation", **kwargs)
             activation_alpha = get_tuner_values(
                 hp, "fnn-layer-activation-alpha", **kwargs
