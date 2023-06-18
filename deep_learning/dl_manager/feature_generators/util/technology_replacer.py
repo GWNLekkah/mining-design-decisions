@@ -21,6 +21,10 @@ def replace_technologies(issues: list[list[str]],
         project_name_lookup = load_db_file(project_name_lookup_ident, conf)
     else:
         project_name_lookup = {}
+    if project_names and not other_project_replacement:
+        raise ValueError('other-technology-replacement must be given')
+    if project_name_lookup and not this_project_replacement:
+        raise ValueError('this-technology-replacement must be given')
     return replace_other_systems(
         project_names,
         replace_this_system(
