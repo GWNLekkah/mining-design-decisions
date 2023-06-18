@@ -466,7 +466,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             # with cProfile.Profile() as p:
             #    tokenized_issues = self.preprocess(texts)
             # p.dump_stats('profile.txt')
-            tokenized_issues = self.preprocess(texts)
+            tokenized_issues = self.preprocess(texts, labels['issue_keys'])
 
         log.info("Generating feature vectors")
         with timer("Feature Generation"):
@@ -499,7 +499,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             ids=output["labels"]["issue_ids"],
         )
 
-    def preprocess(self, issues):
+    def preprocess(self, issues, issue_keys):
         log.info("Preprocessing Features")
         with timer("Feature Preprocessing"):
             if self.__apply_ontologies:
@@ -547,12 +547,12 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             tagged = tagger.bulk_tag_parallel(
                 texts, self.conf.get("system.resources.threads")
             )
-            texts = replace_technologies(
-                keys=[issue.key for issue in issues],
-                issues=texts,
+            tagged = replace_technologies(
+                keys=issue_keys,
+                issues=tagged,
                 project_names_ident=self.params['replace-other-technologies-list'],
                 project_name_lookup_ident=self.params['replace-this-technology-mapping'],
-                this_project_replacement=self.params['this-technology-replacement'],
+                this_project_replacement=self.params['this-technology-replacement'].split(),
                 other_project_replacement=self.params['other-technology-replacement'],
                 conf=self.conf
             )

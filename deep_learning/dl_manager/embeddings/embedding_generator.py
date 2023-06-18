@@ -118,7 +118,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             issues=texts,
             project_names_ident=self.params['replace-other-technologies-list'], # replace-this-technology-mapping
             project_name_lookup_ident=self.params['replace-this-technology-mapping'],
-            this_project_replacement=self.params['this-technology-replacement'],
+            this_project_replacement=self.params['this-technology-replacement'].split(),
             other_project_replacement=self.params['other-technology-replacement'],
             conf=conf
         )
