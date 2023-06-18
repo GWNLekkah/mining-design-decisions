@@ -261,9 +261,14 @@ def run_keras_tuner(
     model, input_shape = model_and_input_shape
 
     # Things to configure
-    directory = os.path.join(
-        conf.get("system.os.data-directory"), conf.get("run.model-id")
-    )
+    if conf.get("system.os.peregrine"):
+        directory = os.path.join(
+            conf.get("system.os.scratch-directory"), conf.get("run.model-id")
+        )
+    else:
+        directory = os.path.join(
+            conf.get("system.os.data-directory"), conf.get("run.model-id")
+        )
     project_name = "trials_results"
 
     # Get the tuner
@@ -309,7 +314,7 @@ def run_keras_tuner(
             factor=5,
             hyperband_iterations=conf.get("run.tuner-hyperband-iterations"),
         )
-    print(tuner.search_space_summary())  # TODO: this should be output
+    print(tuner.search_space_summary())
     splitter = splitting.SimpleSplitter(
         conf,
         val_split_size=conf.get("run.split-size"),
@@ -362,14 +367,6 @@ def run_keras_tuner(
         validation_data=(validation[0], validation[1]),
         callbacks=callbacks,
     )
-    # TODO: decide what to output
-    models = tuner.get_best_models(num_models=2)
-    best_model = models[0]
-    best_model.build(input_shape=input_shape)
-    print("---------------------------------------------")
-    print("Evaluation on test set")
-    best_model.evaluate(test[0], test[1])
-    print("---------------------------------------------")
     print(tuner.results_summary())
 
 

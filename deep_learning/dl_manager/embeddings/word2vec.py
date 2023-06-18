@@ -2,12 +2,12 @@ import pathlib
 
 from gensim.models import Word2Vec as GensimWord2Vec
 
-from ..config import Argument, IntArgument, EnumArgument
 from .embedding_generator import AbstractEmbeddingGenerator
+from ..config import Argument, IntArgument, EnumArgument, Config
 
 
 class Word2VecGenerator(AbstractEmbeddingGenerator):
-    def generate_embedding(self, issues: list[str], path: pathlib.Path):
+    def generate_embedding(self, issues: list[str], path: pathlib.Path, conf: Config):
         min_count = self.params["min-count"]
         vector_size = self.params["vector-length"]
         model = GensimWord2Vec(
@@ -15,7 +15,7 @@ class Word2VecGenerator(AbstractEmbeddingGenerator):
             min_count=min_count,
             vector_size=vector_size,
             sg=self.params["algorithm"] == "skip-gram",
-            workers=self.conf("system.resources.threads"),
+            workers=conf.get("system.resources.threads"),
         )
         model.wv.save_word2vec_format(path, binary=True)
 
