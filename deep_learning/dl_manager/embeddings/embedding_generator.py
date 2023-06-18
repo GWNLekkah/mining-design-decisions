@@ -13,6 +13,7 @@ from ..config import Config, BoolArgument, Argument, ArgumentConsumer, EnumArgum
 from ..feature_generators.util.text_cleaner import FormattingHandling
 from ..feature_generators.util.text_cleaner import clean_issue_text
 from ..feature_generators.util.ontology import load_ontology, apply_ontologies_to_sentence
+from ..feature_generators.util.technology_replacer import replace_technologies
 from ..logger import get_logger
 
 log = get_logger('Embedding Generator')
@@ -57,7 +58,7 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         # issues = db.select_issues(query)
         # data = db.get_issue_data(issues, ['summary', 'description'])
         db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
-        issues = db.search(query, attributes=['summary', 'description'])
+        issues = db.search(query, attributes=['key', 'summary', 'description'])
         log.info(f'Training embedding on {len(issues)} issues (query: {query})')
 
         # Setting up NLP stuff
@@ -111,6 +112,16 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             for summary, description in zip(summaries, descriptions)
         ]
         texts = tagger.bulk_tag_parallel(texts, conf.get('system.resources.threads'))
+
+        texts = replace_technologies(
+            keys=[issue.key for issue in issues],
+            issues=texts,
+            project_names_ident=self.params['replace-other-technologies-list'], # replace-this-technology-mapping
+            project_name_lookup_ident=self.params['replace-this-technology-mapping'],
+            this_project_replacement=self.params['this-technology-replacement'],
+            other_project_replacement=self.params['other-technology-replacement'],
+            conf=conf
+        )
 
         # Per-issue processing
         documents = []
@@ -203,6 +214,28 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             'ontology-id': StringArgument(
                 name='ontology-id',
                 description='ID to a file containing ontology classes.',
+                default=''
+            ),
+            'replace-this-technology-mapping': StringArgument(
+                name='replace-this-technology-mapping',
+                description='If given, should be a file mapping project keys to project names. '
+                            'Project names in text will be replacement with `this-technology-replacement`.',
+                default=''
+            ),
+            'this-technology-replacement': StringArgument(
+                name='this-technology-replacement',
+                description='See description of `replace-this-technology-mapping`',
+                default=''
+            ),
+            'replace-other-technologies-list': StringArgument(
+                name='replace-other-technologies-list',
+                description='If given, should be a file containing a list of project names. '
+                            'Project names will be replaced with `other-technology-replacement`',
+                default=''
+            ),
+            'other-technology-replacement': StringArgument(
+                name='other-technology-replacement',
+                description='See description of `replace-other-technology-list`.',
                 default=''
             )
         }

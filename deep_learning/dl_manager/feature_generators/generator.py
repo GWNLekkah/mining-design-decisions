@@ -32,6 +32,7 @@ from .. import accelerator
 from ..model_io import InputEncoding, classification8_lookup
 from ..custom_kfold import stratified_trim
 from .util import ontology
+from .util.technology_replacer import replace_technologies
 from ..config import Config
 from ..logger import get_logger, timer
 from ..data_manager import Dataset
@@ -312,6 +313,28 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 options=["markers", "remove", "keep"],
                 default="markers",
             ),
+            'replace-this-technology-mapping': StringArgument(
+                name='replace-this-technology-mapping',
+                description='If given, should be a file mapping project keys to project names. '
+                            'Project names in text will be replacement with `this-technology-replacement`.',
+                default=''
+            ),
+            'this-technology-replacement': StringArgument(
+                name='this-technology-replacement',
+                description='See description of `replace-this-technology-mapping`',
+                default=''
+            ),
+            'replace-other-technologies-list': StringArgument(
+                name='replace-other-technologies-list',
+                description='If given, should be a file containing a list of project names. '
+                            'Project names will be replaced with `other-technology-replacement`',
+                default=''
+            ),
+            'other-technology-replacement': StringArgument(
+                name='other-technology-replacement',
+                description='See description of `replace-other-technology-list`.',
+                default=''
+            ),
         }
 
     def load_data_from_db(self, query: issue_db_api.Query, metadata_attributes):
@@ -523,6 +546,15 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             ]
             tagged = tagger.bulk_tag_parallel(
                 texts, self.conf.get("system.resources.threads")
+            )
+            texts = replace_technologies(
+                keys=[issue.key for issue in issues],
+                issues=texts,
+                project_names_ident=self.params['replace-other-technologies-list'],
+                project_name_lookup_ident=self.params['replace-this-technology-mapping'],
+                this_project_replacement=self.params['this-technology-replacement'],
+                other_project_replacement=self.params['other-technology-replacement'],
+                conf=self.conf
             )
             tokenized_issues = []
             for issue in tagged:
