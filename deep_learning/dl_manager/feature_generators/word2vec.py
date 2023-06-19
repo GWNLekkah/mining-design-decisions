@@ -29,11 +29,11 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
 
         # Build the final feature vectors.
         # This function should also save the pretrained model
-        return self.finalize_vectors(tokenized_issues, wv, args)
+        return self.finalize_vectors(tokenized_issues, wv, args, filename)
 
     @staticmethod
     @abc.abstractmethod
-    def finalize_vectors(tokenized_issues, wv, args):
+    def finalize_vectors(tokenized_issues, wv, args, filename):
         pass
 
     @staticmethod

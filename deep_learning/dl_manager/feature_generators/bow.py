@@ -34,7 +34,8 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
                         'dict-file': filename
                     },
                     [
-                        filename
+                        os.path.join(self.conf.get('system.os.scratch-directory'), path)
+                        for path in os.listdir(os.path.split(filename)[0])
                     ]
                 )
             else:
