@@ -43,6 +43,7 @@ class Word2Vec(AbstractWord2Vec):
             features.append(feature)
 
         if self.pretrained is None:
+            directory = os.path.split(filename)[0]
             self.save_pretrained(
                 {
                     'word-to-index-mapping': word_to_idx,
@@ -60,8 +61,8 @@ class Word2Vec(AbstractWord2Vec):
                 #     )
                 # ]
                 [
-                    os.path.join(self.conf.get('system.os.scratch-directory'), path)
-                    for path in os.listdir(os.path.split(filename)[0])
+                    os.path.join(directory, path)
+                    for path in os.listdir(directory)
                 ]
             )
 

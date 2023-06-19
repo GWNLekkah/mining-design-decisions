@@ -29,13 +29,14 @@ class AbstractBOW(AbstractFeatureGenerator, abc.ABC):
                 with open(filename) as file:
                     word_to_idx = json.load(file)
 
+                directory = os.path.split(filename)[0]
                 self.save_pretrained(
                     {
                         'dict-file': filename
                     },
                     [
-                        os.path.join(self.conf.get('system.os.scratch-directory'), path)
-                        for path in os.listdir(os.path.split(filename)[0])
+                        os.path.join(directory, path)
+                        for path in os.listdir(directory)
                     ]
                 )
             else:

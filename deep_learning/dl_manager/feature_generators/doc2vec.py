@@ -38,14 +38,15 @@ class Doc2Vec(AbstractFeatureGenerator):
 
             shape = int(args['vector-length'])
 
+            directory = os.path.split(filename)[0]
             self.save_pretrained(
                 {
                     'pretrained-file': filename,
                     'vector-length': shape
                 },
                 [
-                    os.path.join(self.conf.get('system.os.scratch-directory'), path)
-                    for path in os.listdir(os.path.split(filename)[0])
+                    os.path.join(directory, path)
+                    for path in os.listdir(directory)
                 ]
             )
         else:
