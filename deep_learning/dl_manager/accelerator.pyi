@@ -3,6 +3,12 @@ def bulk_clean_text_parallel(documents: list[str],
                              num_threads: int) -> list[str]: ...
 
 
+def bulk_replace_parallel(documents: list[list[str]],
+                          needles: list[list[str]],
+                          replacement: list[str],
+                          num_threads: int) -> list[list[str]]: ...
+
+
 class Tagger:
     def __init__(self,
                  weights: dict[str, dict[str, float]],

@@ -544,17 +544,17 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 ]
                 for summary, description in zip(summaries, descriptions)
             ]
-            tagged = tagger.bulk_tag_parallel(
-                texts, self.conf.get("system.resources.threads")
-            )
-            tagged = replace_technologies(
+            texts = replace_technologies(
                 keys=issue_keys,
-                issues=tagged,
+                issues=texts,
                 project_names_ident=self.params['replace-other-technologies-list'],
                 project_name_lookup_ident=self.params['replace-this-technology-mapping'],
                 this_project_replacement=self.params['this-technology-replacement'].split(),
-                other_project_replacement=self.params['other-technology-replacement'],
+                other_project_replacement=self.params['other-technology-replacement'].split(),
                 conf=self.conf
+            )
+            tagged = tagger.bulk_tag_parallel(
+                texts, self.conf.get("system.resources.threads")
             )
             tokenized_issues = []
             for issue in tagged:

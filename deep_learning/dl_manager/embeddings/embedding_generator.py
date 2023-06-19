@@ -116,17 +116,16 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             ]
             for summary, description in zip(summaries, descriptions)
         ]
-        texts = tagger.bulk_tag_parallel(texts, conf.get("system.resources.threads"))
-
         texts = replace_technologies(
             keys=[issue.key for issue in issues],
             issues=texts,
-            project_names_ident=self.params['replace-other-technologies-list'], # replace-this-technology-mapping
+            project_names_ident=self.params['replace-other-technologies-list'],  # replace-this-technology-mapping
             project_name_lookup_ident=self.params['replace-this-technology-mapping'],
             this_project_replacement=self.params['this-technology-replacement'].split(),
-            other_project_replacement=self.params['other-technology-replacement'],
+            other_project_replacement=self.params['other-technology-replacement'].split(),
             conf=conf
         )
+        texts = tagger.bulk_tag_parallel(texts, conf.get("system.resources.threads"))
 
         # Per-issue processing
         documents = []
