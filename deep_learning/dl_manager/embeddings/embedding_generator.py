@@ -101,6 +101,8 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         # Bulk processing
         summaries = [issue.summary for issue in issues]
         descriptions = [issue.description for issue in issues]
+        issue_keys = [issue.key for issue in issues]
+
         summaries = accelerator.bulk_clean_text_parallel(
             summaries, handling.as_string(), conf.get("system.resources.threads")
         )
@@ -109,22 +111,37 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
             descriptions, handling.as_string(), conf.get("system.resources.threads")
         )
         descriptions = [clean_issue_text(description) for description in descriptions]
+
+        summaries = replace_technologies(
+            issues=summaries,
+            keys=issue_keys,
+            project_names_ident=self.params['replace-other-technologies-list'],
+            project_name_lookup_ident=self.params['replace-this-technology-mapping'],
+            this_project_replacement=self.params['this-technology-replacement'],
+            other_project_replacement=self.params['other-technology-replacement'],
+            conf=conf
+        )
+        descriptions = replace_technologies(
+            issues=descriptions,
+            keys=issue_keys,
+            project_names_ident=self.params['replace-other-technologies-list'],
+            project_name_lookup_ident=self.params['replace-this-technology-mapping'],
+            this_project_replacement=self.params['this-technology-replacement'],
+            other_project_replacement=self.params['other-technology-replacement'],
+            conf=conf
+        )
+
         texts = [
             [
                 nltk.word_tokenize(sent.lower())
                 for sent in itertools.chain(summary, description)
             ]
-            for summary, description in zip(summaries, descriptions)
+            for key, summary, description in zip(issue_keys, summaries, descriptions)
         ]
-        texts = replace_technologies(
-            keys=[issue.key for issue in issues],
-            issues=texts,
-            project_names_ident=self.params['replace-other-technologies-list'],  # replace-this-technology-mapping
-            project_name_lookup_ident=self.params['replace-this-technology-mapping'],
-            this_project_replacement=self.params['this-technology-replacement'].split(),
-            other_project_replacement=self.params['other-technology-replacement'].split(),
-            conf=conf
-        )
+        #     project_names_ident=self.params['replace-other-technologies-list'],
+        #     project_name_lookup_ident=self.params['replace-this-technology-mapping'],
+        #     this_project_replacement=self.params['this-technology-replacement'].split(),
+        #     other_project_replacement=self.params['other-technology-replacement'].split(),
         texts = tagger.bulk_tag_parallel(texts, conf.get("system.resources.threads"))
 
         # Per-issue processing
