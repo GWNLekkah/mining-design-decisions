@@ -60,6 +60,11 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         # db: DatabaseAPI = conf.get('system.storage.database-api')
         # issues = db.select_issues(query)
         # data = db.get_issue_data(issues, ['summary', 'description'])
+
+        if TEMP_EMBEDDING_DIR.exists():
+            shutil.rmtree(str(TEMP_EMBEDDING_DIR))
+        TEMP_EMBEDDING_DIR.mkdir(exist_ok=True)
+
         db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
         issues = db.search(query, attributes=['key', 'summary', 'description'])
         log.info(f'Training embedding on {len(issues)} issues (query: {query})')
@@ -106,23 +111,14 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         summaries = accelerator.bulk_clean_text_parallel(
             summaries, handling.as_string(), conf.get("system.resources.threads")
         )
-        summaries = [clean_issue_text(summary) for summary in summaries]
+        #summaries = [clean_issue_text(summary) for summary in summaries]
         descriptions = accelerator.bulk_clean_text_parallel(
             descriptions, handling.as_string(), conf.get("system.resources.threads")
         )
-        descriptions = [clean_issue_text(description) for description in descriptions]
+        #descriptions = [clean_issue_text(description) for description in descriptions]
 
-        summaries = replace_technologies(
-            issues=summaries,
-            keys=issue_keys,
-            project_names_ident=self.params['replace-other-technologies-list'],
-            project_name_lookup_ident=self.params['replace-this-technology-mapping'],
-            this_project_replacement=self.params['this-technology-replacement'],
-            other_project_replacement=self.params['other-technology-replacement'],
-            conf=conf
-        )
-        descriptions = replace_technologies(
-            issues=descriptions,
+        stream = replace_technologies(
+            issues=list(zip(summaries, descriptions)),
             keys=issue_keys,
             project_names_ident=self.params['replace-other-technologies-list'],
             project_name_lookup_ident=self.params['replace-this-technology-mapping'],
@@ -134,9 +130,9 @@ class AbstractEmbeddingGenerator(abc.ABC, ArgumentConsumer):
         texts = [
             [
                 nltk.word_tokenize(sent.lower())
-                for sent in itertools.chain(summary, description)
+                for sent in itertools.chain(clean_issue_text(summary), clean_issue_text(description))
             ]
-            for key, summary, description in zip(issue_keys, summaries, descriptions)
+            for summary, description in stream
         ]
         #     project_names_ident=self.params['replace-other-technologies-list'],
         #     project_name_lookup_ident=self.params['replace-this-technology-mapping'],
