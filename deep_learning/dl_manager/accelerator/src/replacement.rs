@@ -1,3 +1,5 @@
-mod trie;
+mod char_trie;
+mod word_trie;
 
-pub use trie::WordTrie;
+pub use word_trie::WordTrie;
+pub use char_trie::CharTrie;

@@ -1,6 +1,5 @@
 use std::collections::hash_map::Entry;
 use std::collections::HashMap;
-use std::thread::current;
 
 use peekmore::{PeekMore, PeekMoreIterator};
 
