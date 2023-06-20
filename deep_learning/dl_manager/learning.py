@@ -194,6 +194,8 @@ def run_cross(
             max_train=conf.get("run.max-train"),
         )
     comparator = metrics.ComparisonManager()
+    if conf.get("run.seed") >= 0:
+        random.seed(conf.get("run.seed"))
     stream = splitter.split(training_data, testing_data)
     for (
         train,
