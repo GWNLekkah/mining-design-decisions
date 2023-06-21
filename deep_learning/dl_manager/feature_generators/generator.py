@@ -505,8 +505,12 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 keys=labels["issue_keys"],
                 project_names_ident=None,
                 project_name_lookup_ident=None,
-                this_project_replacement=self.params["this-technology-replacement"],
-                other_project_replacement=self.params["other-technology-replacement"],
+                this_project_replacement=self.params.get(
+                    "this-technology-replacement", ""
+                ),
+                other_project_replacement=self.params.get(
+                    "other-technology-replacement", ""
+                ),
                 conf=self.conf,
                 project_names_file=self._project_names_file,
                 name_lookup_file=self._name_lookup_file,
