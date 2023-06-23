@@ -83,9 +83,6 @@ def run_single(
     conf: Config,
 ):
     id_generator = run_identifiers.IdentifierFactory()
-    max_train = conf.get("run.max-train")
-    if max_train > 0:
-        warnings.warn("The --max-train parameter is ignored in single runs.")
     spitter = splitting.SimpleSplitter(
         conf,
         val_split_size=conf.get("run.split-size"),
