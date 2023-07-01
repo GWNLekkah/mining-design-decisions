@@ -10,6 +10,7 @@ from gensim import models
 from ..config import StringArgument, IntArgument
 from .base import AbstractUpSampler
 from ..feature_generators import generators, FeatureEncoding
+from ..embeddings.util import load_embedding
 from .. import data_manager_bootstrap
 
 
@@ -35,14 +36,7 @@ class SynonymUpSampler(AbstractUpSampler):
         # Download substitution embedding
         db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
         embedding_id = self.hyper_params['word-embedding']
-        embedding = db.get_embedding_by_id(embedding_id)
-        embedding_filename = os.path.join(
-            self.conf.get('system.os.scratch-directory'),
-            embedding_id + '.bin'
-        )
-        if os.path.exists(embedding_filename):
-            os.remove(embedding_filename)
-        embedding.download_binary(embedding_filename)
+        embedding_filename = load_embedding(embedding_id, db, self.conf)
 
         #
         with open(data_manager_bootstrap.get_raw_text_file_name(self.conf)) as file:

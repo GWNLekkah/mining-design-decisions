@@ -473,6 +473,16 @@
           "options": []
         },
         {
+          "name": "tuner-hyperband-iterations",
+          "help": "Select the number of iterations for the HyperBand algorithm.",
+          "type": "int",
+          "default": null,
+          "nargs": "1",
+          "required": false,
+          "null-unless": {"name": "perform-tuning", "value": true},
+          "options": []
+        },
+        {
           "name": "tuner-hyper-params",
           "help": "Hyper-parameters params for the Keras Tuner. Items in the name=value format.",
           "nargs": "1",

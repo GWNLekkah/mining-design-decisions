@@ -7,7 +7,7 @@ import issue_db_api
 from ..config import Argument, IntArgument, StringArgument
 
 from .generator import FeatureEncoding
-
+from ..embeddings.util import load_embedding
 from ..feature_generators import AbstractFeatureGenerator
 
 class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
@@ -18,14 +18,7 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
         # Train or load a model
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
-            embedding = db.get_embedding_by_id(self.params['embedding-id'])
-            filename = os.path.join(
-                self.conf.get('system.os.scratch-directory'),
-                self.params['embedding-id'] + '.bin'
-            )
-            if os.path.exists(filename):
-                os.remove(filename)
-            embedding.download_binary(filename)
+            filename = load_embedding(self.params['embedding-id'], db, self.conf)
 
             # Load the model
             wv = models.KeyedVectors.load_word2vec_format(filename, binary=True)
@@ -36,11 +29,11 @@ class AbstractWord2Vec(AbstractFeatureGenerator, abc.ABC):
 
         # Build the final feature vectors.
         # This function should also save the pretrained model
-        return self.finalize_vectors(tokenized_issues, wv, args)
+        return self.finalize_vectors(tokenized_issues, wv, args, filename)
 
     @staticmethod
     @abc.abstractmethod
-    def finalize_vectors(tokenized_issues, wv, args):
+    def finalize_vectors(tokenized_issues, wv, args, filename):
         pass
 
     @staticmethod

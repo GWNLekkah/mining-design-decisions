@@ -9,7 +9,7 @@ class Word2Vec(AbstractWord2Vec):
     def input_encoding_type() -> InputEncoding:
         return InputEncoding.Embedding
 
-    def finalize_vectors(self, tokenized_issues, wv, args):
+    def finalize_vectors(self, tokenized_issues, wv, args, filename):
         if self.pretrained is None:
             idx = 0
             word_to_idx = dict()
@@ -43,6 +43,7 @@ class Word2Vec(AbstractWord2Vec):
             features.append(feature)
 
         if self.pretrained is None:
+            directory = os.path.split(filename)[0]
             self.save_pretrained(
                 {
                     'word-to-index-mapping': word_to_idx,
@@ -50,17 +51,18 @@ class Word2Vec(AbstractWord2Vec):
                     'embedding-weights': embedding_weights,
                     'feature-shape': feature_shape,
                     'word-vector-length': word_vector_length,
-                    'model': os.path.join(
-                        self.conf.get('system.os.scratch-directory'),
-                        self.params['embedding-id'] + '.bin'
-                    ),
+                    'model': filename ,
                     #'model-binary': args['pretrained-binary'].lower() == 'true'
                 },
+                # [
+                #     os.path.join(
+                #         self.conf.get('system.os.scratch-directory'),
+                #         self.params['embedding-id'] + '.bin'
+                #     )
+                # ]
                 [
-                    os.path.join(
-                        self.conf.get('system.os.scratch-directory'),
-                        self.params['embedding-id'] + '.bin'
-                    )
+                    os.path.join(directory, path)
+                    for path in os.listdir(directory)
                 ]
             )
 

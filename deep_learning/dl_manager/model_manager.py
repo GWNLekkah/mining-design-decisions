@@ -187,7 +187,8 @@ def _convert_value(x):
 
 
 def _upload_zip_data(path, conf: Config):
-    filename = shutil.make_archive('model', 'zip', path)
+    target_file = os.path.join(conf.get('system.os.scratch-directory'), 'model.zip')
+    filename = shutil.make_archive(target_file.removesuffix('.zip'), 'zip', path)
     db: issue_db_api.IssueRepository = conf.get('system.storage.database-api')
     model = db.get_model_by_id(conf.get('run.model-id'))
     return model.add_version(filename).version_id

@@ -6,6 +6,7 @@ from gensim.models.doc2vec import Doc2Vec as GensimDoc2Vec
 
 from ..config import Argument, IntArgument, StringArgument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
+from ..embeddings.util import load_embedding
 from ..model_io import InputEncoding
 
 
@@ -31,26 +32,21 @@ class Doc2Vec(AbstractFeatureGenerator):
             #     args['pretrained-file'] = filename
 
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
-            embedding = db.get_embedding_by_id(self.params['embedding-id'])
-            filename = os.path.join(
-                self.conf.get('system.os.scratch-directory'),
-                self.params['embedding-id'] + '.bin'
-            )
-            if os.path.exists(filename):
-                os.remove(filename)
-            embedding.download_binary(filename)
+            filename = load_embedding(self.params['embedding-id'], db, self.conf)
 
             model = GensimDoc2Vec.load(filename)
 
             shape = int(args['vector-length'])
 
+            directory = os.path.split(filename)[0]
             self.save_pretrained(
                 {
                     'pretrained-file': filename,
                     'vector-length': shape
                 },
                 [
-                    filename
+                    os.path.join(directory, path)
+                    for path in os.listdir(directory)
                 ]
             )
         else:

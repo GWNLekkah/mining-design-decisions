@@ -83,9 +83,6 @@ def run_single(
     conf: Config,
 ):
     id_generator = run_identifiers.IdentifierFactory()
-    max_train = conf.get("run.max-train")
-    if max_train > 0:
-        warnings.warn("The --max-train parameter is ignored in single runs.")
     spitter = splitting.SimpleSplitter(
         conf,
         val_split_size=conf.get("run.split-size"),
@@ -93,6 +90,8 @@ def run_single(
         max_train=conf.get("run.max-train"),
     )
     # Split returns an iterator; call next() to get data splits
+    if conf.get("run.seed") >= 0:
+        random.seed(conf.get("run.seed"))
     (
         train,
         test,
@@ -192,6 +191,8 @@ def run_cross(
             max_train=conf.get("run.max-train"),
         )
     comparator = metrics.ComparisonManager()
+    if conf.get("run.seed") >= 0:
+        random.seed(conf.get("run.seed"))
     stream = splitter.split(training_data, testing_data)
     for (
         train,
@@ -259,8 +260,15 @@ def run_keras_tuner(
     model, input_shape = model_and_input_shape
 
     # Things to configure
-    directory = "tmp/dir_for_storing_results"
-    project_name = "project_name"
+    if conf.get("system.os.peregrine"):
+        directory = os.path.join(
+            conf.get("system.os.scratch-directory"), conf.get("run.model-id")
+        )
+    else:
+        directory = os.path.join(
+            conf.get("system.os.data-directory"), conf.get("run.model-id")
+        )
+    project_name = "trials_results"
 
     # Get the tuner
     if conf.get("run.tuner-type") == "RandomSearch":
@@ -272,7 +280,7 @@ def run_keras_tuner(
             ),
             max_trials=conf.get("run.tuner-max-trials"),
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
-            overwrite=True,
+            overwrite=False,
             directory=directory,
             project_name=project_name,
         )
@@ -285,7 +293,7 @@ def run_keras_tuner(
             ),
             max_trials=conf.get("run.tuner-max-trials"),
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
-            overwrite=True,
+            overwrite=False,
             directory=directory,
             project_name=project_name,
         )
@@ -296,15 +304,16 @@ def run_keras_tuner(
                 f"val_{conf.get('run.tuner-objective')}",
                 direction=EARLY_STOPPING_GOALS[conf.get("run.tuner-objective")],
             ),
-            max_epochs=50,
-            factor=10,
-            hyperband_iterations=3,
             executions_per_trial=conf.get("run.tuner-executions-per-trial"),
-            overwrite=True,
+            overwrite=False,
             directory=directory,
             project_name=project_name,
+            # Hyperband specific settings
+            max_epochs=conf.get("run.epochs"),
+            factor=5,
+            hyperband_iterations=conf.get("run.tuner-hyperband-iterations"),
         )
-    print(tuner.search_space_summary())  # TODO: this should be output
+    print(tuner.search_space_summary())
     splitter = splitting.SimpleSplitter(
         conf,
         val_split_size=conf.get("run.split-size"),
@@ -312,6 +321,8 @@ def run_keras_tuner(
         max_train=None,
     )
     # Split returns an iterator; call next() to get data splits
+    if conf.get("run.seed") >= 0:
+        random.seed(conf.get("run.seed"))
     (
         train,
         test,
@@ -323,6 +334,16 @@ def run_keras_tuner(
         val_ids,
         test_ids,
     ) = next(splitter.split(data))
+
+    with open(f"{directory}/datasets.json", "w") as file:
+        json.dump(
+            {
+                "train": train_ids.tolist(),
+                "val": val_ids.tolist(),
+                "test": test_ids.tolist(),
+            },
+            file,
+        )
 
     # Create callbacks
     callbacks = []
@@ -345,14 +366,6 @@ def run_keras_tuner(
         validation_data=(validation[0], validation[1]),
         callbacks=callbacks,
     )
-    # TODO: decide what to output
-    models = tuner.get_best_models(num_models=2)
-    best_model = models[0]
-    best_model.build(input_shape=input_shape)
-    print("---------------------------------------------")
-    print("Evaluation on test set")
-    best_model.evaluate(test[0], test[1])
-    print("---------------------------------------------")
     print(tuner.results_summary())
 
 

@@ -7,9 +7,12 @@ use rayon::prelude::*;
 
 mod pos;
 mod text_cleaning;
+mod replacement;
 
 use pos::PerceptronTagger;
 use crate::text_cleaning::{clean_text, FormattingHandling};
+use crate::replacement::{CharTrie, WordTrie};
+
 
 #[pyclass]
 pub struct Tagger {
@@ -88,9 +91,42 @@ fn bulk_clean_text_parallel(documents: Vec<String>,
     )
 }
 
+#[pyfunction]
+fn bulk_replace_parallel(documents: Vec<Vec<String>>,
+                         needles: Vec<Vec<String>>,
+                         replacement: Vec<String>,
+                         num_threads: usize) -> PyResult<Vec<Vec<String>>> {
+    let x = create_pool(num_threads)?.install(|| {
+        let trie = WordTrie::new(needles);
+        documents.into_par_iter().map(
+            move |document| trie.replace_substrings_with(document, &replacement)
+        )
+    }).collect();
+    Ok(x)
+}
+
+#[pyfunction]
+fn bulk_replace_parallel_string(documents: Vec<Vec<String>>,
+                                needles: Vec<String>,
+                                replacement: String,
+                                num_threads: usize) -> PyResult<Vec<Vec<String>>> {
+    let x = create_pool(num_threads)?.install(|| {
+        let trie = CharTrie::new(needles);
+        documents.into_par_iter().map(
+            move |document| document
+                .into_iter()
+                .map(|body| trie.replace_substrings_with(body, &replacement))
+                .collect()
+        )
+    }).collect();
+    Ok(x)
+}
+
 #[pymodule]
 fn accelerator(_py: Python<'_>, m: &PyModule) -> PyResult<()> {
     m.add_class::<Tagger>()?;
     m.add_function(wrap_pyfunction!(bulk_clean_text_parallel, m)?)?;
+    m.add_function(wrap_pyfunction!(bulk_replace_parallel, m)?)?;
+    m.add_function(wrap_pyfunction!(bulk_replace_parallel_string, m)?)?;
     Ok(())
 }

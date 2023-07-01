@@ -6,6 +6,7 @@ import issue_db_api
 
 from ..config import Argument, StringArgument
 from .generator import AbstractFeatureGenerator, FeatureEncoding
+from ..embeddings.util import load_embedding
 from ..model_io import InputEncoding
 
 
@@ -21,14 +22,7 @@ class TfidfGenerator(AbstractFeatureGenerator):
                          args: dict[str, str]):
         if self.pretrained is None:
             db: issue_db_api.IssueRepository = self.conf.get('system.storage.database-api')
-            embedding = db.get_embedding_by_id(self.params['dictionary-id'])
-            filename = os.path.join(
-                self.conf.get('system.os.scratch-directory'),
-                self.params['dictionary-id'] + '.bin'
-            )
-            if os.path.exists(filename):
-                os.remove(filename)
-            embedding.download_binary(filename)
+            filename = load_embedding(self.params['dictionary-id'], db, self.conf)
 
             with open(filename) as file:
                 tfidf_data = json.load(file)
@@ -36,12 +30,14 @@ class TfidfGenerator(AbstractFeatureGenerator):
             layout = tfidf_data['layout']
             inverse_document_frequency = tfidf_data['idf']
 
+            directory = os.path.split(filename)[0]
             self.save_pretrained(
                 {
                     'idf-file': filename
                 },
                 [
-                    filename
+                    os.path.join(directory, path)
+                    for path in os.listdir(directory)
                 ]
             )
         else:

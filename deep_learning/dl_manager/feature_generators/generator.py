@@ -32,6 +32,10 @@ from .. import accelerator
 from ..model_io import InputEncoding, classification8_lookup
 from ..custom_kfold import stratified_trim
 from .util import ontology
+from .util.technology_replacer import (
+    replace_technologies,
+    get_filename as get_technology_file_filename,
+)
 from ..config import Config
 from ..logger import get_logger, timer
 from ..data_manager import Dataset
@@ -156,6 +160,8 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         self.conf = conf
         self.__ontology_classes = None
         self.__apply_ontologies = False
+        self._project_names_file = ""
+        self._name_lookup_file = ""
         if self.__pretrained is not None:
             if self.__params:
                 raise ValueError(
@@ -166,11 +172,15 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             for name in AbstractFeatureGenerator.get_arguments():
                 if name in self.__pretrained:
                     self.__params[name] = self.__pretrained[name]
+            aux = self.conf.get("system.storage.auxiliary-map")
             if "ontology-classes" in self.__pretrained:
-                aux = self.conf.get("system.storage.auxiliary-map")
                 # self.conf.set('run.ontology-classes', aux[self.__pretrained['ontology-classes']])
                 self.__ontology_classes = aux[self.__pretrained["ontology-classes"]]
                 self.__apply_ontologies = self.__pretrained["use-ontology-classes"]
+            if x := self.__pretrained.get("$project-names-file", ""):
+                self._project_names_file = aux[x]
+            if x := self.__pretrained.get("$project-lookup-file", ""):
+                self._name_lookup_file = aux[x]
         else:
             self.__ontology_classes = (
                 f'{conf.get("system.storage.file-prefix")}_ontologies.json'
@@ -230,6 +240,20 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
         pretrained_settings["use-ontology-classes"] = self.conf.get(
             "run.apply-ontology-classes"
         )
+        if x := self.params["replace-other-technologies-list"]:
+            pretrained_settings["$project-names-file"] = get_technology_file_filename(
+                x, self.conf
+            )
+            self.conf.get("system.storage.auxiliary").append(
+                get_technology_file_filename(x, self.conf)
+            )
+        if x := self.params["replace-this-technology-mapping"]:
+            pretrained_settings["$project-lookup-file"] = get_technology_file_filename(
+                x, self.conf
+            )
+            self.conf.get("system.storage.auxiliary").append(
+                get_technology_file_filename(x, self.conf)
+            )
         self.conf.get("system.storage.generators").append(filename)
         self.conf.get("system.storage.auxiliary").extend(auxiliary_files)
         with open(filename, "w") as file:
@@ -312,6 +336,28 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 options=["markers", "remove", "keep"],
                 default="markers",
             ),
+            "replace-this-technology-mapping": StringArgument(
+                name="replace-this-technology-mapping",
+                description="If given, should be a file mapping project keys to project names. "
+                "Project names in text will be replacement with `this-technology-replacement`.",
+                default="",
+            ),
+            "this-technology-replacement": StringArgument(
+                name="this-technology-replacement",
+                description="See description of `replace-this-technology-mapping`",
+                default="",
+            ),
+            "replace-other-technologies-list": StringArgument(
+                name="replace-other-technologies-list",
+                description="If given, should be a file containing a list of project names. "
+                "Project names will be replaced with `other-technology-replacement`",
+                default="",
+            ),
+            "other-technology-replacement": StringArgument(
+                name="other-technology-replacement",
+                description="See description of `replace-other-technology-list`.",
+                default="",
+            ),
         }
 
     def load_data_from_db(self, query: issue_db_api.Query, metadata_attributes):
@@ -352,7 +398,7 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             # summary = x if (x := issue.pop('summary')) is not None else ''
             # description = x if (x := issue.pop('description')) is not None else ''
             # labels['issue_keys'].append(issue.pop('key'))
-            texts.append((issue.summary, issue.description))
+            texts.append([issue.summary, issue.description])
         metadata = []
         for issue in issues:
             metadata.append(
@@ -437,13 +483,46 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                     if idx in stratified_indices
                 ]
 
+        # The replace_technologies function
+        # already performs the substitutions conditionally,
+        # so it can be in the main code path here.
+        if self.pretrained is None:
+            texts = replace_technologies(
+                issues=texts,
+                keys=labels["issue_keys"],
+                project_names_ident=self.params["replace-other-technologies-list"],
+                project_name_lookup_ident=self.params[
+                    "replace-this-technology-mapping"
+                ],
+                this_project_replacement=self.params["this-technology-replacement"],
+                other_project_replacement=self.params["other-technology-replacement"],
+                conf=self.conf,
+            )
+        else:
+            # Cry
+            texts = replace_technologies(
+                issues=texts,
+                keys=labels["issue_keys"],
+                project_names_ident=None,
+                project_name_lookup_ident=None,
+                this_project_replacement=self.params.get(
+                    "this-technology-replacement", ""
+                ),
+                other_project_replacement=self.params.get(
+                    "other-technology-replacement", ""
+                ),
+                conf=self.conf,
+                project_names_file=self._project_names_file,
+                name_lookup_file=self._name_lookup_file,
+            )
+
         if self.input_encoding_type() == InputEncoding.Text:
             tokenized_issues = [[". ".join(text)] for text in texts]
         else:
             # with cProfile.Profile() as p:
             #    tokenized_issues = self.preprocess(texts)
             # p.dump_stats('profile.txt')
-            tokenized_issues = self.preprocess(texts)
+            tokenized_issues = self.preprocess(texts, labels["issue_keys"])
 
         log.info("Generating feature vectors")
         with timer("Feature Generation"):
@@ -476,7 +555,10 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
             ids=output["labels"]["issue_ids"],
         )
 
-    def preprocess(self, issues):
+    def apply_technology_substitutions(self):
+        pass
+
+    def preprocess(self, issues, issue_keys):
         log.info("Preprocessing Features")
         with timer("Feature Preprocessing"):
             if self.__apply_ontologies:
@@ -521,6 +603,16 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                 ]
                 for summary, description in zip(summaries, descriptions)
             ]
+            # old version which operated on tokens. No clue why I did that
+            # texts = replace_technologies(
+            #     keys=issue_keys,
+            #     issues=texts,
+            #     project_names_ident=self.params['replace-other-technologies-list'],
+            #     project_name_lookup_ident=self.params['replace-this-technology-mapping'],
+            #     this_project_replacement=self.params['this-technology-replacement'].split(),
+            #     other_project_replacement=self.params['other-technology-replacement'].split(),
+            #     conf=self.conf
+            # )
             tagged = tagger.bulk_tag_parallel(
                 texts, self.conf.get("system.resources.threads")
             )
@@ -538,8 +630,10 @@ class AbstractFeatureGenerator(abc.ABC, ArgumentConsumer):
                         )
 
                     # Remove stopwords
-                    if not self.__params['disable-stopwords']:
-                        words = [(word, tag) for word, tag in words if word not in stopwords]
+                    if not self.__params["disable-stopwords"]:
+                        words = [
+                            (word, tag) for word, tag in words if word not in stopwords
+                        ]
 
                     if use_stemming and use_lemmatization:
                         raise ValueError("Cannot use both stemming and lemmatization")

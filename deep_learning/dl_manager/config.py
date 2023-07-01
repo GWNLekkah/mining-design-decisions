@@ -31,6 +31,7 @@ import uvicorn
 
 from . import db_util
 from . import logger
+from . import checkpointing
 
 log = logger.get_logger("App Builder")
 
@@ -313,14 +314,15 @@ class WebApp:
             ssl_certfile=certfile,
         )
 
-    def execute_script(self, filename):
-        with open(filename) as file:
-            script = json.load(file)
-        token = script["auth"]["token"]
-        for command in script["script"]:
+    def execute_script(self, filename, *, invalidate_checkpoints):
+        manager = checkpointing.CheckpointManager(filename)
+        if invalidate_checkpoints:
+            manager.invalidate()
+        token = manager.get_auth()["token"]
+        for command in manager.commands():
             # Refresh the token
             response = requests.post(
-                url=script["auth"]["token-endpoint"],
+                url=manager.get_auth()["token-endpoint"],
                 headers={"Authorization": "Bearer " + token},
             )
             response.raise_for_status()
@@ -505,7 +507,7 @@ class _ArgumentValidator:
                 f'[{self.name}] Cannot set both "null-if" and "null-unless"'
             )
         # self._options = spec.get('options', [])
-        self._options = spec["options"]
+        self._options: typing.Any = spec["options"]
         if self._nargs not in ("1", "*", "+"):
             raise ValueError(f"[{self.name}] Invalid nargs: {self._nargs}")
         if self._type not in (
@@ -544,11 +546,11 @@ class _ArgumentValidator:
                 raise ValueError(
                     f'[{self.name}] Option of "arglist" argument must contain "map-path" and "multi-valued".'
                 )
-            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1)
+            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1) # type: ignore
             self._options[0] = ArgumentListParser(
                 name=self.name,
                 lookup_map=getattr(importlib.import_module(module), item),
-                multi_valued=self._options[0]["multi-valued"],
+                multi_valued=self._options[0]["multi-valued"],  # type: ignore
             )
         if self._type == "hyper_arglist":
             if len(self._options) != 1 or not isinstance(self._options[0], dict):
@@ -562,18 +564,18 @@ class _ArgumentValidator:
                 raise ValueError(
                     f'[{self.name}] Option of "hyper_arglist" argument must contain "map-path" and "multi-valued".'
                 )
-            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1)
+            module, item = self._options[0]["map-path"].rsplit(".", maxsplit=1) # type: ignore
             self._options[0] = HyperArgumentListParser(
                 name=self.name,
                 lookup_map=getattr(importlib.import_module(module), item),
-                multi_valued=self._options[0]["multi-valued"],
+                multi_valued=self._options[0]["multi-valued"], # type: ignore
             )
         if self._type == "dynamic_enum":
             if len(self._options) != 1 or not isinstance(self._options[0], str):
                 raise ValueError(
                     f'[{self.name}] Argument of type "dynamic_enum" requires exactly one option of type "str".'
                 )
-            module, item = self._options[0].rsplit(".", maxsplit=1)
+            module, item = self._options[0].rsplit(".", maxsplit=1) # type: ignore
             self._options[0] = set(getattr(importlib.import_module(module), item))
 
     @property
@@ -657,7 +659,7 @@ class _ArgumentValidator:
                 return x
             case "class":
                 try:
-                    return self._options[0](x)
+                    return self._options[0](x)  # type: ignore
                 except Exception as e:
                     raise fastapi.HTTPException(
                         detail=f"Error while converting {self.name!r} to {self._options[0].__class__.__name__}: {e}",
@@ -739,7 +741,7 @@ class Argument(abc.ABC):
         return self._data_type
 
     @abc.abstractmethod
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         pass
 
     @property
@@ -782,7 +784,7 @@ class FloatArgument(Argument):
         self._min = minimum
         self._max = maximum
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, float):
             self.raise_invalid(f"Must be float, got {value.__class__.__name__}")
         if self._min is not None and value < self._min:
@@ -817,7 +819,7 @@ class IntArgument(Argument):
         self._min = minimum
         self._max = maximum
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, int):
             self.raise_invalid(f"Must be int, got {value.__class__.__name__}")
         if self._min is not None and value < self._min:
@@ -855,7 +857,7 @@ class EnumArgument(Argument):
         else:
             self._options = options
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, str):
             self.raise_invalid(f"Must be string, got {value.__class__.__name__}")
         if value not in self._options:
@@ -877,7 +879,7 @@ class BoolArgument(Argument):
     def __init__(self, name: str, description: str, default=Argument._NOT_SET):
         super().__init__(name, description, bool, default)
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if isinstance(value, bool) or (isinstance(value, int) and value in (0, 1)):
             return value
         self.raise_invalid(f"Must be Boolean, got {value.__class__.__name__}")
@@ -897,7 +899,7 @@ class StringArgument(Argument):
     def __init__(self, name: str, description: str, default=Argument._NOT_SET):
         super().__init__(name, description, str, default)
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if not isinstance(value, str):
             self.raise_invalid(f"Must be string, got {value.__class__.__name__}")
         return value
@@ -917,7 +919,7 @@ class QueryArgument(Argument):
     def __init__(self, name: str, description: str, default=Argument._NOT_SET):
         super().__init__(name, description, issue_db_api.Query, default)
 
-    def validate(self, value):
+    def validate(self, value, *, tuning=False):
         if value is None:
             return value
         try:
@@ -934,6 +936,61 @@ class QueryArgument(Argument):
     @staticmethod
     def supported_hyper_param_specs():
         return ["values"]
+
+
+class NestedArgument(Argument):
+
+    class _Wrapper(ArgumentConsumer):
+        def __init__(self, payload):
+            self._payload = payload
+        def get_arguments(self) -> dict[str, Argument]:
+            return self._payload
+
+
+    def __init__(self,
+                 name: str,
+                 description: str, *,
+                 spec: dict[str, dict[str, Argument]]):
+        default = {
+            key: [{k: v.default for k, v in value.items()}]
+            for key, value in spec.items()
+        }
+        super().__init__(name, description, dict, default=default)
+        self._raw_spec = spec
+        self._spec = {key: self._Wrapper(value) for key, value in spec.items()}
+        self._parser = ArgumentListParser(name, self._spec)
+        self._hyper_parser = HyperArgumentListParser(name, self._spec, multi_valued=True)
+
+    def validate(self, value, *, tuning=False):
+        # if not isinstance(value, dict):
+        #     self.raise_invalid(f'Expected a dictionary, got {value.__class__.__name__}')
+        # if len(value) != 1:
+        #     self.raise_invalid(f'Expected a single key, got {len(value)}')
+        # key, nested = next(iter(value.items()))
+        # if key not in self._spec:
+        #     self.raise_invalid(f'Illegal key {key!r}')
+        try:
+            if tuning:
+                return self._hyper_parser.validate(value)
+            return self._parser.validate(value)
+        except fastapi.HTTPException as e:
+            self.raise_invalid(e.detail)
+
+    @property
+    def legal_values(self):
+        return {}
+
+    def get_json_spec(self):
+        return super().get_json_spec() | {
+            'spec': {
+                key: {k: v.get_json_spec() for k, v in value.items()}
+                for key, value in self._raw_spec.items()
+            }
+        }
+
+    @staticmethod
+    def supported_hyper_param_specs():
+        return ['nested']
 
 
 class ArgumentListParser:
@@ -1082,11 +1139,15 @@ class ArgumentListParser:
         return validator.validate(value)
 
     def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
+        if isinstance(validator, NestedArgument):
+            return validator.default
         return validator.validate(value)
 
 
 class HyperArgumentListParser(ArgumentListParser):
     def validate_value(self, validator: Argument, value: typing.Any) -> typing.Any:
+        if isinstance(validator, NestedArgument):
+            return validator.validate(value, tuning=True)
         if not isinstance(value, dict):
             raise fastapi.HTTPException(
                 detail="hyper param arglist entry must be a dict", status_code=400
@@ -1132,14 +1193,22 @@ class HyperArgumentListParser(ArgumentListParser):
                 detail=f"Hyper param arglist item of type {validator.__class__.__name__} does not support range.",
                 status_code=400,
             )
-        self._check_opt_key(options, {"start", "stop", "step"})
+        if "step" not in options:
+            options["step"] = None
+        else:
+            self._check_opt_type(options["step"], int, "step")
+        if "sampling" not in options:
+            options["sampling"] = "linear"
+        else:
+            self._check_opt_type(options["sampling"], str, "sampling")
+        self._check_opt_key(options, {"start", "stop", "step", "sampling"})
         self._check_opt_type(options["start"], int, "start")
         self._check_opt_type(options["stop"], int, "stop")
-        self._check_opt_type(options["step"], int, "step")
         return {
             "start": options["start"],
             "stop": options["stop"],
             "step": options["step"],
+            "sampling": options["sampling"],
         }
 
     def _validate_values(self, validator: Argument, options: dict):
@@ -1158,14 +1227,22 @@ class HyperArgumentListParser(ArgumentListParser):
                 detail=f'Hyper param arglist item of type {validator.__class__.__name__} does not support "floats".',
                 status_code=400,
             )
-        self._check_opt_key(options, {"start", "stop", "step"})
+        if "step" not in options:
+            options["step"] = None
+        else:
+            self._check_opt_type(options["step"], float, "step")
+        if "sampling" not in options:
+            options["sampling"] = "linear"
+        else:
+            self._check_opt_type(options["sampling"], str, "sampling")
+        self._check_opt_key(options, {"start", "stop", "step", "sampling"})
         self._check_opt_type(options["start"], float, "start")
         self._check_opt_type(options["stop"], float, "stop")
-        self._check_opt_type(options["step"], float, "step")
         return {
             "start": options["start"],
             "stop": options["stop"],
             "step": options["step"],
+            "sampling": options["sampling"],
         }
 
     def _require_opt_field(self, options, key):
@@ -1191,7 +1268,16 @@ class HyperArgumentListParser(ArgumentListParser):
             )
 
     def validate_default(self, validator: Argument, value: typing.Any) -> typing.Any:
+        if isinstance(validator, NestedArgument):
+            default = {
+                f'{key}.0': {
+                    k: {'type': 'values', 'options': {'values': [v]}}
+                    for k, v in value[0].items()
+                }
+                for key, value in value.items()
+            }
+            return validator.validate(default, tuning=True)
         return self.validate_value(
             validator,
-            {"type": "values", "options": {"values": [validator.validate(value)]}},
+            {"type": "values", "options": {"values": [validator.validate(value, tuning=True)]}},
         )
